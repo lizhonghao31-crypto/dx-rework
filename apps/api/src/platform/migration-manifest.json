@@ -1299,6 +1299,10 @@
     {
       "version": "0310_original_external_craft_final_quantity",
       "checksum": "1b3318acb4c3404ef031dfccf60e9ff42ad982b511bcc1eb97c8a84d263e4949"
+    },
+    {
+      "version": "0311_internal_craft_quality_reinspection",
+      "checksum": "f87a4dfba92df6f9a19985db58e846953afb3baf44b1facb8be71c38d07ca4ca"
     }
   ]
 }

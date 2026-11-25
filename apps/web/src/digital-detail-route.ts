@@ -1,5 +1,5 @@
-import {readWarehouseWorkbenchRoute,warehouseWorkbenchPath} from './warehouse-workbench-route.js';
-import {qualityWorkbenchPath,readQualityWorkbenchRoute} from './quality-workbench-route.js';
+import {readWarehouseWorkbenchRoute,warehouseCraftTarget,warehouseWorkbenchPath} from './warehouse-workbench-route.js';
+import {qualityRecordTarget,qualityWorkbenchPath,readQualityWorkbenchRoute} from './quality-workbench-route.js';
 import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
 import {patternHistoryPath} from './pattern-history-query.js';
 import { DigitalIdSchema, type DigitalOrder, type DigitalSource } from "@dx-rework/contracts/digital-production";
@@ -22,6 +22,12 @@ export type DigitalDetailRoute = { kind: "landing" } | { kind: "invalid"; messag
 /** Preserve compound-link priority; malformed history never opens current editable data. */
 export function digitalDetailRoute(search: string): DigitalDetailRoute {
   const query = new URLSearchParams(search);
+  const quality=qualityRecordTarget(query);
+  if(quality===null||quality&&(domains.filter(kind=>query.has(kind)).length!==1||query.has('originalEvent')))
+    return {kind:'invalid',message:'质检对象或数量版本无效，请返回质量中心重新读取'};
+  const warehouseCraft=warehouseCraftTarget(query);
+  if(warehouseCraft===null||warehouseCraft&&(quality!==undefined||domains.filter(kind=>query.has(kind)).length!==1||query.has('originalEvent')))
+    return {kind:'invalid',message:'原仓库工艺收发入口无效，请从仓库中心重新打开'};
   for (const kind of domains) {
     if (!query.has(kind)) continue;
     const id = query.get(kind);
@@ -101,7 +107,10 @@ export function digitalDetailReturnUrl(value: string | null, base: string,depth=
   const presentVersionKeys=present.flatMap(domain=>versions[domain]?[versions[domain]!]:[]);
   if(presentVersionKeys.some(key=>query.has(key)&&(!/^[1-9]\d*$/.test(query.get(key)!)||!Number.isSafeInteger(Number(query.get(key))))))return null;
   const documentContext=hasTask||present.some(domain=>['development','budget','instruction'].includes(domain))&&readDocumentKind(url.search)!==undefined;
-  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...(documentContext?Object.values(documentVersionKeys):[]),...(kind==='development'?['developmentDocumentVersion']:[]),...(originalTechnical?technicalOriginalKeys:[]),...(['budget','instruction'].includes(kind)?['originalDocument']:[]),...(['quotationSource','quotationOrder'].includes(kind)?['quoteId']:[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
+  const quality=qualityRecordTarget(query);
+  const qualityKeys=quality?.kind==='garment'?['qualityReceipt','qualityQuantityVersion']:quality?.kind==='factory'?['qualityProduction','qualityDecision']:
+    quality?.kind==='craft'?['qualityReturn','qualityStep','qualityTask']:[];
+  if(![...query.keys()].every(key=>[...present,...presentVersionKeys,...qualityKeys,...(warehouseCraftTarget(query)?['warehouseCraft']:[]),...(documentContext?Object.values(documentVersionKeys):[]),...(kind==='development'?['developmentDocumentVersion']:[]),...(originalTechnical?technicalOriginalKeys:[]),...(['budget','instruction'].includes(kind)?['originalDocument']:[]),...(['quotationSource','quotationOrder'].includes(kind)?['quoteId']:[]),'taskView','todo','returnTo','workbench','taskTab','documentCategory','documentChapter','documentKind','line','factoryAction','washingWindow'].includes(key)))return null;
   if(documentContext&&Object.entries(documentVersionKeys).some(([document,key])=>query.has(key)&&readDocumentVersion(document as keyof typeof documentVersionKeys,url.search)===undefined&&!isCurrentDocumentVersion(document as keyof typeof documentVersionKeys,url.search)))return null;
   if(query.has('documentKind')&&!readDocumentKind(url.search))return null;
   if (query.has("taskView") && (!hasTask || !["read", "handle", "correct"].includes(query.get("taskView")!))) return null;

@@ -1,4 +1,7 @@
-import type {QualityNativeTaskQuery,WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
+import type {QualityDirectoryItem,QualityDirectoryQuery,WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
+import {qualityCenterFactoryDirectory} from './quality-center-factory-directory.js';
+import {qualityCenterGarmentDirectory} from './quality-center-garment-directory.js';
+import {qualityCenterCraftDirectory} from './quality-center-craft-directory.js';
 import {readTechnicalTaskListPage} from './journey-selection-access.js';
 import {developmentRushKey,readDevelopmentOrderRush} from './development-order-rush.js';
 import {attachDevelopmentRegistrations,developmentResponsibilityWindow} from './development-responsibility-window.js';
@@ -982,7 +985,7 @@ export class DigitalProductionTaskService {
     for (const id of ids) if (await policy.allowed(actor, "task", id, "technical")) tasks.push(await this.read(actor, id, db));
     return tasks;
   }
-  async list(actor: TrustedActorContext, page: number, native?:WarehouseNativeTaskQuery|QualityNativeTaskQuery) {
+  async list(actor: TrustedActorContext, page: number, native?:WarehouseNativeTaskQuery) {
     const db=await this.database.connect();
     try{
     await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -991,6 +994,17 @@ export class DigitalProductionTaskService {
     if(items.length!==target.ids.length)throw new ApplicationError('TASK_SCOPE_CHANGED','任务查看范围已变化，请刷新重试',409);
     await db.query('COMMIT');return {items,page,total:target.total};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async qualityDirectory(actor:TrustedActorContext,kind:'craft'|'factory'|'garment',input:QualityDirectoryQuery){
+    if(kind==='craft')return qualityCenterCraftDirectory(this.database,actor,input);
+    if(kind==='garment')return qualityCenterGarmentDirectory(this.database,actor,input);
+    const actual=await qualityCenterFactoryDirectory(this.database,actor,{...input,status:input.status==='completed'?'inspected':'open'});
+    const items=actual.items.map((row):QualityDirectoryItem=>({id:row.id,orderId:row.orderId,
+      designStyleNo:row.designStyleNo,customerCode:row.customerCode,poNumber:row.poNumber,supplierName:row.supplierName,
+      quantity:row.quantity,qualifiedQuantity:null,dueAt:null,inspected:row.inspected,
+      result:row.result==='合格'?'passed':row.result==='需处理'?'problem':null,
+      source:{kind:'factory',factoryDecisionId:row.factoryDecisionId,productionId:row.productionId,lineId:row.lineId}}));
+    return {...actual,items};
   }
   /** Internal fixed-route audit only; never records receipt, approval or completion. */
   async recordSystemRouteWithClient(client:PoolClient,actor:TrustedActorContext,id:string,fromId:string){

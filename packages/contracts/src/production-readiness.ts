@@ -46,7 +46,7 @@ export const WarehouseReceiptBatchSchema=z.object({
  evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
 }).strict().refine(value=>Number(value.quantity)>0||Boolean(value.replaces),'只有订正已登记的原收料才能记录零');
 export const WarehouseNativeTaskQuerySchema=z.object({
- kind:z.enum(['preshrink','dispatch']),status:z.enum(['open','completed']).default('open'),
+ kind:z.enum(['preshrink','dispatch','craft']),status:z.enum(['open','completed']).default('open'),
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
 }).strict();
 export const WarehouseReceiptPageQuerySchema=z.object({
@@ -116,3 +116,11 @@ export const QualityNativeTaskQuerySchema=z.object({
   page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
 }).strict();
 export type QualityNativeTaskQuery=z.infer<typeof QualityNativeTaskQuerySchema>;
+export const QualityDirectoryQuerySchema=QualityNativeTaskQuerySchema.omit({kind:true});
+export type QualityDirectoryQuery=z.infer<typeof QualityDirectoryQuerySchema>;
+export type QualityDirectoryItem={id:string;orderId:string;designStyleNo:string|null;customerCode:string|null;
+ poNumber:string|null;supplierName:string|null;quantity:number;qualifiedQuantity:number|null;dueAt:string|null;inspected:boolean;
+ result:'passed'|'problem'|null;
+ source:{kind:'factory';factoryDecisionId:string|null;productionId:string;lineId:string}|{kind:'garment';receiptId:string;quantityVersion:string}
+ |{kind:'craft';stepRef:string|null;returnFactId:string;lineId:string;taskId:string};
+};

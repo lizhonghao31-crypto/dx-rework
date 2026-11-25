@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import {FactoryProductionQcSchema,FactoryLogisticsSchema,FactoryQcSchema,FactoryDispatchSchema,FactoryFollowupSchema} from "@dx-rework/contracts/factory-flow";
+import {FactoryProductionQcSchema,FactoryLogisticsSchema,FactoryQcSchema,FactoryDispatchSchema,FactoryFollowupSchema,OriginalCraftReworkDraftSchema} from "@dx-rework/contracts/factory-flow";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -14,6 +14,15 @@ export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: Di
   const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
   const base="/digital-production/orders/:orderId/factory-flow";
   app.get(base,async request=>service.read(await actor(request),id(request,"orderId")));
+  if(dependencies.workbenchNumberedCreation)app.get(`${base}/warehouse-craft`,async(request,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.warehouseCraftWork(await actor(request),id(request,'orderId'));
+  });
+  if(dependencies.workbenchNumberedCreation)app.get(`${base}/craft-remediation`,async(request,reply)=>{
+    const original=parse(OriginalCraftReworkDraftSchema.shape.scope.omit({orderId:true}),request.query);
+    reply.header('cache-control','private, no-store');
+    return {item:await service.craftRemediation(await actor(request),{...original,orderId:id(request,'orderId')})};
+  });
   app.post(`${base}/logistics`,async request=>service.logistics(await actor(request),id(request,"orderId"),parse(FactoryLogisticsSchema,request.body),key(request)));
   app.post(`${base}/production-qc`,async request=>service.productionQc(await actor(request),id(request,"orderId"),parse(FactoryProductionQcSchema,request.body),key(request)));
   const factoryPhoto=`${base}/production-qc/:productionId/:factoryKey/:lineId`;

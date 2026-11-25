@@ -69,7 +69,7 @@ export function WarehouseCenter(){
  const change=(next:WarehouseWorkbenchRoute)=>{
   window.history.replaceState(window.history.state,'',warehouseWorkbenchPath(next,urls.base));setRoute(next);
  };
- const sections=[['receive','待收料'],['preshrink','待预缩'],['dispatch','待发料及发厂']] as const;
+ const sections=[['receive','待收料'],['preshrink','待预缩'],['craft','工艺收发'],['dispatch','待发料及发厂']] as const;
  return <div className="dx-designer-astryx" lang="zh-CN">
   <style>{designerAstryxCss}</style>
   <h1>仓库中心</h1>

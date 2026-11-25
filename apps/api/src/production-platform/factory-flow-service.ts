@@ -10,7 +10,7 @@ import {shipSampleFacts} from './ship-sample-facts.js';
 import {factoryBatchTiming} from './factory-batch-timing.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import type {FactoryFlowSheet,FactoryLogistics,FactoryQc,FactoryDispatch,FactoryFollowup} from '@dx-rework/contracts/factory-flow';
+import type {FactoryFlowSheet,FactoryLogistics,FactoryQc,FactoryDispatch,FactoryFollowup,WarehouseCraftWorkChoice,WarehouseCraftWorkSheet} from '@dx-rework/contracts/factory-flow';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
@@ -21,17 +21,18 @@ import {factoryBatchLedger,factoryBatchReleaseAvailable,type FactoryScope} from 
 import {factoryStepLedger,priorCraftReleasedPieces} from './factory-step-ledger.js';
 import {fixedCraftSteps} from './fixed-craft-steps.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
-import {craftLegacyLabel} from '@dx-rework/contracts/digital-craft';
+import {craftLegacyLabel,craftStepLabel} from '@dx-rework/contracts/digital-craft';
 import {readFixedOrderRoute} from './fixed-order-route.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 import {warehouseFactoryDispatchEvidence} from './warehouse-factory-dispatch-evidence.js';
 import {readWarehouseCraftFactoryBasis} from './warehouse-craft-factory-basis.js';
 import {availableWarehouseCraftQuantities,qualifyWarehouseCraftMovement,type WarehouseCraftMotion,type WarehouseCraftOccupationReader} from './warehouse-craft-movement.js';
 import {canReadExactOriginalQualityPhoto,exactUnboundQualityPhotos,factoryInspectionQualityAttachment,type OriginalQualityPhotoReference} from './original-quality-photo.js';
-import {countedCraftCheck} from './quality-craft-problem-scope.js';
+import {countedCraftCheck,readCurrentCraftProblem,type CraftProblemLocator} from './quality-craft-problem-scope.js';
+import {internalCraftReinspection} from './internal-craft-quality-reinspection.js';
 import {checkedExternalCraftRepairFact,lockExternalCraftRepair,readExternalCraftRepairProof} from './warehouse-craft-rework-return.js';
 type DB=Pick<Pool|PoolClient,'query'>;
-const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
+function fail(message:string):never{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);}
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
 const ROOT='root_superuser';
 type WarehouseCraftCommand=Omit<WarehouseCraftMotion,'scope'|'lines'>&{expectedRevision:number;taskId:string;preparationId:string;stepRef:string;lines:FactoryScope[];note:string};
@@ -153,7 +154,89 @@ export class FactoryFlowService{
   const craftOwners=s.craftSteps.filter(step=>step.specialCraft).map(step=>({stepRef:step.stepId,name:craftOwnerRows.find(row=>row.library_id===step.specialCraft!.id&&Number(row.library_version)===step.specialCraft!.version)?.display_name??null}));
   const batchTiming=s.batch?await factoryBatchTiming(db,id):null;
   const now=new Date((await new ContextBusinessClock(this.database,readOnlyClient).read({kind:'order',id})).now);
-  return {currentProduction:currentProduction?{productionId:currentProduction.production_order_id as string,factoryDecisionId:currentProduction.factory_decision_id as string|null}:null,...(s.route?.route_schema_version===2?{routeSchemaVersion:2 as const,craftSteps:s.craftSteps,craftOwners,craftSendable:s.stepLedger?.sendable??[]}:{}),returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.stepLedger?s.stepLedger.steps.flatMap(step=>step.batches):s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
+  return {currentProduction:currentProduction?{productionId:currentProduction.production_order_id as string,factoryDecisionId:currentProduction.factory_decision_id as string|null}:null,...(s.route?.route_schema_version===2?{routeSchemaVersion:2 as const,craftSteps:s.craftSteps,craftOwners,craftSendable:s.stepLedger?.sendable??[]}:{}),returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.stepLedger?s.stepLedger.steps.flatMap(step=>step.batches):s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!,...(c.quantity_scope?{quantityScope:c.quantity_scope}:{})}))};
+ }
+ async craftRemediation(actor:TrustedActorContext,locator:CraftProblemLocator){
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const access=new DigitalProductionAccessPolicy(db);
+   await access.assert(actor,'order',locator.orderId,'technical');
+   const sheet=await this.readFlow(actor,locator.orderId,db,db);
+   const task=sheet.tasks.find(row=>row.taskKind==='bulk_qc'&&row.stepRef===locator.stepRef&&row.canExecute);
+   if(!task||sheet.preparationId!==locator.preparationId)return digitalForbidden();
+   const evidence=await readCurrentCraftProblem(db,locator);
+   if(!evidence){await db.query('COMMIT');return null;}
+   const original=(await db.query<{rework_id:string;execution:'factory'|'internal';status:string;quantity:number}>(`SELECT rework_order_id AS rework_id,
+     craft_rework_execution AS execution,status,rework_quantity::int AS quantity FROM rework_orders
+     WHERE source_craft_qc_check_id=$1 AND status NOT IN ('cancelled','deleted')`,[locator.checkId])).rows[0];
+   if(!original){await db.query('COMMIT');return null;}
+   const available=sheet.batches?.find(row=>row.factId===locator.returnFactId&&row.stepRef===locator.stepRef)?.rows.find(row=>row.lineId===locator.lineId)?.available??0;
+   const proof=original.execution==='internal'&&task.state==='ready'&&!task.paused&&!sheet.dispatched?
+    await internalCraftReinspection(db,{...locator,reworkId:original.rework_id,currentCheckId:locator.checkId},{unit:'片',inspectedQuantity:original.quantity,
+      qualifiedQuantity:original.quantity,problemQuantity:0},available,evidence.actualReturned,false):null;
+   await db.query('COMMIT');
+   return {reworkId:original.rework_id,execution:original.execution,status:original.status,quantity:original.quantity,canConfirmReinspection:Boolean(proof)};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async warehouseCraftWork(actor:TrustedActorContext,id:string):Promise<WarehouseCraftWorkSheet>{
+  if(!this.readWarehouseCraftOccupation)fail('原仓库工艺任务尚未接入当前质检放行依据');
+  const db=await this.database.connect();
+  try{
+   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const policy=new DigitalProductionAccessPolicy(db);
+   await policy.assert(actor,'order',id,'technical');
+   if(!actor.actorRoles.includes(ROOT)){
+    const assigned=(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[id])).rows[0];
+    if(assigned?.warehouse_worker_id!==actor.actorId||!await policy.activeRole(actor.actorId,'warehouse_receiver'))digitalForbidden();
+   }
+   const s=await this.state(db,id),choices:WarehouseCraftWorkChoice[]=[];
+   const preparationId=s.route?.preparation_id;
+   if(!preparationId||!s.stepLedger)fail('本单没有已采用的独立裁片工艺');
+   if(!s.dispatched&&!s.gate.reasons.length&&!s.batch?.quantityConflict){
+    for(const exact of s.stepLedger.steps){
+     const step=exact.step,task=s.tasks.find(task=>task.task_kind==='process_logistics'&&task.step_id===step.stepId&&task.state==='ready');
+     if(!task)continue;
+     const fixed={stepRef:step.stepId,title:craftStepLabel(step),taskId:task.task_id};
+     const add=(choice:Omit<WarehouseCraftWorkChoice,'id'|'stepRef'|'title'|'taskId'|'lines'>,limits:Iterable<readonly [string,number]>)=>{
+      const lines=Array.from(limits,([lineId,remaining])=>{const line=s.lines.find(line=>line.line_id===lineId);return {lineId,remaining,poNumber:line?.po_number??null,color:line?.color??''};}).filter(line=>line.remaining>0);
+      if(lines.length)choices.push({...fixed,...choice,lines,id:JSON.stringify([fixed.stepRef,choice.kind,choice.sourceFactId,choice.reworkId??null])});
+     };
+     const basis=await readWarehouseCraftFactoryBasis(db,id,step,false);
+     const stepLimits=s.stepLedger.sendable.find(row=>row.stepRef===step.stepId)?.lines??[];
+     const prior=step.sequence>1?s.stepLedger.steps[step.sequence-2]:null;
+     if(basis){
+      const sources=prior?.batches.map(batch=>({id:batch.factId,rows:batch.rows.map(row=>({lineId:row.lineId,remaining:row.releasedAvailable===undefined?
+       Math.min(priorCraftReleasedPieces(prior,row),stepLimits.find(line=>line.lineId===row.lineId)?.remaining??0):row.available}))}))??[{id:null,rows:stepLimits}];
+      for(const source of sources){
+       const scope={orderId:id,preparationId,stepRef:step.stepId,sourceFactId:source.id};
+       const limit=availableWarehouseCraftQuantities(scope,source.rows,await this.readWarehouseCraftOccupation!(db,scope));
+       if(limit)add({kind:'send',sourceFactId:source.id,factoryId:basis.supplierId,factoryName:basis.supplierName},limit);
+      }
+     }
+     for(const send of exact.pendingSends){
+      const original=s.facts.find(fact=>fact.fact_id===send.factId),motion=original?.payload.warehouseMotion;
+      if(!motion?.factoryId||!original?.payload.supplier)continue;
+      add({kind:'return',sourceFactId:send.factId,factoryId:motion.factoryId,factoryName:original.payload.supplier,
+       ...(motion.reworkId?{reworkId:motion.reworkId}:{})},send.rows.map(row=>[row.lineId,row.remaining] as const));
+     }
+     const repairs=(await db.query<{id:string;line_id:string;fact_id:string;factory_id:string;factory_name:string;quantity:number}>(`SELECT r.rework_order_id AS id,
+      q.line_id,q.return_fact_id AS fact_id,f.payload#>>'{warehouseMotion,factoryId}' AS factory_id,f.payload->>'supplier' AS factory_name,r.rework_quantity::int AS quantity
+      FROM rework_orders r JOIN digital_factory_qc q ON q.check_id=r.source_craft_qc_check_id
+      JOIN digital_factory_facts f ON f.fact_id=q.return_fact_id AND f.preparation_id=q.preparation_id
+      WHERE q.preparation_id=$1 AND f.payload->>'stepRef'=$2 AND r.craft_rework_execution='factory' AND r.status='in_progress'`,[preparationId,step.stepId])).rows;
+     for(const repair of repairs){
+      if(!repair.factory_id||!repair.factory_name)continue;
+      const sent=s.facts.filter(fact=>fact.kind==='工艺发出'&&fact.payload.warehouseMotion?.reworkId===repair.id)
+       .reduce((total,fact)=>total+(fact.payload.lines?.find((line:FactoryScope)=>line.lineId===repair.line_id)?.quantity??0),0);
+      const remaining=exact.batches.find(batch=>batch.factId===repair.fact_id)?.rows.find(row=>row.lineId===repair.line_id)?.available??0;
+      add({kind:'send',sourceFactId:repair.fact_id,factoryId:repair.factory_id,factoryName:repair.factory_name,reworkId:repair.id},
+       [[repair.line_id,Math.min(remaining,repair.quantity-sent)]]);
+     }
+    }
+   }
+   await db.query('COMMIT');return {orderId:id,preparationId,revision:s.revision,choices};
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:{expectedRevision:number},key:string,work:(db:PoolClient,s:Awaited<ReturnType<FactoryFlowService['state']>>)=>Promise<void>,authorizeReplay?:(db:PoolClient)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{
@@ -195,7 +278,6 @@ export class FactoryFlowService{
    return reworkId?this.warehouseCraftRepair(actor,id,{...native,reworkId},key):this.warehouseCraftMotion(actor,id,native,key);
   }
   return this.command(actor,id,'logistics',input,key,async(db,s)=>{
-  if(this.readWarehouseCraftOccupation&&s.stepLedger&&input.kind!=='工艺沟通')fail('本单独立工艺实物请从原任务的仓库收发办理');
   if(!await this.authorized(db,actor,s,'process_logistics',input.stepRef))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
   if(input.kind==='工艺沟通'&&!input.note.trim())fail('请填写沟通记录');
   if(input.kind==='工艺发出'&&s.lastMovement?.kind==='工艺发出')fail('整款已在工艺厂，不能重复发出');
@@ -277,6 +359,8 @@ export class FactoryFlowService{
   },db=>this.assertAssignedWarehouse(db,actor,id));
  }
  async qc(actor:TrustedActorContext,id:string,input:FactoryQc,key:string){return this.command(actor,id,'qc',input,key,async(db,s)=>{
+  if(input.internalReworkId&&(!input.returnFactId||!input.stepRef||input.checks.length!==1||!s.stepLedger||!this.readWarehouseCraftOccupation))
+   fail('本厂返工复检须引用同一工艺、本批回仓及本次原返工');
   if(!await this.authorized(db,actor,s,'bulk_qc',input.stepRef))digitalForbidden();const checkedAt=businessNow().toISOString();if(s.batch)return this.batchQc(db,actor,s,input,checkedAt);if(input.checks.some(check=>check.quantityScope))fail('分量检查需要原工艺回仓批次');if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
   this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,s.returned.occurred_at));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length||input.checks.some(c=>!s.lines.some(l=>l.line_id===c.lineId)))fail('检查款色必须属于本母单且不可重复');
@@ -325,10 +409,19 @@ export class FactoryFlowService{
    if(prior&&!own&&!previous)fail('后一道工艺须选择前一道已检查放行的真实回仓批次');
    const sendable=step?s.stepLedger!.sendable.find(row=>row.stepRef===step.step.stepId)!.lines:null;
    lines=this.scope(input.lines,from?from.rows.map(l=>({lineId:l.lineId,remaining:previous?Math.min(priorCraftReleasedPieces(prior!,l),sendable!.find(row=>row.lineId===l.lineId)?.remaining??0):l.available})):sendable??ledger.totals.map(l=>({lineId:l.lineId,remaining:l.craftRemaining})));
+   // The pre-existing workflow is still valid for ordinary movements, but
+   // must not silently surrender counted pieces reserved for original rework.
+   if(!warehouseMotion&&step&&from&&this.readWarehouseCraftOccupation){
+    const scope={orderId:s.route.production_order_id,preparationId:s.route.preparation_id,stepRef:step.step.stepId,sourceFactId:from.factId};
+    const available=availableWarehouseCraftQuantities(scope,from.rows.map(row=>({lineId:row.lineId,remaining:row.available})),await this.readWarehouseCraftOccupation(db,scope));
+    if(!available||lines.some(line=>line.quantity>(available.get(line.lineId)??0)))fail('原质检或返工已占用本批部分裁片，请从原返工办理对应范围');
+   }
    this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,from?.occurredAt));
   }else{
    sendFactId=input.sendFactId??ledger.pendingSends.filter(b=>b.rows.some(l=>l.remaining>0)).at(-1)?.factId;
    const send=ledger.pendingSends.find(b=>b.factId===sendFactId);if(!send)fail('请选本单尚有未回数量的工艺发出批次');
+   if(!warehouseMotion&&this.readWarehouseCraftOccupation&&s.facts.find(fact=>fact.fact_id===sendFactId)?.payload.warehouseMotion)
+    fail('本批使用原仓库任务发出，请沿同一仓库任务和工厂范围登记回仓');
    lines=this.scope(input.lines,send!.rows);this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,send!.occurredAt));
   }
   await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note,lines,...identity,...(sendFactId?{sendFactId}:{}),...(fromReturnId?{fromReturnId}:{}),...(warehouseMotion?{warehouseMotion}:{})});
@@ -353,6 +446,22 @@ export class FactoryFlowService{
   for(const check of input.checks){
    const row=batch!.rows.find(l=>l.lineId===check.lineId);if(!row||row.available<=0)fail('本批PO已发完或已重新发工艺，不可覆盖检查');
    const prior=s.checks.filter(c=>c.return_fact_id===batch!.factId&&c.line_id===check.lineId).at(-1);
+   if(input.internalReworkId){
+    if(!prior?.quantity_scope||!step||externalReworkId||check.result!=='合格'||check.allowDispatch||check.dispatchReason||!nativeReturn)
+     fail('本次仅确认原本厂返工且已实际复检合格的片数，未通过的范围继续保留为原问题');
+    const verified=await internalCraftReinspection(db,{reworkId:input.internalReworkId,orderId:s.route.production_order_id,
+     preparationId:s.route.preparation_id,returnFactId:batch!.factId,stepRef:step.step.stepId,lineId:check.lineId,currentCheckId:prior.check_id},
+     check.quantityScope,row.available,row.returned);
+    if(!verified)fail('原本厂返工还未完成实际执行，或复检不属于本批已完成的原数量');
+    if(!await exactUnboundQualityPhotos(db,actor.actorId,check.attachmentIds))fail('复检图片须由本人上传并可用');
+    const checkId=randomUUID(),hasProblems=verified.count.problemQuantity>0;
+    await db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,
+      allow_dispatch,dispatch_reason,checked_at,quantity_scope,reinspection_rework_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+     [checkId,s.route.preparation_id,batch!.factId,check.lineId,hasProblems?'需处理':'合格',hasProblems?verified.problem:'',check.treatment||verified.treatment,
+      check.attachmentIds,actor.actorId,hasProblems&&verified.allowDispatch,hasProblems?verified.dispatchReason:'',checkedAt,JSON.stringify(verified.count),input.internalReworkId]);
+    await db.query("UPDATE attachments SET entity_type='digital_factory_qc',entity_id=$1,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($2::uuid[])",[checkId,check.attachmentIds]);
+    continue;
+   }
    const counted=check.quantityScope&&row?countedCraftCheck(check.quantityScope,row.returned):null;
    if(check.quantityScope){
     const original=nativeReturn;

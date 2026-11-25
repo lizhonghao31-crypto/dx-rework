@@ -2613,5 +2613,24 @@
       "validate_responsibility_version"
     ],
     "sequences": []
+  },
+  "0311_internal_craft_quality_reinspection": {
+    "checksum": "f87a4dfba92df6f9a19985db58e846953afb3baf44b1facb8be71c38d07ca4ca",
+    "tables": [
+      "digital_factory_qc",
+      "operation_events",
+      "rework_orders"
+    ],
+    "functions": [],
+    "references": [
+      "rework_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_internal_craft_reinspection"
+    ],
+    "sequences": []
   }
 }

@@ -7,6 +7,8 @@ import {DocumentGuardContext} from './use-digital-detail-navigation-guard.js';
 import {FactoryDispatchTimeInput,factoryDispatchTime} from './factory-dispatch-time-input.js';
 import {acceptanceInputNow} from './acceptance-business-time.js';
 import {FactoryProductionQcPanel} from './factory-production-qc-panel.js';
+import {qualityRecordTarget} from './quality-workbench-route.js';
+import {CraftOriginalQuality} from './craft-original-quality.js';
 import {FactoryBatchPanel} from './factory-batch-panel.js';
 import {roleLabel} from "./components.js";
 import { digitalTaskDisplayStatus } from "./digital-workspace-copy.js";
@@ -72,6 +74,12 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
   }catch(e){setFailedUploads(current=>({...current,[lineId]:remaining}));setError(e instanceof Error?e.message:'上传失败');}
   finally{writing.current=false;setBusy(false);}
  };
+ const removePendingPhoto=(key:string,id:string)=>{
+  const preview=previews[key]?.find(photo=>photo.attachmentId===id);
+  if(preview){URL.revokeObjectURL(preview.url);previewUrls.current.delete(preview.url);}
+  setImages(current=>({...current,[key]:(current[key]??[]).filter(attachment=>attachment!==id)}));
+  setPreviews(current=>({...current,[key]:(current[key]??[]).filter(photo=>photo.attachmentId!==id)}));
+ };
  useEffect(()=>{if(!sheet||target.error||target.lineId&&!sheet.lines.some(line=>line.lineId===target.lineId))return;const elementId=target.lineId?`factory-qc-line-${target.lineId}`:`factory-${target.action}`;const frame=window.requestAnimationFrame(()=>document.getElementById(elementId)?.scrollIntoView({block:'start'}));return()=>window.cancelAnimationFrame(frame);},[sheet?.revision,target]);
  const time=(unknown=false)=><><label>真实发生时间（北京时间，留空为当前）<input name="at" type="datetime-local"/></label>{unknown&&<label><input name="unknown" type="checkbox"/>真实时间暂不明确</label>}</>;
  if(target.error)return <Surface><Button onClick={()=>void guarded(onClose)}>返回这张订单</Button><p role="alert">{target.error}</p></Surface>;
@@ -80,6 +88,23 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
  if(warehouseDispatchTask&&sheet&&!sheet.tasks.some(task=>task.taskKind==='warehouse_dispatch'&&task.taskId===warehouseDispatchTask))
   return <Surface><Button onClick={onClose}>返回来源</Button><p role="alert">该发厂任务已变更，请从仓库中心重新核对。</p></Surface>;
  const paused=Boolean(sheet?.tasks.some(task=>task.paused&&!['completed','cancelled'].includes(task.state)));
+ const qualityTarget=qualityRecordTarget(new URLSearchParams(search));
+ if(qualityTarget?.kind==='craft')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
+  <div className="pattern-actions"><Button disabled={working} onClick={()=>void guarded(onClose)}>返回来源</Button>
+   <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
+  <h2>二次工艺回仓检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
+  {loading&&<p role="status">正在读取原工艺检查…</p>}
+  {sheet&&<CraftOriginalQuality key={`${qualityTarget.returnFactId}:${qualityTarget.lineId}`} sheet={sheet} target={qualityTarget} busy={busy} paused={paused}
+   save={save} upload={upload} images={images} previews={previews} failedUploads={failedUploads}
+   removePendingPhoto={removePendingPhoto} clearFailed={key=>setFailedUploads(current=>({...current,[key]:[]}))}/>}
+ </Surface></DocumentGuardContext.Provider>;
+ if(qualityTarget?.kind==='factory')return <DocumentGuardContext.Provider value={guards}><Surface className="factory-flow">
+  <div className="pattern-actions"><Button disabled={working} onClick={()=>void guarded(onClose)}>返回来源</Button>
+   <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
+  <h2>加工检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
+  {loading&&<p role="status">正在读取原加工检查…</p>}
+  {sheet&&<FactoryProductionQcPanel sheet={sheet} busy={busy} paused={paused} open save={save} focus={qualityTarget}/>}
+ </Surface></DocumentGuardContext.Provider>;
  const qcDisabled=busy||paused||Boolean(target.error)||Boolean(target.lineId&&!sheet?.lines.some(line=>line.lineId===target.lineId))||Boolean(sheet?.inTransit)||sheet?.tasks.find(t=>t.taskKind==='bulk_qc')?.state!=='ready';
  const wholeDispatch=sheet&&!sheet.batchMode&&sheet.canWarehouse&&!sheet.dispatched&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('/dispatch',{...factoryDispatchTime(f),supplierId:sheet.supplierId,note:String(f.get('note')??'')});}}><fieldset disabled={busy||paused||!sheet.allQc||!sheet.supplierId}><legend id="factory-dispatch">仓库整款实际发厂</legend><p>全部PO一起发给 {sheet.supplierName}。登记实际发出后启动原生产监控。</p><FactoryDispatchTimeInput/><label>发厂说明<textarea name="note" maxLength={2000}/></label><Button type="submit">确认整款已实际发厂</Button></fieldset></form>;
  if(warehouseDispatchTask)return <DocumentGuardContext.Provider value={guards}><DocumentEntryScope orderId={orderId}>

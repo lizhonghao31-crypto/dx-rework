@@ -36,6 +36,7 @@ const OrderDocumentContainer=lazyBusinessPage(()=>import('./order-document-conta
 const DevelopmentOriginalReader=lazyBusinessPage(()=>import('./development-original-reader.js').then(module=>({default:module.DevelopmentOriginalReader})),{shellOnError:false});
 const DevelopmentTechnicalOriginal=lazyBusinessPage(()=>import('./development-technical-original.js').then(module=>({default:module.DevelopmentTechnicalOriginal})),{shellOnError:false});
 const WarehouseReceiptBatchPanel=lazyBusinessPage(()=>import('./warehouse-receipt-batch-panel.js').then(module=>({default:module.WarehouseReceiptBatchPanel})),{shellOnError:false});
+const WarehouseCraftWork=lazyBusinessPage(()=>import('./warehouse-craft-work.js').then(module=>({default:module.WarehouseCraftWork})),{shellOnError:false});
 const PreparationMaterialOriginal=lazyBusinessPage(()=>import('./preparation-material-original.js').then(module=>({default:module.PreparationMaterialOriginal})),{shellOnError:false});
 const OrderHistoryOriginal=lazyBusinessPage(()=>import('./order-history-original.js').then(module=>({default:module.OrderHistoryOriginal})),{shellOnError:false});
 const ProductionOriginalReader=lazyBusinessPage(()=>import('./production-original-reader.js').then(module=>({default:module.ProductionOriginalReader})),{shellOnError:false});
@@ -192,7 +193,8 @@ function DigitalProductionPageContent() {
     case "closure": detail = new URLSearchParams(location.search).has('originalEvent')?
       <OrderHistoryOriginal orderId={route.id} domain="closure" onClose={()=>void closeDetail()}/>:
       <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
-    case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
+    case "factory": detail = new URLSearchParams(window.location.search).get('warehouseCraft')==='1'?
+      <WarehouseCraftWork key={route.id} orderId={route.id} onClose={()=>void closeDetail()}/>:<FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "materialSource":
     case "materialOrder": {
       const query=new URLSearchParams(window.location.search);

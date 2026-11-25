@@ -18,6 +18,7 @@ import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '
 import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
 import {pendingReceivingView} from '../../apps/api/src/receiving/pending-receiving-view.js';
 import {qualityCenterFactoryDirectory} from '../../apps/api/src/production-platform/quality-center-factory-directory.js';
+import {qualityCenterGarmentDirectory} from '../../apps/api/src/production-platform/quality-center-garment-directory.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('original production completion and receipt correction facts',()=>{
@@ -108,6 +109,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
    const created=await receiving.create(receiver,{cuttingOrderId:r.cuts[0]!.cutting_order_id,productionOrderId:production,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]},randomUUID());
    const quality=(await garmentQuality(f.db,r.id))[0]!;
+   const garmentQuery={page:1,search:'TEST anchor factory',status:'open' as const};
+   expect(await qualityCenterGarmentDirectory(f.db,assignedQc,garmentQuery)).toMatchObject({total:1,items:[{orderId:r.id,quantity:2,qualifiedQuantity:null,
+    source:{kind:'garment',receiptId:quality.receiptId,quantityVersion:quality.quantityVersion}}]});
+   await expect(qualityCenterGarmentDirectory(f.db,receiver,garmentQuery)).rejects.toMatchObject({statusCode:403});
    const unrelated=randomUUID(),initialReceipts=await readPendingReceivingNativeReceipts(f.db,[r.id,unrelated]);
    const scope={orderId:r.id,productionId:production,lineId:quality.lineId,cuttingOrderId:r.cuts[0]!.cutting_order_id,
     factoryAllocationKey:receivingFactoryAllocationKey(production,null)};
@@ -128,6 +133,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(qc.record(assignedQc,r.id,{...inspection,attachmentIds:[otherPhoto]},randomUUID())).rejects.toMatchObject({statusCode:409});
    const originalCheck=await qc.record(assignedQc,r.id,withPhoto,photoKey);
    await expect(qc.record(assignedQc,r.id,withPhoto,photoKey)).resolves.toEqual(originalCheck);
+   expect(await qualityCenterGarmentDirectory(f.db,assignedQc,garmentQuery)).toMatchObject({total:0,items:[]});
+   expect(await qualityCenterGarmentDirectory(f.db,assignedQc,{...garmentQuery,status:'completed'})).toMatchObject({total:1,items:[{qualifiedQuantity:2,result:'passed'}]});
    const originalPhoto={kind:'garment-receipt' as const,orderId:r.id,receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,eventId:originalCheck.eventId,attachmentId:photo};
    await expect(canReadExactOriginalQualityPhoto(f.db,assignedQc,originalPhoto)).resolves.toBe(true);
    expect((await garmentQuality(f.db,r.id))[0]).toMatchObject({attachmentIds:[photo]});
@@ -151,6 +158,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const restoredQuality=(await garmentQuality(f.db,r.id)).find(item=>item.receiptId===quality.receiptId)!;
    expect(restoredQuality).toMatchObject({quantity:2,inspected:false,priorInspection:true,eventId:originalCheck.eventId,packingReadyAt:null});
    expect(restoredQuality.quantityVersion).not.toBe(inspection.quantityVersion);
+   expect(await qualityCenterGarmentDirectory(f.db,assignedQc,garmentQuery)).toMatchObject({total:1,items:[{id:quality.receiptId,inspected:false,
+    source:{kind:'garment',receiptId:quality.receiptId,quantityVersion:restoredQuality.quantityVersion}}]});
    await expect(qc.authorizeUpload(assignedQc,r.id,quality.receiptId,quality.quantityVersion)).rejects.toMatchObject({statusCode:409});
    expect(restoredQuality.attachmentIds).toBeUndefined();
    await expect(canReadExactOriginalQualityPhoto(f.db,assignedQc,originalPhoto)).resolves.toBe(true);
