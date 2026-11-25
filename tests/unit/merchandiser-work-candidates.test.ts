@@ -1,0 +1,33 @@
+import {describe,expect,it} from 'vitest';
+import type {TodoResponse} from '@dx-rework/contracts';
+import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
+import {merchandiserWorkCandidate} from '../../apps/api/src/production-platform/merchandiser-work-candidates.js';
+
+const actor:TrustedActorContext={actorId:'test-merchandiser',actorRoles:['order_merchandiser','warehouse_receiver'],authorizationCapability:'todo:view',requestId:'test-workbench'};
+const task={
+ todoId:'test-handover',category:'digital_material_investment',requiredRole:'order_merchandiser',recipientUserId:actor.actorId,todoType:'business_action',status:'pending',
+ taskTitle:'投面辅料',dueAt:'2026-11-25T09:00:00.000Z',route:{todoId:'test-handover',entityId:'test-source',routeName:'digital_source_material_investment'},
+} satisfies Parameters<typeof merchandiserWorkCandidate>[1];
+const route=(routeName:TodoResponse['route']['routeName'])=>({...task.route,routeName});
+describe('only native actionable merchandiser work is eligible for the new workbench',()=>{
+ it('retains the original pre-order source or formal order and the original deadline',()=>{
+  expect(merchandiserWorkCandidate(actor,task)).toEqual({itemId:task.todoId,kind:'preparation',title:task.taskTitle,route:task.route,dueAt:task.dueAt});
+  expect(merchandiserWorkCandidate(actor,{...task,route:{...route('digital_order_material_investment'),entityId:'test-order'}})?.route.entityId).toBe('test-order');
+ });
+ it('does not turn a second role, another recipient, a reminder or a superseded route into a new command',()=>{
+  expect(merchandiserWorkCandidate(actor,{...task,requiredRole:'warehouse_receiver'})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,recipientUserId:'someone-else'})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,todoType:'information'})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,status:'blocked_recipient'})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,route:{...task.route,todoId:'stale'}})).toBeNull();
+  expect(merchandiserWorkCandidate({...actor,actorRoles:['warehouse_receiver']},task)).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...task,category:'digital_preparation_materials',route:route('digital_bulk_preparation')})).toBeNull();
+ });
+ it('preserves the exact contract-return route and does not turn an approval into a merchandiser action',()=>{
+  const doc={documentId:'test-document',version:2,supplierName:'TEST factory',source:'price_reapplication' as const};
+  const candidate={...task,category:'sourcing_contract_return',route:{...route('sourcing_detail'),tab:'contract_return' as const,contractReturn:doc}};
+  expect(merchandiserWorkCandidate(actor,candidate)?.route).toEqual(candidate.route);
+  expect(merchandiserWorkCandidate(actor,{...candidate,category:'sourcing_owner_approval'})).toBeNull();
+  expect(merchandiserWorkCandidate(actor,{...candidate,route:route('sourcing_detail')})).toBeNull();
+ });
+});
