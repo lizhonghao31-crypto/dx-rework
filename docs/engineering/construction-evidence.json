@@ -2,7 +2,7 @@
   "version": 1,
   "risk": "full",
   "base": "90bc335db678dc038f15fe9e939b5505251ffc70",
-  "sourceFingerprint": "de64bafc5d44b1084dc28956fc024bdd78f52f4d4b78c28123933e5672f965f7",
+  "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
   "rules": [
     {
       "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
@@ -158,12 +158,12 @@
       "passed": 285,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T10:33:35+00:00",
-      "endedAt": "2026-11-25T10:33:40+00:00",
-      "sourceFingerprint": "de64bafc5d44b1084dc28956fc024bdd78f52f4d4b78c28123933e5672f965f7",
-      "testedHead": "b0fdb547f1570b244a8019d58ada5d82543d2c58",
-      "log": "/workspace/dx-v115-c5-evidence/prepush/c5-protocol.log",
-      "logSha256": "0303582ab72d59895dee0f4a82a6957b021f7ce311488db41d39fd01deca6f66"
+      "startedAt": "2026-11-25T11:11:57+00:00",
+      "endedAt": "2026-11-25T11:12:03+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-protocol.log",
+      "logSha256": "627b53c239b4262cc3803baa39fb94ce1cc300c4fb757745490d71c4e51010ba"
     },
     {
       "id": "c5-static",
@@ -172,12 +172,12 @@
       "context": "Exact current working candidate before commit. Locked repository Node 22. Migration checksum and chronological sequence verified before fresh isolated PostgreSQL use.",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T10:28:27+00:00",
-      "endedAt": "2026-11-25T10:29:08+00:00",
-      "sourceFingerprint": "de64bafc5d44b1084dc28956fc024bdd78f52f4d4b78c28123933e5672f965f7",
-      "testedHead": "dac10b73b4536728d180b623a050b76c3286d3c6",
-      "log": "/workspace/dx-v115-c5-evidence/prepush/c5-static.log",
-      "logSha256": "181b64c0971bacf726c97373944ef8a9b2043506abb6cbb86d11b9f5cd6955af"
+      "startedAt": "2026-11-25T11:12:08+00:00",
+      "endedAt": "2026-11-25T11:12:57+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-static.log",
+      "logSha256": "a9fc11c279638d9ef02aede9b682ed529ee727846e53f2e6509a3e5af5134b64"
     },
     {
       "id": "c5-unit",
@@ -189,42 +189,42 @@
       "passed": 91,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T10:28:00+00:00",
-      "endedAt": "2026-11-25T10:28:05+00:00",
-      "sourceFingerprint": "de64bafc5d44b1084dc28956fc024bdd78f52f4d4b78c28123933e5672f965f7",
-      "testedHead": "dac10b73b4536728d180b623a050b76c3286d3c6",
-      "log": "/workspace/dx-v115-c5-evidence/prepush/c5-unit.log",
-      "logSha256": "395c5002ebfa78a385125b7b5b6085bb303fc23c9b3a45208d1208b229130ad7",
+      "startedAt": "2026-11-25T11:12:03+00:00",
+      "endedAt": "2026-11-25T11:12:08+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-unit.log",
+      "logSha256": "2ea618ce9dfd236c91f76befa66e643837da26613c8ed0b88c3692732b11b7c6",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c638a7b6c4ba4d6af2123de1495d9369ec2408b1a1267b491a94f21d2a7719a5"
+          "sha256": "bf3660b9b5bff7c986fdae7c9defb94051dbf6def1ee13b0f6e492720fc91670"
         }
       ]
     },
     {
       "id": "c5-native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts -t 'C5 rejects cross-order|C5 completes the formal milestone|submits current revision inputs|opens the seven approved workbench regions|reads an exact original development revision|captures and supplements the original customer approval date|numbers new pure and confirmed orders|resumes an unnumbered draft'",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'C5 rejects cross-order|C5 completes the formal milestone|submits current revision inputs|opens the seven approved workbench regions|reads an exact original development revision|captures and supplements the original customer approval date|numbers new pure and confirmed orders|resumes an unnumbered draft|keeps the original sample handover receipt|keeps a failed .* precheck|opens the exact native request|shows the ordinary|reads the original customer'",
       "context": "Same original signed App AuthService, production web build and Chromium, dual isolated guarded PostgreSQL databases, normal two-worker test mode. Synthetic data only. Checks affected cases. Other cases filtered by name and not counted.",
       "status": "passed",
       "exitCode": 0,
-      "passed": 9,
+      "passed": 13,
       "failed": 0,
-      "skipped": 39,
-      "startedAt": "2026-11-25T10:27:45+00:00",
-      "endedAt": "2026-11-25T10:28:38+00:00",
-      "sourceFingerprint": "de64bafc5d44b1084dc28956fc024bdd78f52f4d4b78c28123933e5672f965f7",
-      "testedHead": "dac10b73b4536728d180b623a050b76c3286d3c6",
-      "log": "/workspace/dx-v115-c5-evidence/prepush/c5-native.log",
-      "logSha256": "1d84034750d95a1fed3881a287ca42b3e4dc4c3a060f5ddf3b9f979438fdde86",
+      "skipped": 52,
+      "startedAt": "2026-11-25T11:11:57+00:00",
+      "endedAt": "2026-11-25T11:13:32+00:00",
+      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
+      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
+      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-native.log",
+      "logSha256": "aeae8919d8e70de95cf4e7a4628c37176eb1a1ee82dba598b0a71dfa4f105600",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9a4a7bf57c38480cdc655e5f3a956df909cd8304740add3ecf1d038e95ce3c58"
+          "sha256": "c1d613649be962865e3803d0e897ef03bf1f8eefa882016bc11eb5425383c88f"
         }
       ]
     }
   ],
-  "executionBoundary": "Local checks use signed synthetic identities and isolated PostgreSQL. No deploy, live business data, or Acceptance run. Initial Light reported a missing C5 time-site inventory; all original semantic metadata was retained and the unchanged original protocol passed. Official final GitHub gate and independent exact-head Review remain pending at construction time. C3, C4, C6 and X1/X2 are unchanged and X3–X6 remain separate."
+  "executionBoundary": "Local checks use signed synthetic identities and isolated PostgreSQL. No deploy, live business data, or Acceptance run. Initial Light reported a missing C5 time-site inventory; all original semantic metadata was retained and the unchanged original protocol passed. Full 45597174756 passed non-db but reported two legacy-browser expectation mismatches in the PostgreSQL lane. Both now exercise the approved new sample receipt decoration and separate Customer Opinion and Quotation regions while retaining actual receipt, database, precheck and native retry assertions. Changes after that run are tests and evidence only. Official final GitHub gate and independent Review for this correction remain pending at construction time. C3, C4, C6 and X1/X2 are unchanged and X3–X6 remain separate."
 }

@@ -1450,7 +1450,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const key=await submitted.request().headerValue('idempotency-key');expect(key).toBeTruthy();
    const firstReceipt=(await submitted.json()).receipt;
    expect(firstReceipt).toMatchObject({...body,confirmedBy:designer.actorId});
-   await panel.getByText(/^已交样衣 ·/).waitFor();
+   const completed=panel.locator('[data-receipt="shared"]').filter({hasText:/已交样衣 ·/});
+   await completed.waitFor();
+   expect(await completed.innerText()).toContain(firstReceipt.recipientName??'接收跟单');
    const repeat=await send('POST',sample,randomUUID(),body);expect(repeat.statusCode).toBe(200);expect(repeat.json().receipt).toEqual(firstReceipt);
    const reassigned=await selectRecipient(second.actorId,1);expect(reassigned.statusCode,reassigned.body).toBe(200);
    const afterReassignment=await send('GET',sample,'');expect(afterReassignment.json()).toMatchObject({recipient:{id:second.actorId},current:null,canConfirm:true,history:[firstReceipt]});
