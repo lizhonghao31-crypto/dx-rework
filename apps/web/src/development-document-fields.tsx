@@ -109,7 +109,8 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     if(i!==index)return item;
     const next={...item,...patch};
     if(patch.supplier!==undefined&&patch.supplier!==item.supplier&&!Object.hasOwn(patch,"supplierReference"))delete next.supplierReference;
-    const changedIdentity=(["name","specification","supplier","auxiliaryKind"] as const).some(key=>Object.hasOwn(patch,key)&&patch[key]!==item[key]);
+    const identityFields=item.auxiliaryCatalog?["name","specification","auxiliaryKind"] as const:["name","specification","auxiliaryKind","supplier"] as const;
+    const changedIdentity=identityFields.some(key=>Object.hasOwn(patch,key)&&patch[key]!==item[key]);
     if(changedIdentity&&!Object.hasOwn(patch,"auxiliaryCatalog")){
       delete next.auxiliaryCatalog;
       const completingName=Object.hasOwn(patch,"name")&&fillingMaterialName.current===item.materialId;
@@ -146,10 +147,10 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       const showPrice=(amount:string|undefined,unit:string|undefined)=>amount?amount+(unit?` 元 / ${unit}`:" 元"):"未记录";
       const before=showPrice(current.unitPrice,current.pricingUnit);
       const after=showPrice(nextPrice?.amount,nextPrice?.unit);
-      if(!await confirmInApp(`采用所选辅料版本？本单 ${before} · ${current.supplier||"供应商未记录"} · ${prior?`目录版本 ${prior.version}`:"无目录版本"} → ${after} · ${selected.supplier||"供应商未记录"} · 目录版本 ${selected.version}`)||writing.current)return false;
+      if(!await confirmInApp(`采用所选辅料版本？本单 ${before} · ${prior?`目录版本 ${prior.version}`:"无目录版本"} → ${after} · 目录版本 ${selected.version}`)||writing.current)return false;
     }
     changeMaterial(index,{
-      name:selected.name,specification:selected.specification,supplier:selected.supplier,auxiliaryKind:selected.auxiliaryKind,
+      name:selected.name,specification:selected.specification,auxiliaryKind:selected.auxiliaryKind,
       auxiliaryCatalog:{id:selected.id,version:selected.version,...(nextPrice!==undefined?{referencePricing:nextPrice}:{})},
       ...(nextPrice?{unitPrice:nextPrice.amount,pricingUnit:nextPrice.unit}:{
         ...(current.unitPrice!==undefined?{unitPrice:""}:{}),...(current.pricingUnit!==undefined?{pricingUnit:""}:{}),

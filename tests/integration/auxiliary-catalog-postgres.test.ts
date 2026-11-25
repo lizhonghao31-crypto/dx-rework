@@ -2,7 +2,7 @@ import {vi as correctnessBudget} from 'vitest';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 // Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
 correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import Fastify from 'fastify';
@@ -27,7 +27,7 @@ const url=process.env.TEST_DATABASE_URL;
  const capabilities=new Map<string,string[]>();
  const rootAuthority=new RootAuthority(db,'TEST',`TEST-${ids.get('root_superuser')}`),service=new AuxiliaryCatalogService(db,rootAuthority),forms=new DigitalDevelopmentService(db,true),identity=new DigitalProductionIdentityService(db,true);
  const actor=(role='sample_designer'):TrustedActorContext=>({actorId:ids.get(role)!,actorRoles:[role],authorizationCapability:'auxiliary_catalog:write',authorizationCapabilities:capabilities.get(role)??[],requestId:'TEST-P06'});
- const value=(name='TEST-'+randomUUID(),specification='TEST规格',supplier='TEST供应方')=>({name,specification,supplier,auxiliaryKind:'扁机' as const});
+ const value=(name='TEST-'+randomUUID(),specification='TEST规格')=>({name,specification,auxiliaryKind:'扁机' as const});
  const list=(q='',includeInactive=false,page=1,who=actor())=>service.list(who,AuxiliaryQuerySchema.parse({q,includeInactive:String(includeInactive),page}));
  beforeAll(async()=>{
   await createOwnedPostgresSchema(admin,schema);await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -56,14 +56,36 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(service.merge(actor('development_clerk'),protectedItem.id,{expectedVersion:1,targetId:randomUUID(),expectedTargetVersion:1,reason:'TEST'},randomUUID())).rejects.toMatchObject({statusCode:403});
   await expect(db.query("INSERT INTO capability_catalog(capability,display_name,description) VALUES('test:forbidden','TEST','TEST')")).rejects.toThrow();
  });
- it('deduplicates concurrent same combinations and same keys, retaining separate specifications and suppliers',async()=>{
+ it('deduplicates concurrent same combinations and same keys, retaining separate specifications without a supplier',async()=>{
   const input=value(),results=await Promise.allSettled([service.create(actor(),input,randomUUID()),service.create(actor('order_merchandiser'),input,randomUUID())]);expect(results.filter(row=>row.status==='fulfilled')).toHaveLength(1);expect(results.filter(row=>row.status==='rejected')).toHaveLength(1);
-  await service.create(actor(),{...input,specification:'另一规格'},randomUUID());await service.create(actor(),{...input,supplier:'另一供应方'},randomUUID());expect((await list(input.name)).total).toBe(3);
+  await service.create(actor(),{...input,specification:'另一规格'},randomUUID());
+  await expect(service.create(actor(),{...input,supplier:'另一供应方'},randomUUID())).rejects.toMatchObject({statusCode:400});
+  expect((await list(input.name)).total).toBe(2);
   const key=randomUUID(),next=value(),[a,b]=await Promise.all([service.create(actor(),next,key),service.create(actor(),next,key)]);expect(a).toEqual(b);expect((await list(next.name)).total).toBe(1);
   await expect(service.create(actor(),{...next,name:next.name+'不同载荷'},key)).rejects.toMatchObject({statusCode:409});expect((await service.receipt(actor(),'create',key)).receipt).toMatchObject({id:a.id});expect((await service.receipt(actor('order_merchandiser'),'create',key)).receipt).toBeNull();
  });
+ it('preserves but does not project or search old supplier data in the directory, including original receipts',async()=>{
+  const oldSupplier='TEST旧辅料供应方'+randomUUID(),input=value(),key=randomUUID();
+  const entry=await service.create(actor(),input,key);
+  const legacyInput={name:input.name,specification:input.specification,supplier:oldSupplier,auxiliaryKind:input.auxiliaryKind};
+  const legacyHash=createHash('sha256').update(JSON.stringify(legacyInput)).digest('hex');
+  // Simulate a pre-change head and original response without modifying immutable version history.
+  await db.query('UPDATE auxiliary_catalog_items SET supplier=$2 WHERE auxiliary_id=$1',[entry.id,oldSupplier]);
+  await db.query("UPDATE idempotency_records SET request_hash=$3,response=response||jsonb_build_object('supplier',$2::text) WHERE scope='auxiliary-catalog:create' AND idempotency_key=$1",[key,oldSupplier,legacyHash]);
+  const renamed=await service.rename(actor(),entry.id,{expectedVersion:1,name:entry.name+'原记录',reason:'TEST 照常改名'},randomUUID());
+  expect(renamed).not.toHaveProperty('supplier');
+  expect((await list(oldSupplier,true)).total).toBe(0);
+  expect((await list(entry.name)).items).toEqual([renamed]);
+  expect((await service.history(actor(),entry.id,1)).items.every(row=>!Object.hasOwn(row,'supplier'))).toBe(true);
+  expect((await service.receipt(actor(),'create',key)).receipt).toEqual(entry);
+  expect(await service.create(actor(),legacyInput,key)).toEqual(entry);
+  await expect(service.create(actor(),{...input,name:renamed.name},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await db.query('SELECT supplier FROM auxiliary_catalog_versions WHERE auxiliary_id=$1 AND version=2',[entry.id])).rows[0].supplier).toBe(oldSupplier);
+ });
  it('stores reference pricing by exact version and keeps catalog access separate from cost visibility',async()=>{
   const original=await service.create(actor(),{...value(),referencePricing:{amount:'0',unit:'套'}},randomUUID());
+  expect((await db.query('SELECT supplier FROM auxiliary_catalog_items WHERE auxiliary_id=$1',[original.id])).rows).toEqual([{supplier:''}]);
+  expect((await db.query('SELECT supplier FROM auxiliary_catalog_versions WHERE auxiliary_id=$1 AND version=1',[original.id])).rows).toEqual([{supplier:''}]);
   const key=randomUUID(),next={expectedVersion:1,referencePricing:{amount:'2.350001',unit:'枚'},reason:'TEST 目录参考价改版'};
   const changed=await service.changeReferencePricing(actor(),original.id,next,key);
   expect(changed).toMatchObject({version:2,referencePricing:next.referencePricing});
@@ -97,7 +119,7 @@ const url=process.env.TEST_DATABASE_URL;
  it('preserves real order snapshots after rename/merge/disable and refuses new stale or invented references',async()=>{
   const entry=await service.create(actor(),value(),randomUUID()),source=await identity.createSource(actor(),{designStyleNo:'TEST-P06-'+randomUUID(),temporaryStyleNo:null,customerCode:null,developmentType:'头版'},randomUUID()),file=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST-P06/${file}`,'a'.repeat(64),actor().actorId]);
-  const document={...initialDevelopmentDocument(),quantity:1,sizes:['M','L'],sampleSize:'M',sizeQuantities:[1,0],measurements:initialDevelopmentDocument().measurements.map(row=>({...row,values:['50','50']})),materials:[{materialId:randomUUID(),category:'辅料' as const,label:'TEST辅料',auxiliaryKind:entry.auxiliaryKind,auxiliaryCatalog:{id:entry.id,version:entry.version},name:entry.name,supplier:entry.supplier,specification:entry.specification,width:'',weight:'',composition:'',consumption:'',color:'',quantity:'1',requiredThisRound:true,available:false,expectedDate:'2026-12-01'}],files:[{attachmentId:file,kind:'款图' as const}]};
+  const document={...initialDevelopmentDocument(),quantity:1,sizes:['M','L'],sampleSize:'M',sizeQuantities:[1,0],measurements:initialDevelopmentDocument().measurements.map(row=>({...row,values:['50','50']})),materials:[{materialId:randomUUID(),category:'辅料' as const,label:'TEST辅料',auxiliaryKind:entry.auxiliaryKind,auxiliaryCatalog:{id:entry.id,version:entry.version},name:entry.name,supplier:'TEST 原订单供应商',specification:entry.specification,width:'',weight:'',composition:'',consumption:'',color:'',quantity:'1',requiredThisRound:true,available:false,expectedDate:'2026-12-01'}],files:[{attachmentId:file,kind:'款图' as const}]};
   const saved=await forms.save(actor(),source.sourceId,{expectedVersion:0,document},randomUUID()),published=await forms.publish(actor(),source.sourceId,saved.version,randomUUID());
   const draftSource=await identity.createSource(actor(),{designStyleNo:'TEST-P06-'+randomUUID(),temporaryStyleNo:null,customerCode:null,developmentType:'头版'},randomUUID());
   const draft=await forms.save(actor(),draftSource.sourceId,{expectedVersion:0,document:{...document,files:[]}},randomUUID());

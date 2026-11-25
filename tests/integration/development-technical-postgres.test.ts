@@ -109,7 +109,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   if(options.catalogReferencePrice){
    const material=document.materials.find(row=>row.materialId===accessoryId)!;
    const catalog=new AuxiliaryCatalogService(f.db,new RootAuthority(f.db,'anchor-test','uat-root'));
-   const entry=await catalog.create(designer,{name:`TEST 参考辅料 ${randomUUID()}`,specification:material.specification,supplier:material.supplier,auxiliaryKind:'普通辅料',referencePricing:{amount:'99',unit:'件'}},randomUUID());
+   const entry=await catalog.create(designer,{name:`TEST 参考辅料 ${randomUUID()}`,specification:material.specification,auxiliaryKind:'普通辅料',referencePricing:{amount:'99',unit:'件'}},randomUUID());
    material.name=entry.name;
    material.auxiliaryCatalog={id:entry.id,version:entry.version,referencePricing:entry.referencePricing??null};
   }

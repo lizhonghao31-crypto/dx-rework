@@ -42,7 +42,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  const [resultKey,setResultKey]=useState<string|null>(null);
  const [busy,setBusy]=useState(false),[unknown,setUnknown]=useState(false),writing=useRef(false),confirming=useRef(false),input=useRef<HTMLInputElement>(null);
  const [action,setAction]=useState<Action|null>(null),[source,setSource]=useState<AuxiliaryItem|null>(null);
- const [name,setName]=useState(''),[specification,setSpecification]=useState(''),[supplier,setSupplier]=useState(''),[kind,setKind]=useState<AuxiliaryItem['auxiliaryKind']>('普通辅料'),[reason,setReason]=useState('');
+ const [name,setName]=useState(''),[specification,setSpecification]=useState(''),[kind,setKind]=useState<AuxiliaryItem['auxiliaryKind']>('普通辅料'),[reason,setReason]=useState('');
  const [referenceAmount,setReferenceAmount]=useState(''),[referenceUnit,setReferenceUnit]=useState('');
  const editorInitial=useRef(''),[historyItem,setHistoryItem]=useState<AuxiliaryItem|null>(null);
  const [reading,setReading]=useState(true);
@@ -52,7 +52,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  const attempt=useRef<{action:Action;path:string;body:unknown;key:string}|null>(null),locked=disabled||busy||unknown||reading||!currentResult;
  const canReadReferencePricing=result?.canReadReferencePricing===true;
  const canManage=result?.canManage===true&&!selectionOnly;
- const dirty=action!==null&&JSON.stringify({name,specification,supplier,kind,reason,referenceAmount,referenceUnit})!==editorInitial.current;
+ const dirty=action!==null&&JSON.stringify({name,specification,kind,reason,referenceAmount,referenceUnit})!==editorInitial.current;
  useDigitalDetailNavigationGuard(unknown||dirty,busy,writing,unknown?'共享辅料操作结果仍未确认，离开不会撤销提交并会丢失本页重试标识。仍要离开？':'共享辅料资料尚未保存，仍要离开？');
  useEffect(()=>{if(!pageView)input.current?.focus();},[pageView]);
  useEffect(()=>{
@@ -79,8 +79,8 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  const canDiscard=async()=>!(unknown||dirty)||await confirmInApp(unknown?'目录提交仍未确认，离开不会撤销操作，并会丢失本页核对标识。仍要继续？':'目录资料尚未保存，仍要放弃本次编辑？',pageView?{presentation:'astryx'}:{});
  const edit=async(next:Action,item:AuxiliaryItem|null=null)=>{
   if(locked||!await canDiscard()||writing.current)return;
-  const values={name:item?.name??search.trim(),specification:item?.specification??'',supplier:item?.supplier??'',kind:item?.auxiliaryKind??'普通辅料',reason:'',referenceAmount:item?.referencePricing?.amount??'',referenceUnit:item?.referencePricing?.unit??''};
-  editorInitial.current=JSON.stringify(values);setAction(next);setSource(item);setName(values.name);setSpecification(values.specification);setSupplier(values.supplier);setKind(values.kind);setReason('');setReferenceAmount(values.referenceAmount);setReferenceUnit(values.referenceUnit);setError('');attempt.current=null;
+  const values={name:item?.name??search.trim(),specification:item?.specification??'',kind:item?.auxiliaryKind??'普通辅料',reason:'',referenceAmount:item?.referencePricing?.amount??'',referenceUnit:item?.referencePricing?.unit??''};
+  editorInitial.current=JSON.stringify(values);setAction(next);setSource(item);setName(values.name);setSpecification(values.specification);setKind(values.kind);setReason('');setReferenceAmount(values.referenceAmount);setReferenceUnit(values.referenceUnit);setError('');attempt.current=null;
  };
  const complete=(item:AuxiliaryItem)=>{setUnknown(false);attempt.current=null;setAction(null);setSource(null);setNotice(onSelect?`共享辅料“${item.name}”的目录操作已取得回执；订单资料尚未保存。请搜索并选择当前有效条目。`:`共享辅料“${item.name}”的目录操作已保存；历史订单资料快照保持不变。`);quietRead.current=true;setRefresh(x=>x+1);};
  const showKnownError=(operation:Action,issue:BusinessDialogIssue)=>{if(pageView)void businessErrorInApp(actionTitles[operation],[issue]);else setError(issue.message);};
@@ -103,7 +103,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  };
  const submit=async()=>{if(locked||!action||confirming.current)return;
   const referencePricing=referenceAmount.trim()||referenceUnit.trim()?{amount:referenceAmount.trim(),unit:referenceUnit.trim()}:null;
-  const body=action==='create'?CreateAuxiliarySchema.safeParse({name,specification,supplier,auxiliaryKind:kind,...(canReadReferencePricing?{referencePricing}:{})})
+  const body=action==='create'?CreateAuxiliarySchema.safeParse({name,specification,auxiliaryKind:kind,...(canReadReferencePricing?{referencePricing}:{})})
    :action==='reference-pricing'?ChangeAuxiliaryReferencePricingSchema.safeParse({expectedVersion:source?.version,referencePricing,reason}):action==='rename'?RenameAuxiliarySchema.safeParse({expectedVersion:source?.version,name,reason}):DisableAuxiliarySchema.safeParse({expectedVersion:source?.version,reason});
   if(!body.success){showKnownError(action,{type:'format',message:body.error.issues[0]?.message??'请核对目录资料'});return;}
   if(action==='disable'){
@@ -144,11 +144,10 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  ];
  const editor=action&&<form onSubmit={event=>{event.preventDefault();event.stopPropagation();void submit();}}>
   {!pageView&&<h3>{action==='create'?'直接新增共享辅料':actionTitles[action]}</h3>}
-  {source&&<div className="auxiliary-catalog-comparison"><div><h3>原辅料</h3><p>{source.name} · 版本 {source.version}</p><p>{source.auxiliaryKind} · 规格：{source.specification||'未填写'} · 供应方：{source.supplier||'未填写'}</p></div></div>}
+  {source&&<div className="auxiliary-catalog-comparison"><div><h3>原辅料</h3><p>{source.name} · 版本 {source.version}</p><p>{source.auxiliaryKind} · 规格：{source.specification||'未填写'}</p></div></div>}
   {(action==='create'||action==='rename')&&<CatalogField page={pageView} label="辅料品名" value={name} onChange={setName} disabled={locked} maxLength={100}/>}
   {action==='create'&&<>
    <CatalogField page={pageView} label="规格" value={specification} onChange={setSpecification} disabled={locked} maxLength={100}/>
-   <CatalogField page={pageView} label="供应方" value={supplier} onChange={setSupplier} disabled={locked} maxLength={100}/>
    {pageView?<Selector label="辅料分类" value={kind} options={['普通辅料','拉链','扁机']} onChange={value=>setKind(value as typeof kind)} isDisabled={locked}/>:<label>辅料分类<select value={kind} disabled={locked} onChange={event=>setKind(event.target.value as typeof kind)}>{['普通辅料','拉链','扁机'].map(value=><option key={value}>{value}</option>)}</select></label>}
   </>}
   {(action==='reference-pricing'||action==='create'&&canReadReferencePricing)&&<>
@@ -172,7 +171,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
   {pageView&&<style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style>}
   <header>{pageView?<h1>共享辅料目录</h1>:<h2>{onSelect?'选择共享辅料':'共享辅料目录'}</h2>}{onSelect&&<p>选择只填入本行资料；本轮是否使用仍由文员核料确认。</p>}</header>
   <div className="auxiliary-catalog-search">
-   {pageView?<CatalogField page label="搜索品名、规格或供应方" value={search} maxLength={100} disabled={busy} onChange={value=>{setSearch(value);setPage(1);}}/>:<label>搜索品名、规格或供应方<input ref={input} value={search} maxLength={100} disabled={busy} onChange={event=>{setSearch(event.target.value);setPage(1);}}/></label>}
+   {pageView?<CatalogField page label="搜索品名或规格" value={search} maxLength={100} disabled={busy} onChange={value=>{setSearch(value);setPage(1);}}/>:<label>搜索品名或规格<input ref={input} value={search} maxLength={100} disabled={busy} onChange={event=>{setSearch(event.target.value);setPage(1);}}/></label>}
    <label><input type="checkbox" checked={includeInactive} disabled={busy} onChange={event=>{setIncludeInactive(event.target.checked);setPage(1);}}/>显示停用及已合并记录</label>
    {canManage&&<ActionButton type="button" variant={pageView?'primary':'secondary'} disabled={locked} onClick={()=>void edit('create')}>{pageView?'新增辅料':'直接新增辅料'}</ActionButton>}
   </div>
@@ -180,7 +179,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
   {readError&&<p role="alert">{readError}<ActionButton type="button" disabled={busy||reading} onClick={()=>{if(!pendingRead.current)setRefresh(value=>value+1);}}>重新读取目录</ActionButton></p>}
   {!result&&!readError&&<p role="status">正在读取共享辅料…</p>}
   {pageView?<div className="auxiliary-catalog-table" aria-busy={reading||!currentResult}><div className="auxiliary-catalog-table-canvas"><Table data={result?.items??[]} idKey="id" columns={columns} density="balanced" textOverflow="wrap" aria-label="共享辅料目录" rowIndexStart={(page-1)*(result?.pageSize??15)+1}/></div></div>:<div className="auxiliary-catalog-results">{result?.items.map(item=><article key={item.id}>
-   <div><strong>{item.name}</strong><span>{item.auxiliaryKind} · 规格：{item.specification||'未填写'} · 供应方：{item.supplier||'未填写'} · v{item.version}</span>{canReadReferencePricing&&<small>参考价：{priceText(item.referencePricing)}</small>}{!item.active&&<small>{item.mergedInto?'已合并，保留原引用':'已停用，旧订单快照保留'}</small>}</div>{actions(item)}
+   <div><strong>{item.name}</strong><span>{item.auxiliaryKind} · 规格：{item.specification||'未填写'} · v{item.version}</span>{canReadReferencePricing&&<small>参考价：{priceText(item.referencePricing)}</small>}{!item.active&&<small>{item.mergedInto?'已合并，保留原引用':'已停用，旧订单快照保留'}</small>}</div>{actions(item)}
   </article>)}</div>}
   {result&&!reading&&currentResult&&!result.items.length&&<p>没有匹配的辅料。{selectionOnly?'可换关键词。':'可换关键词，或由有权岗位直接新增。'}</p>}
   {result&&<ListPagination page={page} totalPages={!reading&&currentResult&&!readError?Math.max(1,Math.ceil(result.total/result.pageSize)):null} total={!reading&&currentResult&&!readError?result.total:null} busy={busy||reading||!currentResult} onPageChange={setPage} ariaLabel="辅料目录分页"/>}

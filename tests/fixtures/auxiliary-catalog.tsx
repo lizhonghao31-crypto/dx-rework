@@ -14,7 +14,7 @@ import {initialDevelopmentDocument} from '../../apps/web/src/digital-development
 import type {AuxiliaryItem} from '@dx-rework/contracts/auxiliary-catalog';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,mode=new URLSearchParams(location.search).get('mode')??'select';
-const entry:AuxiliaryItem={id:id(1),version:1,name:'TEST扁机完整中文名称',specification:'TEST规格40厘米',supplier:'TEST供应方',auxiliaryKind:'扁机',active:true,mergedInto:null,changedAt:'2026-10-20T00:00:00Z'};
+const entry:AuxiliaryItem={id:id(1),version:1,name:'TEST扁机完整中文名称',specification:'TEST规格40厘米',auxiliaryKind:'扁机',active:true,mergedInto:null,changedAt:'2026-10-20T00:00:00Z'};
 const fixture={requests:[] as {path:string;method:string;key:string|null;body:unknown}[],commits:0,parentSubmits:0,document:null as DevelopmentDocument|null};Object.assign(window,{auxiliaryFixture:fixture});let receipt:AuxiliaryItem|null=null;
 let releaseDirectory!:()=>void;
 const slowInitialDirectory=new Promise<void>(resolve=>{releaseDirectory=resolve;});
