@@ -187,7 +187,7 @@
       "startedAt": "2026-11-25T12:59:07.748Z",
       "endedAt": "2026-11-25T13:02:06.953Z",
       "logSha256": "9a0335d3fa7d26db37158bb6e8b8b5b6e4cd951c3dd1b5433b9d6e40829b2a5b",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-native-warehouse-chain.log"
     },
     {
       "id": "signed-creation",
@@ -210,7 +210,7 @@
       "startedAt": "2026-11-25T12:59:07.768Z",
       "endedAt": "2026-11-25T12:59:58.793Z",
       "logSha256": "d0648284b5833db0a8a2d5e6376194dc27ee452e30b9cac5713066a388d8798e",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-warehouse-creation-browser.log"
     },
     {
       "id": "warehouse-unit",
@@ -233,7 +233,7 @@
       "startedAt": "2026-11-25T12:59:07.406Z",
       "endedAt": "2026-11-25T12:59:17.357Z",
       "logSha256": "9dfa1123d2098e06462d11d064af8d41bb33f855862d49ee0e9f22e3c0ad24bd",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-unit.log"
     },
     {
       "id": "typecheck",
@@ -247,7 +247,7 @@
       "startedAt": "2026-11-25T12:59:07.097Z",
       "endedAt": "2026-11-25T13:00:08.193Z",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-typecheck.log"
     },
     {
       "id": "scoped-lint",
@@ -261,7 +261,7 @@
       "startedAt": "2026-11-25T12:59:07.053Z",
       "endedAt": "2026-11-25T12:59:07.053Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-source-lint.log"
     },
     {
       "id": "preflight",
@@ -275,7 +275,7 @@
       "startedAt": "2026-11-25T12:59:07.105Z",
       "endedAt": "2026-11-25T12:59:22.244Z",
       "logSha256": "ee192d6d999a0c98f172c58d5bdf00dfe6e3fef39d3ff00f8dca264e84e6f27f",
-      "logReference": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log"
+      "log": "/workspace/dx-v115-x3-evidence/x3-reviewed-preflight.log"
     }
   ]
 }
