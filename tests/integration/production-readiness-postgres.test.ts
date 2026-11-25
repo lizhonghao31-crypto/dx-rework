@@ -1453,6 +1453,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(state.facts.find(record=>record.kind==='material_investment')).toMatchObject({recordId:initial.recordId,version:1,state:'partial',occurredAt:started});
    expect(state.materialInvestmentReminder).toMatchObject({handoverId:original.handoverId,startedAt:started,percent:70,closed:null,status:'waiting'});
    expect(await materialInvestmentTodos(h.db,merch,{todoId:original.handoverId})).toMatchObject([{todoId:original.handoverId,route:{routeName:'digital_order_material_investment',entityId:orderId}}]);
+   const workbench=new TodoService(h.db,undefined,undefined,undefined,notifications);
+   const readCapabilities=(await h.db.query<{capability:string}>(`SELECT c.capability FROM user_role_assignments a JOIN role_capabilities c USING(role_code)
+    WHERE a.user_id=$1 AND a.role_code='order_merchandiser' AND a.revoked_at IS NULL`,[merch.actorId])).rows.map(row=>row.capability);
+   expect(readCapabilities).toContain('todo:view');
+   const selected=await workbench.merchandiserActionPage({...merch,authorizationCapability:'todo:view',authorizationCapabilities:readCapabilities},
+    {kind:'preparation',search:orderId,page:1});
+   expect(selected.items).toEqual(expect.arrayContaining([expect.objectContaining({itemId:original.handoverId,dueAt:state.materialInvestmentReminder!.dueAt,
+    originalOrderId:orderId,poNumbers:[style+'-PO'],route:{routeName:'digital_order_material_investment',entityId:orderId,todoId:original.handoverId}})]));
    return state.materialInvestmentReminder!;
   });
   expect(reminder.warningAt).toBeTruthy();

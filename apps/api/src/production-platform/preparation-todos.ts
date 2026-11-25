@@ -9,20 +9,23 @@ import type {InstructionDocument} from '@dx-rework/contracts/production-instruct
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import {preparationMaterialLabels,type PreparationMaterialFact} from '@dx-rework/contracts/production-readiness';
 import {developmentReadTables} from './development-amendment-repository.js';
-import {materialInvestmentReminder} from './material-investment-reminder.js';
+import {materialInvestmentPlanTarget,materialInvestmentReminder} from './material-investment-reminder.js';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
+import {digitalFormalPoNo,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
 import {todoSlaTiming} from '../todos/sla-presentation.js';
 import {todoContentToken} from '../todos/content-reads.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 /** Derived actions share native evidence. Reading or acknowledging them never completes work. */
-export async function preparationWindowTodos(db:DB,actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]>{
+export async function preparationWindowTodos(db:DB,actor:TrustedActorContext,projection?:TodoProjection,
+ clockSource?:{database:Pool;transaction:PoolClient}):Promise<TodoResponse[]>{
  if(!actor.actorRoles.includes('order_merchandiser')||!await preparationAvailable(db)||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'))return [];
  const rows=(await db.query(`SELECT w.*,o.design_style_no FROM digital_preparation_windows w JOIN digital_production_orders o USING(production_order_id)
   WHERE o.primary_merchandiser_id=$1 AND ($2::uuid IS NULL OR w.window_id=$2) AND NOT EXISTS(SELECT 1 FROM digital_preparation_instruction_events e WHERE e.production_order_id=w.production_order_id AND e.kind=CASE WHEN w.kind='draft' THEN 'draft_saved' ELSE 'published' END)
   AND NOT EXISTS(SELECT 1 FROM digital_order_closures c WHERE c.production_order_id=w.production_order_id)
   AND NOT EXISTS(SELECT 1 FROM digital_production_resource_lifecycle l WHERE ((l.resource_kind='order' AND l.resource_id=o.production_order_id) OR (l.resource_kind='source' AND l.resource_id=o.source_id)) AND l.state<>'active')`,[actor.actorId,projection?.todoId??null])).rows;
  const result:TodoResponse[]=[];
- for(const r of rows){if(!await acceptanceIncludesNative(db,r.production_order_id))continue;const at=preparationIso(r.recorded_at)!;
-  const selectionKey:TodoSelectionKey={todoId:r.window_id,contentToken:todoContentToken(['preparation-window',r.window_id]),taskTitle:r.kind==='draft'?'主料已到仓：完成制单草稿':'前提已齐：发布有效制单',todoType:'business_action',category:'digital_preparation_instruction',sourceAction:'preparation_window',recipientUserId:actor.actorId,route:{routeName:'digital_production_instruction',entityId:r.production_order_id,todoId:r.window_id},dueAt:preparationIso(r.due_at),status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:r.design_style_no,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};
+ for(const r of rows){if(!await acceptanceIncludesNative(clockSource?.database??db,r.production_order_id,clockSource?.transaction))continue;const at=preparationIso(r.recorded_at)!;
+  const selectionKey:TodoSelectionKey={todoId:r.window_id,contentToken:todoContentToken(['preparation-window',r.window_id]),taskTitle:r.kind==='draft'?'主料已到仓：完成制单草稿':'前提已齐：发布有效制单',todoType:'business_action',category:'digital_preparation_instruction',sourceAction:'preparation_window',recipientUserId:actor.actorId,requiredRole:'order_merchandiser',route:{routeName:'digital_production_instruction',entityId:r.production_order_id,todoId:r.window_id},dueAt:preparationIso(r.due_at),status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:r.design_style_no,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};
   appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:r.window_id,entityType:'digital_production',entityId:r.production_order_id,requiredRole:'order_merchandiser',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:businessNow().getTime()>new Date(r.due_at).getTime()?'原制单时限已逾期；不会因等待或补料重置':null,version:1,updatedAt:at}),{sourceId:null,orderId:r.production_order_id});
  }
  return result;
@@ -60,17 +63,20 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  if(!actor.actorRoles.includes('order_merchandiser')||!await preparationAvailable(db)||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'))return [];
  const tables=await developmentReadTables(db);
  type Handover=Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'>;
- type Candidate={sourceId:string|null;orderId:string|null;styleNo:string;handoverId:string;handoverVersion:number;occurredAt:Date;handover:Handover;
+ const workbench=projection?.merchandiserSelection===true;
+ type Candidate={sourceId:string|null;orderId:string|null;styleNo:string;sourceCustomer:string|null;preorder:unknown;handoverId:string;handoverVersion:number;occurredAt:Date;handover:Handover;
   documentVersion:number|null;materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;instructionVersion:number|null;orderHandover:boolean;investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'version'|'investmentMaterialOccurrences'>|null};
  const rows=(await db.query<Candidate>(`WITH resources AS (
-  SELECT s.source_id,o.production_order_id,o.primary_merchandiser_id,s.design_style_no
+  SELECT s.source_id,o.production_order_id,o.primary_merchandiser_id,s.design_style_no,s.customer_code
   FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
   WHERE o.production_order_id IS NULL OR o.primary_merchandiser_id=$1
   UNION ALL
-  SELECT NULL,o.production_order_id,o.primary_merchandiser_id,o.design_style_no
+  SELECT NULL,o.production_order_id,o.primary_merchandiser_id,o.design_style_no,NULL
   FROM digital_production_orders o WHERE o.source_id IS NULL AND o.primary_merchandiser_id=$1
  )
- SELECT res.source_id AS "sourceId",res.production_order_id AS "orderId",res.design_style_no AS "styleNo",
+ SELECT res.source_id AS "sourceId",res.production_order_id AS "orderId",res.design_style_no AS "styleNo",res.customer_code AS "sourceCustomer",
+  CASE WHEN $3 AND res.production_order_id IS NULL AND d.document->'customerOrderDraft'->>'stage'='preorder'
+   AND d.document->'customerOrderDraft'->>'withOrder'='true' THEN d.document->'customerOrderDraft'->'order' END AS preorder,
   h.record_id AS "handoverId",h.version AS "handoverVersion",h.occurred_at AS "occurredAt",h.body AS handover,
   coalesce(r.document_version,d.version) AS "documentVersion",j.version AS "instructionVersion",
   (h.resource_kind='order' AND h.body->>'sourceDocumentVersion' IS NULL) AS "orderHandover",
@@ -100,12 +106,13 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
     AND ((l.resource_kind='order' AND l.resource_id=res.production_order_id) OR (l.resource_kind='source' AND l.resource_id=res.source_id)))
    AND (res.source_id IS NULL OR d.status='published' OR (d.status='draft' AND d.document->'customerOrderDraft'->>'stage'='preorder'
     AND d.document->'customerOrderDraft'->>'withOrder'='true'))`,
-  [actor.actorId,projection?.todoId??null])).rows;
+  [actor.actorId,projection?.todoId??null,workbench])).rows;
  const result:TodoResponse[]=[];
  const clock=observation?new ContextBusinessClock(observation.database,observation.transaction):null;
  const scoped=observation?.scan||acceptanceBusinessContext()||!observation;
+ const eligible:Array<{row:Candidate;id:string}>=[];
  for(const row of rows){
-  const id=row.orderId??row.sourceId,at=preparationIso(row.occurredAt)!;
+  const id=row.orderId??row.sourceId;
   const source=row.documentVersion===null?null:{version:row.documentVersion,materials:row.materials??[]};
   const instruction=row.instruction&&row.instructionVersion!==null
    ?{version:row.instructionVersion,materials:instructionInvestmentMaterials(row.instruction)}:null;
@@ -114,9 +121,16 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
    :preparationHandoverCurrent(row.handover,source);
   if(!id||!current||preparationInvestmentComplete(row.handover,row.investment??undefined))continue;
   if(scoped&&!await acceptanceIncludesNative(observation?.database??db,id,observation?.transaction))continue;
-  const now=clock?new Date((await clock.read({kind:row.orderId?'order':'source',id})).now):businessNow();
-  const reminder=await materialInvestmentReminder(db,{sourceId:row.sourceId,orderId:row.orderId,handoverId:row.handoverId,
-   scopeFingerprint:row.handover.investmentScopeBasis?.fingerprint??null},now);
+  eligible.push({row,id});
+ }
+ const plans=workbench?await new OrderTimePlanRepository(db).currentOrders(eligible.flatMap(({row})=>row.orderId&&row.handover.investmentScopeBasis?.fingerprint?[row.orderId]:[])):null;
+ for(const {row,id} of eligible){
+  const at=preparationIso(row.occurredAt)!,scopeFingerprint=row.handover.investmentScopeBasis?.fingerprint??null;
+  const now=workbench?null:clock?new Date((await clock.read({kind:row.orderId?'order':'source',id})).now):businessNow();
+  const reminder=now?await materialInvestmentReminder(db,{sourceId:row.sourceId,orderId:row.orderId,handoverId:row.handoverId,scopeFingerprint},now):null;
+  const dueAt=plans&&row.orderId?materialInvestmentPlanTarget(plans.get(row.orderId),scopeFingerprint)?.dueAt??null:reminder?.dueAt??null;
+  const preorder=row.preorder?InitialCustomerOrderDraftSchema.safeParse(row.preorder).data:undefined;
+  const preorderSearch=preorder?{customer:preorder.customerCode.trim()||row.sourceCustomer,poNumbers:[...new Set(preorder.lines.flatMap(line=>digitalFormalPoNo(line)??[]))]}:undefined;
   const route:TodoResponse['route']={routeName:row.orderId?'digital_order_material_investment':'digital_source_material_investment',entityId:id,todoId:row.handoverId};
   if(reminder?.enabled&&!reminder.closed&&!reminder.termination&&reminder.status!=='waiting'){
    const title=reminder.status==='overdue'?'投面辅料已逾期':'投面辅料临近截止';
@@ -125,10 +139,10 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
   const selectionKey:TodoSelectionKey={todoId:row.handoverId,
    contentToken:todoContentToken(['material-investment',row.handoverId,row.handover.investmentScopeBasis?.fingerprint??row.handover.sourceDocumentVersion,row.investment?.version??null]),
    taskTitle:preparationMaterialLabels.material_investment,todoType:'business_action',category:'digital_material_investment',sourceAction:'preparation_material_investment',
-   recipientUserId:actor.actorId,route,
-   dueAt:reminder?.dueAt??null,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:row.styleNo,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};
+   recipientUserId:actor.actorId,requiredRole:'order_merchandiser',route,...(preorderSearch?{preorderSearch}:{}),
+   dueAt,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:row.styleNo,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};
   appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:row.handoverId,entityType:'digital_production',entityId:id,
-   requiredRole:'order_merchandiser',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,...(reminder?{timing:todoSlaTiming({dueAt:reminder.dueAt,warningAt:reminder.warningAt,
+   requiredRole:'order_merchandiser',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,...(reminder&&now?{timing:todoSlaTiming({dueAt:reminder.dueAt,warningAt:reminder.warningAt,
     enteredAt:reminder.startedAt,exclusive:reminder.exclusive,asOf:now.toISOString(),unlimited:false})}:{}),version:row.handoverVersion,updatedAt:at}),{sourceId:row.sourceId,orderId:row.orderId});
  }
  return result;

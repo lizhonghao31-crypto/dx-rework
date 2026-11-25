@@ -299,6 +299,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   h.setCollectionScene(scene);
   await h.f.advance(scene,'2026-11-20T04:00:00.000Z');
+  const matchingPo=style+'-PO';
+  const assigned=await h.open(merch.actorId,1165,{},'/ui/digital-production?workspace=merchandiser');
+  try{
+   const search=assigned.page.getByRole('textbox',{name:'搜索订单ID、PO、客户或工厂',exact:true});
+   for(const term of [matchingPo,'PD']){
+    const response=assigned.page.waitForResponse(reply=>{const url=new URL(reply.url());return url.pathname==='/api/todos/merchandiser/current'&&url.searchParams.get('search')===term;});
+    await search.fill(term);
+    const result=await response;expect(result.status(),await result.text()).toBe(200);
+    expect((await result.json()).items).toEqual(expect.arrayContaining([expect.objectContaining({itemId:original.handover.recordId,
+     customer:'PD',poNumbers:[matchingPo],dueAt:null,route:{routeName:'digital_source_material_investment',entityId:original.sourceId,todoId:original.handover.recordId}})]));
+    await assigned.page.getByRole('row').filter({hasText:matchingPo}).getByRole('button',{name:'办理本单投面辅料',exact:true}).waitFor();
+   }
+  }finally{await assigned.close();}
+  const unrelated=await h.dedicated('order_merchandiser','TEST another preorder merchandiser');
+  const other=await h.open(unrelated.id,1165,{},'/ui/my-tasks');
+  try{
+   const result=await other.context.request.get(h.base+'/api/todos/merchandiser/current?'+new URLSearchParams({search:matchingPo,page:'1'}));
+   expect(result.status(),await result.text()).toBe(200);expect(await result.json()).toEqual({page:1,items:[],total:0});
+  }finally{await other.close();}
   const tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page,base='/api/digital-production/sources/'+original.sourceId;

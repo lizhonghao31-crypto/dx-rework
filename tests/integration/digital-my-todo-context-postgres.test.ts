@@ -17,6 +17,7 @@ import { DigitalProductionNotificationService } from "../../apps/api/src/product
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
+import { ContextBusinessClock } from "../../apps/api/src/acceptance-clock/business-time.js";
 import { exceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
@@ -282,6 +283,40 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       // A dedicated lookup for each of the added 35 candidates fails this check.
       expect(contextCalls[2]! - contextCalls[1]!).toBeLessThan(10);
     } finally { query.mockRestore(); }
+  });
+  it('selects complete merchandiser results without hydrating off-page native todos',async()=>{
+    const search=`TEST-X6-CHOICE-${randomUUID().slice(0,8)}-`,created=new Set<string>(),counts:number[]=[];
+    const identity=new DigitalProductionIdentityService(db,true),connection=await db.connect(),prototype=Object.getPrototypeOf(connection) as pg.PoolClient;
+    connection.release();
+    const query=vi.spyOn(prototype,'query'),clock=vi.spyOn(ContextBusinessClock.prototype,'read');
+    try{
+      for(const size of [1,15,50]){
+        while(created.size<size){
+          const style=search+String(created.size);
+          const order=await identity.createOrder(root,{customerCode:'PD',primaryMerchandiserId:ids.merch,productGroup:'男装',designStyleNo:style,
+            orderDate:'2026-10-06',lines:[{poNumber:style,color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:1}]}]},randomUUID());
+          const task=await tx(c=>tasks.createWithClient(c,root,{resource:{kind:'order',id:order.productionOrderId},kind:'sourcing_preparation',
+            routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:ids.merch}));
+          created.add(task.taskId);
+        }
+        query.mockClear();clock.mockClear();
+        const result=await todos.merchandiserActionPage(actors.merch!,{kind:'sourcing',search,page:1});
+        counts.push(query.mock.calls.length);
+        expect(result.total).toBe(size);expect(result.items).toHaveLength(Math.min(15,size));
+        expect(result.items.every(row=>created.has(row.itemId)&&row.poNumbers[0]===row.styleNo)).toBe(true);
+        expect(clock).not.toHaveBeenCalled();
+        expect(query.mock.calls.some(([sql])=>typeof sql==='string'&&sql.includes('SELECT * FROM digital_production_task_access WHERE task_id='))).toBe(false);
+      }
+      expect(counts[2]!-counts[1]!).toBeLessThan(8);
+      const pageOne=await todos.merchandiserActionPage(actors.merch!,{kind:'sourcing',search,page:1});
+      const pageTwo=await todos.merchandiserActionPage(actors.merch!,{kind:'sourcing',search,page:2});
+      expect(pageTwo).toMatchObject({page:2,total:50});
+      expect(new Set([...pageOne.items,...pageTwo.items].map(row=>row.itemId)).size).toBe(30);
+      clock.mockClear();
+      expect(await todos.merchandiserActionPage(actors.merch!,{kind:'sourcing',search:randomUUID(),page:1})).toEqual({page:1,total:0,items:[]});
+      expect(clock).not.toHaveBeenCalled();
+      console.info('X6 native task workbench query counts',JSON.stringify({sizes:[1,15,50],queries:counts,perTaskClockReads:0}));
+    }finally{query.mockRestore();clock.mockRestore();}
   });
   it("serves Acceptance search URLs through the real HTTP and PostgreSQL path for Root and ordinary users", async () => {
     const config = loadConfig({

@@ -2,7 +2,7 @@ import {bulkWashingTodos} from './bulk-washing-todos.js';
 import {issuedOrderNumber} from './order-number-repository.js';
 import {specialCraftQuotationTodos,specialCraftQuotationNotification} from './special-craft-quotation-todos.js';
 import {secondaryCraftApprovalTodos,secondaryCraftApprovalNotification} from './secondary-craft-approval-todos.js';
-import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
+import {type TodoSelection,type TodoSelectionKey,type TodoProjection,type MerchandiserTodoSelection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
 import {orderTimeTodos,orderTimeNotification} from './order-time-todos.js';
 import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
@@ -267,6 +267,33 @@ export class DigitalProductionNotificationService {
   }
 
   /** Use the original actionable-task selector within the workspace's read snapshot. */
+  async merchandiserTodoSelections(db:PoolClient,actor:TrustedActorContext):Promise<MerchandiserTodoSelection[]> {
+    const ready=await this.selectReadyTodoTasks(db,actor,undefined,false);
+    if(!ready)return [];
+    const selected:MerchandiserTodoSelection[]=[];
+    const projection:TodoProjection={countOnly:true,merchandiserSelection:true,
+      select:(key,_load,rushIdentity)=>selected.push({key,...(rushIdentity?{rushIdentity}:{})})};
+    await materialInvestmentTodos(db,actor,projection,undefined,{database:this.database,transaction:db});
+    await preparationWindowTodos(db,actor,projection,{database:this.database,transaction:db});
+    const active=ready.eligible.filter(({task,missing})=>!missing&&task.assignee_id===actor.actorId&&['order_merchandiser','embroidery_washing_merchandiser'].includes(task.required_role));
+    // A selected Acceptance scene used to be checked while reading every
+    // task's clock. Keep that exact direct native scope without hydrating clocks.
+    const scene=acceptanceBusinessContext()?.scenarioId,registered=scene&&active.length?new Set((await db.query<{resource_kind:string;resource_id:string}>(
+      `SELECT resource_kind,resource_id FROM acceptance_sla_clock_resources WHERE scenario_id=$1 AND resource_id=ANY($2::uuid[])`,
+      [scene,[...new Set(active.flatMap(({task})=>task.production_order_id??task.source_id??[]))]])).rows.map(row=>row.resource_kind+':'+row.resource_id)):null;
+    for(const {task} of active){
+      if(registered&&!registered.has(task.production_order_id?'order:'+task.production_order_id:'source:'+task.source_id))continue;
+      const style=task.order_style_no??task.source_style_no,createdAt=iso(task.created_at);
+      selected.push({key:{todoId:task.task_id,sourceAction:'digital_task',taskTitle:task.label,category:'digital_task',recipientUserId:actor.actorId,
+        todoType:'business_action',requiredRole:task.required_role,route:{routeName:'digital_production_task',entityId:task.task_id,todoId:task.task_id,
+          ...(task.source_id?{developmentRound:task.route_version}:{})},dueAt:task.due_at?iso(task.due_at):null,status:'pending',createdAt,
+        orderContext:style?{reworkNo:null,orderNo:null,styleNo:style,supplierName:null,status:task.state,updatedAt:createdAt}:null},
+        rushIdentity:{sourceId:task.source_id,orderId:task.production_order_id}});
+    }
+    return selected;
+  }
+
+  /** Use the original actionable-task selector within the designer's read snapshot. */
   async workbenchNativeActions(db:PoolClient,actor:TrustedActorContext,taskIds:readonly string[]):Promise<DevelopmentWorkspaceAction[]>{
     if(!taskIds.length||!isRootActor(actor)&&!actor.authorizationCapabilities?.includes('todo:view'))return [];
     const ready=await this.selectReadyTodoTasks(db,actor,undefined,false,taskIds);

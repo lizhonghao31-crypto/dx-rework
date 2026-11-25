@@ -2,7 +2,7 @@ import type {MerchandiserCraftCommunication,TodoResponse} from '@dx-rework/contr
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 
-type NativeWork=Pick<TodoResponse,'todoId'|'route'|'category'|'requiredRole'|'recipientUserId'|'todoType'|'status'|'dueAt'|'taskTitle'>;
+type NativeWork=Pick<TodoResponse,'todoId'|'route'|'category'|'recipientUserId'|'todoType'|'status'|'dueAt'|'taskTitle'>&Partial<Pick<TodoResponse,'requiredRole'>>;
 type WorkKind='preparation'|'commercial'|'sourcing'|'delivery'|'exceptions';
 type Candidate={itemId:string;kind:WorkKind;title:string;route:TodoResponse['route'];dueAt:string|null;craftCommunication?:MerchandiserCraftCommunication};
 export type AuthorizedMerchandiserWorkItem=Candidate&{orderNumber:string|null;styleNo:string|null;originalOrderId?:string;poNumbers:readonly string[];

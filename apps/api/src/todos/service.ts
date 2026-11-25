@@ -1,4 +1,4 @@
-import {todoSelectionKey,type TodoSelection} from './selection.js';
+import {todoSelectionKey,type TodoSelection,type TodoSelectionKey,type MerchandiserTodoSelection} from './selection.js';
 import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow,businessScopeKey} from '../acceptance-clock/business-time.js';
@@ -297,13 +297,14 @@ const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
 export class TodoService {
   private slaAvailability?:Promise<boolean>;
   private async appliedSlaAvailable(db:Pick<Pool,"query">){return this.slaAvailability??=db.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation").then(r=>!!r.rows[0]?.relation);}
-  private async contextSql(){const sql=await this.appliedSlaAvailable(this.database)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
+  private async contextSql(db:Pick<Pool,'query'>=this.database){const sql=await this.appliedSlaAvailable(db)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(db)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
   constructor(
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
     private readonly production?: Pick<ProductionClosureService,"todos"> & Partial<Pick<ProductionClosureService,'markRead'|'todo'|'todoSelections'|'todoCounts'>>,
-    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean;todoId?:string}):Promise<TodoSelection[]>;todoCounts?(actor:TrustedActorContext):Promise<{totalCount:number;pendingCount:number;unreadCount:number}>},
+    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean;todoId?:string}):Promise<TodoSelection[]>;todoCounts?(actor:TrustedActorContext):Promise<{totalCount:number;pendingCount:number;unreadCount:number}>;
+      merchandiserTodoSelections?(db:PoolClient,actor:TrustedActorContext):Promise<MerchandiserTodoSelection[]>},
   ) {}
 
   private async providerSelections(provider:{todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean}):Promise<TodoSelection[]>}|undefined,actor:TrustedActorContext,metadata:boolean):Promise<TodoSelection[]> {
@@ -336,21 +337,29 @@ export class TodoService {
   }
   async merchandiserActionSources(actor:TrustedActorContext) {
     this.requireCapability(actor,'todo:view');
-    const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(this.database));
-    const context=roles.order?await this.contextSql():null;
-    const [native,stored]=await Promise.all([
-      this.providerSelections(this.digital,actor,true),
-      context?this.database.query<TodoPageRow>(`WITH todo_view AS (${context})
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(db));
+      const sources=await this.readMerchandiserActionSources(db,actor,roles);
+      await db.query('COMMIT');return sources;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  private async readMerchandiserActionSources(db:PoolClient,actor:TrustedActorContext,roles:{order:boolean;craft:boolean}) {
+    const context=roles.order?await this.contextSql(db):null;
+    // A workbench card uses the original choice key, not a hydrated todo.
+    // Complete authorization and search happen in the caller's one snapshot.
+    const native=await this.digital?.merchandiserTodoSelections?.(db,actor)??[];
+    const stored=context?(await db.query<TodoPageRow>(`WITH todo_view AS (${context})
         SELECT todo_view.* FROM todo_view WHERE recipient_user_id=$1 AND required_role='order_merchandiser'
          AND entity_type='sourcing_case' AND todo_type='business_action' AND status='pending' AND category=ANY($2::text[])
          AND route_descriptor->>'routeName'='sourcing_detail' AND route_descriptor->>'entityId'=entity_id
          AND member_module_can_write($1,'sourcing')
          AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)
          AND (category<>'sourcing_merchandiser_correction' OR sourcing_status='pending_merchandiser_correction')`,
-      [actor.actorId,originalMerchandiserTodoCategories]):{rows:[] as TodoPageRow[]},
-    ]);
+      [actor.actorId,originalMerchandiserTodoCategories])).rows:[];
     const peopleTasks=native.filter(item=>item.key.category==='digital_task'&&item.key.route.routeName==='digital_production_task');
-    const identities=peopleTasks.length?await this.database.query<{task_id:string;task_kind:string;order_id:string|null;preparation_id:string|null;
+    const identities=peopleTasks.length?await db.query<{task_id:string;task_kind:string;order_id:string|null;preparation_id:string|null;
       route_version:number|null;steps:string[]}>(`SELECT t.task_id,a.task_kind,a.production_order_id AS order_id,
         route.preparation_id,route.route_schema_version AS route_version,
         ARRAY(SELECT DISTINCT p.step_id FROM digital_timeline_task_positions p WHERE p.task_id=t.task_id
@@ -367,17 +376,17 @@ export class TodoService {
       return [row.task_id,{taskId:row.task_id,taskKind:row.task_kind,...(craftCommunication?{craftCommunication}:{})}] as const;
     }));
     const selected=native.filter(item=>taskById.has(item.key.todoId)||roles.order&&originalMerchandiserTodoCategories.includes(item.key.category));
-    const originals=[...await sourcingTodoPresentation(this.database,stored.rows.map(todoResponse)),...await Promise.all(selected.map(item=>item.load()))];
-    const nativeScopes=new Map(selected.flatMap(item=>item.rushIdentity?[[item.key.todoId,item.rushIdentity] as const]:[]));
-    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;todo:TodoResponse;identity:RushIdentity|null}>();
-    for(const todo of originals){
-      const candidate=merchandiserWorkCandidate(actor,todo,taskById.get(todo.todoId));
+    const originals=[...stored.map(row=>{const todo=todoResponse(row);return {key:todoSelectionKey(todo),sourcingCaseId:todo.entityId,rushIdentity:undefined};}),
+      ...selected.map(item=>({...item,sourcingCaseId:undefined}))];
+    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;key:TodoSelectionKey;identity:RushIdentity|null;sourcingCaseId:string|undefined}>();
+    for(const {key,rushIdentity,sourcingCaseId} of originals){
+      const candidate=merchandiserWorkCandidate(actor,key,taskById.get(key.todoId));
       if(!candidate)continue;
-      const previous=actions.get(todo.todoId);
+      const previous=actions.get(key.todoId);
       if(previous&&!isDeepStrictEqual(previous.candidate,candidate))throw new ApplicationError('CONFLICT','原跟单工作身份已变化，请重新读取',409);
-      const identity=nativeScopes.get(todo.todoId)??null;
+      const identity=rushIdentity??null;
       if(previous?.identity&&identity&&!isDeepStrictEqual(previous.identity,identity))throw new ApplicationError('CONFLICT','原跟单工作范围已变化，请重新读取',409);
-      actions.set(todo.todoId,{candidate,todo,identity:identity??previous?.identity??null});
+      actions.set(key.todoId,{candidate,key,identity:identity??previous?.identity??null,sourcingCaseId:sourcingCaseId??previous?.sourcingCaseId});
     }
     return [...actions.values()];
   }
@@ -387,7 +396,7 @@ export class TodoService {
   async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;state?:AuthorizedMerchandiserWorkItem['state'];search:string;page:number}){
     this.requireCapability(actor,'todo:view');
     const state=filter.state??'mine',progress=state==='waiting'||state==='completed';
-    const actions=progress?[]:await this.merchandiserActionSources(actor),db=await this.database.connect();
+    const db=await this.database.connect();
     try{
       await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(db));
@@ -397,11 +406,12 @@ export class TodoService {
         await db.query('COMMIT');
         return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};
       }
-      const cases=actions.flatMap(row=>row.todo.entityType==='sourcing_case'&&row.candidate.route.routeName==='sourcing_detail'?[row.candidate.route.entityId]:[]);
+      const actions=await this.readMerchandiserActionSources(db,actor,roles);
+      const cases=actions.flatMap(row=>row.sourcingCaseId?[row.sourcingCaseId]:[]);
       const linked=cases.length?(await db.query<{child_id:string;production_order_id:string}>(`SELECT child_id,production_order_id
         FROM digital_production_child_links WHERE module='sourcing' AND child_id=ANY($1::uuid[])`,[cases])).rows:[];
       const originalCaseOrder=new Map(linked.map(row=>[row.child_id,row.production_order_id]));
-      const parent=(row:typeof actions[number])=>row.identity?.orderId??(row.todo.entityType==='sourcing_case'?originalCaseOrder.get(row.candidate.route.entityId):undefined);
+      const parent=(row:typeof actions[number])=>row.identity?.orderId??(row.sourcingCaseId?originalCaseOrder.get(row.sourcingCaseId):undefined);
       const scopes=[...new Set(actions.flatMap(row=>{const id=parent(row);return id?[id]:[];}))].map(id=>({kind:'order' as const,id}));
       const {resources}=await readJourneySelectionAccess(db,actor,scopes);
       const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.fullOrder?[scope.id]:[]);
@@ -415,11 +425,11 @@ export class TodoService {
       const factories=await readMerchandiserFactoryNames(db,actor,deep.map(row=>row.id));
       const responsibleName=actions.length?(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null:null;
       const rows=actions.filter(row=>row.candidate.craftCommunication?roles.craft:roles.order).map((row):AuthorizedMerchandiserWorkItem=>{
-        const {candidate,todo,identity}=row,order=byId.get(parent(row)??'');
-        const context=todo.orderContext,key=order?'order:'+order.id:identity&&developmentRushKey(identity);
-        return {...candidate,state:todo.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.issued_number??context?.orderNo??null,
+        const {candidate,key:choice,identity}=row,order=byId.get(parent(row)??'');
+        const context=choice.orderContext,key=order?'order:'+order.id:identity&&developmentRushKey(identity);
+        return {...candidate,state:choice.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.issued_number??context?.orderNo??null,
           styleNo:order?.style_no??context?.styleNo??null,...(order?{originalOrderId:order.id}:{}),
-          customer:order?.customer_code??null,poNumbers:order?.po_numbers??context?.poNumbers??[],
+          customer:order?.customer_code??choice.preorderSearch?.customer??null,poNumbers:order?.po_numbers??choice.preorderSearch?.poNumbers??context?.poNumbers??[],
           factory:context?.supplierName??(order&&factories.get(order.id)?.join('、')||null),urgent:Boolean(key&&rush.has(key)),responsibleName};
       });
       await db.query('COMMIT');
