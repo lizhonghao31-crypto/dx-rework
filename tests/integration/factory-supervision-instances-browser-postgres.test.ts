@@ -1,7 +1,8 @@
 import {mkdtemp,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import sharp from 'sharp';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
@@ -175,6 +176,59 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(refreshed.searchParams.get('closure')).toBe(original.id);
    const exact=entries.map(entry=>new URL(entry).searchParams).find(params=>params.get('qualityReceipt')===intake.value.receiptId)!;
    expect(exact.get('qualityQuantityVersion')).not.toBe(intake.value.receiptId);
+   const cancel=await tab.context.request.post(`${h.base}/api/rework-orders/${draft.reworkOrderId}/cancel`,{
+    headers:{'idempotency-key':randomUUID()},data:{expectedVersion:draft.version,reason:'TEST superseded original receipt revision'},
+   });
+   expect(cancel.status(),await cancel.text()).toBe(200);
+   const refreshedEntry=entries.find(entry=>new URL(entry).searchParams.get('qualityReceipt')===intake.value.receiptId)!;
+   await tab.page.goto(refreshedEntry);
+   await inspect.getByText('本批数量已更正，需核对原检查范围',{exact:true}).click();
+   await inspect.getByLabel('检查时间',{exact:true}).selectOption('now');
+   await inspect.getByLabel('本批合格数量',{exact:true}).fill('250');
+   await inspect.getByLabel('质量问题／处理说明',{exact:true}).fill('TEST original QC report for twenty affected garments');
+   await tab.context.route('https://private.example.test/',async route=>{
+    const request=route.request();
+    if(request.method()!=='POST')return route.abort();
+    // The synthetic object store alone is intercepted. Intent, finalization,
+    // ownership and report binding all use the original authenticated API.
+    const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+    const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer());
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
+    expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+    await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
+    await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+   });
+   const photoBytes=await sharp({create:{width:25,height:25,channels:3,background:'blue'}}).png().toBuffer();
+   await inspect.getByLabel('质检报告图片（选填）',{exact:true}).setInputFiles({name:'TEST original QC.png',mimeType:'image/png',buffer:photoBytes});
+   await inspect.getByText(/文件已就绪，尚未登记检查/).waitFor();
+   const reportRecorded=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/orders/${original.id}/closure/quality`));
+   await inspect.getByRole('button',{name:'保存到仓质检',exact:true}).click();
+   const reportResponse=await reportRecorded;
+   expect(reportResponse.status(),await reportResponse.text()).toBe(200);
+   const reportAttachmentId=reportResponse.request().postDataJSON().attachmentIds[0] as string;
+   const reportEventId=(await reportResponse.json()).eventId as string;
+   expect(reportEventId).not.toBe(checkedGarment.eventId);
+   await inspect.getByRole('link',{name:'查看原质检图片 1',exact:true}).waitFor();
+   const recoveredDraft=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/rework-orders/garment-quality/drafts'));
+   await inspect.getByRole('button',{name:'按本批问题发起返工',exact:true}).click();
+   const recovered=await recoveredDraft;
+   expect(recovered.status(),await recovered.text()).toBe(201);
+   const active=await recovered.json();
+   expect(active).toMatchObject({reworkQuantity:20,attachmentIds:[]});
+   await inspect.getByRole('link',{name:'查看原成衣返工单',exact:true}).click();
+   await tab.page.getByText('可沿用原质检报告',{exact:true}).waitFor();
+   await tab.page.getByRole('radio',{name:'否',exact:true}).check();
+   const submitted=tab.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/rework-orders/${active.reworkOrderId}/submit-v2`));
+   await tab.page.getByRole('button',{name:'提交返工',exact:true}).click();
+   await tab.page.getByRole('button',{name:'确认',exact:true}).click();
+   const submittedResponse=await submitted;
+   expect(submittedResponse.status(),await submittedResponse.text()).toBe(200);
+   expect(await submittedResponse.json()).toMatchObject({reworkOrderId:active.reworkOrderId,status:'pending_process_configuration',reworkQuantity:20,attachmentIds:[]});
+   expect((await f.db.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[reportAttachmentId])).rows).toEqual([
+    {entity_type:'digital_garment_receipt_qc',entity_id:reportEventId}]);
+   expect((await f.db.query('SELECT source_garment_qc_event_id,rework_quantity FROM rework_orders WHERE rework_order_id=$1',[active.reworkOrderId])).rows).toEqual([
+    {source_garment_qc_event_id:reportEventId,rework_quantity:20}]);
   }finally{await tab.close();}
  });
  it('reads before/after cutting and keeps each process/QC window through Journey, selector rebuild and authenticated rendering',async()=>{

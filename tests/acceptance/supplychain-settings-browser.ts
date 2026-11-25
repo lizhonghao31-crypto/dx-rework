@@ -55,6 +55,8 @@ import {registerReworkRoutes} from '../../apps/api/src/rework/routes.js';
 import {ReworkBusinessDetailService} from '../../apps/api/src/rework/rework-business-detail-service.js';
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {ReworkV2SubmissionService} from '../../apps/api/src/rework/v2-submission-service.js';
+import {ReworkV2DraftService} from '../../apps/api/src/rework/v2-draft-service.js';
+import {ReworkSupplyContextService} from '../../apps/api/src/rework/supply-context-service.js';
 import {WorkReportingService} from '../../apps/api/src/rework/work-reporting-service.js';
 import {registerWorkReportingRoutes} from '../../apps/api/src/rework/work-reporting-routes.js';
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
@@ -87,7 +89,9 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   }
   if(options?.originalCraftRework){
    const authenticate=(token:string|undefined)=>auth.authenticate(token);
-   registerReworkRoutes(app,{authenticate,root,service:new ReworkInitiationService(db,'anchor-test'),v2SubmissionService:new ReworkV2SubmissionService(db,'anchor-test'),businessDetailService:new ReworkBusinessDetailService(db),originalCraftQuality:true});
+   registerReworkRoutes(app,{authenticate,root,service:new ReworkInitiationService(db,'anchor-test'),v2DraftService:new ReworkV2DraftService(db,'anchor-test'),
+    v2SubmissionService:new ReworkV2SubmissionService(db,'anchor-test'),supplyContextService:new ReworkSupplyContextService(db,'anchor-test'),
+    businessDetailService:new ReworkBusinessDetailService(db),originalCraftQuality:true});
    registerWorkReportingRoutes(app,{authenticate,root,service:new WorkReportingService(db)});
    registerWholeOrderReviewRoutes(app,{authenticate,root,service:new WholeOrderReviewService(db)});
   }

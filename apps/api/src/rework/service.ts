@@ -935,7 +935,10 @@ export class ReworkInitiationService {
       }
       await this.ensureFactoryStillAvailable(client, factoryFromRow(current)!);
       const attachmentIds = await this.attachmentIds(client, reworkOrderId);
-      await this.ensureReadyBoundAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
+      const hasOriginalReport=attachmentIds.length===0&&originalGarment&&(await client.query<{ready:boolean}>(
+        'SELECT garment_rework_has_original_report($1) AS ready',[originalGarment.eventId],
+      )).rows[0]?.ready===true;
+      if(!hasOriginalReport)await this.ensureReadyBoundAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       const numberResult = current.rework_no
         ? { rows: [{ rework_no: current.rework_no }] }
         : await client.query<{ rework_no: string }>("SELECT next_rework_order_number() AS rework_no");

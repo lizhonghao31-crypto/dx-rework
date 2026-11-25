@@ -76,9 +76,10 @@ describe("PR-06 responsibility 2.0", () => {
       engine.indexOf("const sourceRows"),
       engine.indexOf("const actorCapabilities"),
     );
-    expect(sourceRows.match(/item\.execution_kind IN \('worker','tail_inspection'\)/g)).toHaveLength(2);
-    expect(engine).toContain('includedInResponsibility: row.execution_kind === "worker"');
+    expect(sourceRows.match(/item\.execution_kind IN \('worker','tail_inspection','external_craft'\)/g)).toHaveLength(2);
+    expect(engine).toContain('includedInResponsibility: row.execution_kind !== "tail_inspection"');
     expect(engine).toContain('|| order.tail_inspection_cost_bearer !== null');
+    expect(engine).toContain("item.execution_kind='tail_inspection' AND $2 IN ('own_factory','processing_factory')");
   });
 });
 

@@ -2634,8 +2634,9 @@
     "sequences": []
   },
   "0312_original_garment_quality_rework": {
-    "checksum": "81e08372416c867d751f0cbbfd7de0bdf61a7ac4e3e2132386c6785281423dfd",
+    "checksum": "b9739700ff20970d5ae5a483d5f73178861a6ffe2436c036694ec09a1ceae954",
     "tables": [
+      "attachments",
       "digital_order_closures",
       "digital_production_child_lines",
       "digital_production_orders",
@@ -2647,6 +2648,7 @@
       "rework_orders"
     ],
     "functions": [
+      "guard_rework_submission_requires_image",
       "rework_original_quantity_bound"
     ],
     "references": [
@@ -2656,6 +2658,8 @@
     "update": [],
     "creates": [],
     "execute": [
+      "craft_rework_has_original_report",
+      "garment_rework_has_original_report",
       "guard_original_garment_quality_rework",
       "original_garment_qc_problem_quantity",
       "rework_source_receiving_actual_quantity"

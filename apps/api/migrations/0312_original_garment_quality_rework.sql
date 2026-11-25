@@ -70,6 +70,34 @@ CREATE TRIGGER rework_original_garment_quality_update
   BEFORE UPDATE ON rework_orders FOR EACH ROW WHEN (OLD.source_garment_qc_event_id IS NOT NULL OR NEW.source_garment_qc_event_id IS NOT NULL)
   EXECUTE FUNCTION guard_original_garment_quality_rework();
 
+CREATE FUNCTION garment_rework_has_original_report(check_id uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM digital_production_task_events e
+    JOIN attachments a ON e.payload->'attachmentIds' ? a.attachment_id::text
+      AND a.entity_type='digital_garment_receipt_qc' AND a.entity_id=e.event_id::text
+    WHERE e.event_id=check_id AND e.event_kind='garment_receipt_qc' AND e.resource_kind='order'
+      AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION guard_rework_submission_requires_image() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status='draft' AND NEW.status='pending_process_configuration'
+     AND NEW.rework_kind='qc_rework'
+     AND NOT craft_rework_has_original_report(NEW.source_craft_qc_check_id)
+     AND NOT garment_rework_has_original_report(NEW.source_garment_qc_event_id)
+     AND NOT EXISTS (
+       SELECT 1 FROM attachments a WHERE a.entity_type='rework_order'
+         AND a.entity_id=NEW.rework_order_id::text AND a.status='ready'
+         AND a.mime_type IN ('image/jpeg','image/png','image/webp')
+     )
+  THEN
+    RAISE EXCEPTION 'N01 submission requires at least one ready rework image' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION rework_original_quantity_bound(target_order_id uuid)
 RETURNS TABLE(quantity numeric,unit text) LANGUAGE sql STABLE AS $$
   SELECT CASE WHEN orders.source_craft_qc_check_id IS NOT NULL THEN

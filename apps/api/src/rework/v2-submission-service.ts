@@ -195,9 +195,11 @@ export class ReworkV2SubmissionService {
     await this.ensureFactoryStillAvailable(client, factoryFromRow(current));
     const attachmentIds = await this.attachmentIds(client, reworkOrderId);
     if (kind === "qc_rework"){
-      const hasOriginalReport=attachmentIds.length===0&&current.source_craft_qc_check_id?(await client.query<{ready:boolean}>(
+      const hasOriginalReport=attachmentIds.length===0&&(originalGarment?(await client.query<{ready:boolean}>(
+        "SELECT garment_rework_has_original_report($1) AS ready",[originalGarment.eventId],
+      )).rows[0]?.ready===true:current.source_craft_qc_check_id?(await client.query<{ready:boolean}>(
         "SELECT craft_rework_has_original_report($1) AS ready",[current.source_craft_qc_check_id],
-      )).rows[0]?.ready===true:false;
+      )).rows[0]?.ready===true:false);
       if(!hasOriginalReport)await this.ensureReadyBoundImage(client,actor,reworkOrderId,attachmentIds);
     }
 

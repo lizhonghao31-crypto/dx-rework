@@ -536,6 +536,7 @@ export const ReworkOrderResponseSchema = z.object({
   reworkKind: ReworkKindSchema.optional(),
   receivingBatchId: IdSchema.nullable().optional(),
   originalCraftQuality: z.object({ checkId: IdSchema, unit: z.literal("片"), execution: z.enum(["internal","factory"]) }).strict().optional(),
+  originalQualityReportAvailable: z.boolean().optional(),
   styleNo: z.string().nullable(),
   customerSupplyCode: z.string().nullable(),
   factoryStyleNo: z.string().nullable(),
