@@ -74,7 +74,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const plantForm=tab.page.getByRole('group',{name:'本次检查',exact:true});await plantForm.waitFor();
    expect(await plantForm.getByLabel('本次结论').count()).toBe(1);
    expect(await tab.page.getByRole('heading',{name:'大货洗水',exact:true}).count()).toBe(0);
-   await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();await plantLink.waitFor();
+   const beforePlant=(await f.db.query('SELECT count(*)::int AS count FROM rework_orders')).rows[0].count;
+   const inspected=await tab.context.request.post(`${h.base}/api/digital-production/orders/${original.id}/factory-flow/production-qc`,{
+    headers:{'idempotency-key':randomUUID()},data:{expectedRevision:(await flow.read(qc,original.id)).revision,
+     occurredAt:businessNow().toISOString(),factoryDecisionId:null,note:'',
+     checks:[{lineId:line.lineId,result:'需处理',problem:'TEST actual issue, fault quantity not established'}]},
+   });
+   expect(inspected.status(),await inspected.text()).toBe(200);
+   expect((await inspected.json()).productionChecks).toEqual([expect.objectContaining({lineId:line.lineId,productionId:production,
+    result:'需处理',problem:'TEST actual issue, fault quantity not established'})]);
+   await tab.page.reload();
+   await tab.page.getByText('TEST actual issue, fault quantity not established',{exact:true}).waitFor();
+   expect(await tab.page.getByRole('button',{name:/返工/}).count()).toBe(0);
+   expect((await f.db.query('SELECT count(*)::int AS count FROM rework_orders')).rows[0].count).toBe(beforePlant);
+   await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
+   await plant.getByText('没有符合当前授权和筛选的检查。',{exact:true}).waitFor();
    expect(new URL(tab.page.url()).searchParams.get('search')).toBe(style);
    await tab.page.goto(h.base+pagePath.replace('kind=factory','kind=garment'));
    const queue=tab.page.getByRole('region',{name:'成衣到仓检查清单',exact:true}),row=queue.getByRole('row').filter({hasText:'3 件 / 待核'});
