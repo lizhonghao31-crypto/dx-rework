@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import type {TodoResponse} from '@dx-rework/contracts';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
-import {merchandiserWorkCandidate} from '../../apps/api/src/production-platform/merchandiser-work-candidates.js';
+import {merchandiserWorkCandidate,merchandiserWorkPage} from '../../apps/api/src/production-platform/merchandiser-work-candidates.js';
 
 const actor:TrustedActorContext={actorId:'test-merchandiser',actorRoles:['order_merchandiser','warehouse_receiver'],authorizationCapability:'todo:view',requestId:'test-workbench'};
 const task={
@@ -29,5 +29,18 @@ describe('only native actionable merchandiser work is eligible for the new workb
   expect(merchandiserWorkCandidate(actor,candidate)?.route).toEqual(candidate.route);
   expect(merchandiserWorkCandidate(actor,{...candidate,category:'sourcing_owner_approval'})).toBeNull();
   expect(merchandiserWorkCandidate(actor,{...candidate,route:route('sourcing_detail')})).toBeNull();
+ });
+ it('filters the authorized set first and uses urgency, real due and stable original IDs before paging',()=>{
+  const projected=merchandiserWorkCandidate(actor,task)!;
+  const rows=Array.from({length:32},(_,index)=>({...projected,itemId:`task-${String(index).padStart(2,'0')}`,
+   urgent:index===31,state:'mine' as const,orderNumber:'TEST same order',styleNo:null,poNumbers:[index<16?'different':'TARGET'],
+   customer:'TEST',factory:'TEST factory'}));
+  const first=merchandiserWorkPage(rows,{state:'mine',search:'target',page:1});
+  expect(first).toMatchObject({page:1,total:16});expect(first.items).toHaveLength(15);
+  expect(first.items[0]?.itemId).toBe('task-31');
+  const second=merchandiserWorkPage([...rows].reverse(),{state:'mine',search:'target',page:2});
+  expect(second.items.map(row=>row.itemId)).toEqual(['task-30']);
+  expect(new Set([...first.items,...second.items].map(row=>row.itemId)).size).toBe(16);
+  expect(merchandiserWorkPage(rows,{state:'waiting',search:'target',page:1})).toEqual({items:[],page:1,total:0});
  });
 });
