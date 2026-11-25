@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {TextArea} from '@astryxdesign/core/TextArea';
-import {digitalRequest} from './digital-production-api.js';
+import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {unknownWriteResult} from './request-response-feedback.js';
 import {createClientRequestId} from './client-request-id.js';
 import {acceptanceInputNow} from './acceptance-business-time.js';
@@ -48,7 +48,7 @@ function CurrentCommunication({orderId,preparationId,taskId,stepRef}:Scope){
    await digitalRequest(`${base}/logistics`,'POST',command.body,command.key);
    pending.current=null;setNote('');setUncertain(false);setReceipt(true);reload(v=>v+1);
   }catch(error){
-   const unknown=unknownWriteResult(error);
+   const unknown=error instanceof DigitalRequestError?error.resultUnknown:unknownWriteResult(error);
    setActionError(text(error));setUncertain(unknown);
    if(!unknown){pending.current=null;reload(v=>v+1);}
   }finally{busy.current=false;setWorking(false);}
