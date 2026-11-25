@@ -29,11 +29,13 @@ import {readWarehouseCraftFactoryBasis} from './warehouse-craft-factory-basis.js
 import {availableWarehouseCraftQuantities,qualifyWarehouseCraftMovement,type WarehouseCraftMotion,type WarehouseCraftOccupationReader} from './warehouse-craft-movement.js';
 import {canReadExactOriginalQualityPhoto,exactUnboundQualityPhotos,factoryInspectionQualityAttachment,type OriginalQualityPhotoReference} from './original-quality-photo.js';
 import {countedCraftCheck} from './quality-craft-problem-scope.js';
+import {checkedExternalCraftRepairFact,lockExternalCraftRepair} from './warehouse-craft-rework-return.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
 const ROOT='root_superuser';
 type WarehouseCraftCommand=Omit<WarehouseCraftMotion,'scope'|'lines'>&{expectedRevision:number;taskId:string;preparationId:string;stepRef:string;lines:FactoryScope[];note:string};
+type WarehouseCraftRepairCommand=WarehouseCraftCommand&{reworkId:string};
 export class FactoryFlowService{
  constructor(private readonly database:Pool,private readonly readWarehouseCraftOccupation?:WarehouseCraftOccupationReader){}
  private tasks(){return new DigitalProductionTaskService(this.database);}
@@ -190,14 +192,14 @@ export class FactoryFlowService{
  });}
  /** Joint X3/X5 internal command. No route enables it without the original
   * quality occupation reader. Uses the existing fact, task and receipt path. */
+ private async assertAssignedWarehouse(db:PoolClient,actor:TrustedActorContext,id:string){
+  if(actor.actorRoles.includes(ROOT))return;
+  const assignment=(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[id])).rows[0];
+  if(assignment?.warehouse_worker_id!==actor.actorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'warehouse_receiver'))digitalForbidden();
+ }
  async warehouseCraftMotion(actor:TrustedActorContext,id:string,input:WarehouseCraftCommand,key:string){
   const readOccupation=this.readWarehouseCraftOccupation;
   if(!readOccupation)return fail('仓库工艺收发尚无有效质检返工占用依据');
-  const assertAssigned=async(db:PoolClient)=>{
-   if(actor.actorRoles.includes(ROOT))return;
-   const assignment=(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[id])).rows[0];
-   if(assignment?.warehouse_worker_id!==actor.actorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'warehouse_receiver'))digitalForbidden();
-  };
   return this.command(actor,id,'logistics',input,key,async(db,s)=>{
    const step=s.stepLedger?.steps.find(value=>value.step.stepId===input.stepRef);
    if(!step||s.route.preparation_id!==input.preparationId||!s.tasks.some(task=>task.task_id===input.taskId&&task.task_kind==='process_logistics'&&
@@ -207,6 +209,7 @@ export class FactoryFlowService{
    const prior=step.step.sequence>1?s.stepLedger!.steps[step.step.sequence-2]:undefined;
    const send=input.kind==='return'?step.pendingSends.find(row=>row.factId===input.sourceFactId):undefined;
    const sendFact=send?s.facts.find(row=>row.fact_id===send.factId):undefined;
+   if(sendFact?.payload.warehouseMotion?.reworkId)fail('本次实际发出属于原返工，请沿同一返工范围回仓');
    const approved=input.kind==='send'?await readWarehouseCraftFactoryBasis(db,id,step.step,true):null;
    const factoryId=input.kind==='send'?approved?.supplierId:sendFact?.payload.warehouseMotion?.factoryId;
    const supplier=input.kind==='send'?approved?.supplierName:sendFact?.payload.supplier;
@@ -225,7 +228,38 @@ export class FactoryFlowService{
     note:input.note,supplier,stepRef:input.stepRef,occurredAt:input.occurredAt,lines:input.lines,
     ...(input.sourceFactId?input.kind==='return'?{sendFactId:input.sourceFactId}:{fromReturnId:input.sourceFactId}:{})},
     {factoryId,...(approved?{approvalId:approved.approvalId,approvalRevision:approved.approvalRevision,supplierVersion:approved.supplierVersion}:{})});
-  },assertAssigned);
+  },db=>this.assertAssignedWarehouse(db,actor,id));
+ }
+ async warehouseCraftRepair(actor:TrustedActorContext,id:string,input:WarehouseCraftRepairCommand,key:string){
+  if(!this.readWarehouseCraftOccupation)return fail('仓库返工收发尚无有效质检返工占用依据');
+  return this.command(actor,id,'logistics',input,key,async(db,s)=>{
+   const exact=await lockExternalCraftRepair(db,id,input.reworkId),step=s.stepLedger?.steps.find(item=>item.step.stepId===input.stepRef);
+   if(!exact||!step||!input.sourceFactId||!['send','return'].includes(input.kind)||s.route.preparation_id!==exact.preparationId
+    ||input.preparationId!==exact.preparationId||input.stepRef!==exact.stepRef||input.factoryId!==exact.factoryId
+    ||!s.tasks.some(task=>task.task_id===input.taskId&&task.task_kind==='process_logistics'&&task.step_id===exact.stepRef&&task.state==='ready'))
+    return fail('请沿本单原工艺、原返工、真实工厂及仓库任务办理收发');
+   const original=s.facts.find(row=>row.fact_id===exact.originalReturnFactId),source=s.facts.find(row=>row.fact_id===input.sourceFactId),
+    check=s.checks.find(row=>row.check_id===exact.checkId),qty=input.lines[0];
+   if(!original||!source||!check||input.lines.length!==1||qty?.lineId!==exact.lineId||!Number.isFinite(Date.parse(input.occurredAt)))
+    return fail('本次返工须绑定原检查与实际发出/回仓片数');
+   if(input.kind==='send'){
+    const available=step.batches.find(batch=>batch.factId===exact.originalReturnFactId)?.rows.find(row=>row.lineId===exact.lineId)?.available??0;
+    if(source.fact_id!==exact.originalReturnFactId||(qty?.quantity??0)>available)return fail('本次返工发出超过原回仓批次有效余量');
+   }
+   this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,source.occurred_at,check.checked_at));
+   const kind=input.kind==='send'?'工艺发出':'工艺回仓';
+   const payload={supplier:original.payload.supplier,note:input.note,stepRef:exact.stepRef,lines:input.lines,
+    ...(input.kind==='send'?{fromReturnId:input.sourceFactId}:{sendFactId:input.sourceFactId}),
+    warehouseMotion:{factoryId:exact.factoryId,reworkId:exact.reworkId,checkId:exact.checkId}};
+   if(!checkedExternalCraftRepairFact(exact,s.facts,{fact_id:randomUUID(),kind,payload,occurred_at:input.occurredAt}))
+    return fail('原返工尚未进入实际执行，或当前发出/回补超过同一范围');
+   await this.fact(db,actor,exact.preparationId,kind,input.occurredAt,payload);
+   if(input.kind==='return'){
+    const qc=s.tasks.find(task=>task.task_kind==='bulk_qc'&&task.step_id===exact.stepRef);
+    if(!qc)return fail('该工艺缺少原复检任务，请在原订单核对');
+    await this.tasks().setConditionWithClient(db,actor,qc.task_id,'handover_received',true,input.occurredAt,'实际返工回仓待原质量复检');
+   }
+  },db=>this.assertAssignedWarehouse(db,actor,id));
  }
  async qc(actor:TrustedActorContext,id:string,input:FactoryQc,key:string){return this.command(actor,id,'qc',input,key,async(db,s)=>{
   if(!await this.authorized(db,actor,s,'bulk_qc',input.stepRef))digitalForbidden();const checkedAt=businessNow().toISOString();if(s.batch)return this.batchQc(db,actor,s,input,checkedAt);if(input.checks.some(check=>check.quantityScope))fail('分量检查需要原工艺回仓批次');if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));

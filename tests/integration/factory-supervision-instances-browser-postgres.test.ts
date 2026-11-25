@@ -229,6 +229,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[originalReportPhoto])).rows[0])
    .toEqual({entity_type:'digital_factory_qc',entity_id:current.checkId});
   expect((await f.db.query("SELECT count(*)::int AS count FROM rework_work_reports WHERE rework_order_id=$1",[draftId])).rows[0].count).toBe(0);
+  const pendingRepair={...await command(second!.stepId,factories[1]!,'send',in4.factId,2),reworkId:draftId};
+  const beforeRepair=await count();
+  await expect(flow.warehouseCraftRepair(qaActor,ready.id,pendingRepair,randomUUID())).rejects.toMatchObject({statusCode:403});
+  await expect(flow.warehouseCraftRepair(warehouse,ready.id,pendingRepair,randomUUID())).rejects.toThrow('原返工尚未进入实际执行');
+  expect(await count()).toBe(beforeRepair);
   await expect(f.db.query(`INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,
     attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,'合格','','','{}',$5,$6)`,
    [randomUUID(),ready.preparationId,in4.factId,lineId,qc.actorId,businessNow().toISOString()])).rejects.toMatchObject({code:'23514'});

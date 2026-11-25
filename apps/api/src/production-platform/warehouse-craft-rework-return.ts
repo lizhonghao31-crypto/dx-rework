@@ -1,6 +1,8 @@
 import type {BatchFact} from './factory-batch-ledger.js';
+import type {PoolClient} from 'pg';
 
 export type WarehouseCraftRepairScope={reworkId:string;originalReturnFactId:string;stepRef:string;lineId:string;factoryId:string;quantity:number};
+export type WarehouseCraftRepairLocator=WarehouseCraftRepairScope&{orderId:string;preparationId:string;checkId:string;status:string};
 const allocated=(payload:Record<string,unknown>,lineId:string)=>{
  const lines=payload.lines;
  if(!Array.isArray(lines)||lines.length!==1||lines[0]?.lineId!==lineId||!Number.isSafeInteger(lines[0]?.quantity)||lines[0].quantity<1)return null;
@@ -33,4 +35,30 @@ export function externalCraftRepairProgress(scope:WarehouseCraftRepairScope,fact
  }
  return {sent,returned,remainingToSend:scope.quantity-sent,remainingToReturn:sent-returned,
   physicalCompletedAt:returned===scope.quantity&&latestReturn!==null?new Date(latestReturn).toISOString():null};
+}
+
+/** Apply inside the caller's original order/warehouse transaction after role
+ * checks. The rework order is locked after the native order lifecycle lock. */
+export async function lockExternalCraftRepair(db:PoolClient,orderId:string,reworkId:string):Promise<WarehouseCraftRepairLocator|null>{
+ const {rows}=await db.query<WarehouseCraftRepairLocator>(`SELECT r.rework_order_id AS "reworkId",r.status,r.rework_quantity::int AS quantity,
+  q.check_id AS "checkId",q.preparation_id AS "preparationId",q.return_fact_id AS "originalReturnFactId",q.line_id AS "lineId",
+  route.production_order_id AS "orderId",f.payload->>'stepRef' AS "stepRef",f.payload#>>'{warehouseMotion,factoryId}' AS "factoryId"
+  FROM rework_orders r JOIN digital_factory_qc q ON q.check_id=r.source_craft_qc_check_id
+  JOIN digital_factory_routes route USING(preparation_id)
+  JOIN digital_factory_facts f ON f.preparation_id=q.preparation_id AND f.fact_id=q.return_fact_id AND f.kind='工艺回仓'
+  WHERE r.rework_order_id=$1 AND route.production_order_id=$2
+    AND r.craft_rework_execution='factory' AND r.status<>'deleted' AND q.result='需处理'
+    AND r.processing_factory_supplier_id::text=f.payload#>>'{warehouseMotion,factoryId}'
+    AND q.quantity_scope->>'unit'='片' AND r.rework_quantity<=(q.quantity_scope->>'problemQuantity')::numeric
+  FOR UPDATE OF r`,[reworkId,orderId]);
+ return rows.length===1?rows[0]!:null;
+}
+
+/** Verify the original named send or return and use the exact same fold for
+ * preflight and stored facts. The result is not authorization in itself. */
+export function checkedExternalCraftRepairFact(scope:WarehouseCraftRepairLocator,facts:readonly BatchFact[],candidate:BatchFact){
+ if(candidate.kind==='工艺发出'&&scope.status!=='in_progress'||
+  candidate.kind==='工艺回仓'&&!['in_progress','cancelled'].includes(scope.status))return null;
+ if((candidate.payload.warehouseMotion as {reworkId?:string}|undefined)?.reworkId!==scope.reworkId)return null;
+ return externalCraftRepairProgress(scope,[...facts,candidate]);
 }

@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import type {BatchFact} from '../../apps/api/src/production-platform/factory-batch-ledger.js';
-import {externalCraftRepairProgress} from '../../apps/api/src/production-platform/warehouse-craft-rework-return.js';
+import {checkedExternalCraftRepairFact,externalCraftRepairProgress} from '../../apps/api/src/production-platform/warehouse-craft-rework-return.js';
 
 const scope={reworkId:'original-rework',originalReturnFactId:'original-return',stepRef:'step',lineId:'po',factoryId:'original-factory',quantity:20};
 const motion={factoryId:scope.factoryId,reworkId:scope.reworkId};
@@ -19,5 +19,14 @@ describe('actual external rework movement in the original craft ledger',()=>{
   expect(externalCraftRepairProgress(scope,[send,first,{...last,payload:{...last.payload,warehouseMotion:{...motion,factoryId:'other-plant'}}}])).toBeNull();
   expect(externalCraftRepairProgress(scope,[send,first,first])).toBeNull();
   expect(externalCraftRepairProgress(scope,[send,first,incoming('extra','2026-11-24T03:00:00Z',11)])).toBeNull();
+ });
+ it('does not start from a draft or cancel a physical movement out of the ledger',()=>{
+  const active={...scope,orderId:'order',preparationId:'prep',checkId:'original-qc',status:'in_progress'};
+  expect(checkedExternalCraftRepairFact({...active,status:'draft'},[],send)).toBeNull();
+  expect(checkedExternalCraftRepairFact({...active,status:'pending_process_configuration'},[],send)).toBeNull();
+  expect(checkedExternalCraftRepairFact(active,[],send)).toMatchObject({sent:20,remainingToReturn:20});
+  expect(checkedExternalCraftRepairFact({...active,status:'cancelled'},[],send)).toBeNull();
+  expect(checkedExternalCraftRepairFact({...active,status:'cancelled'},[send],first)).toMatchObject({returned:10,remainingToReturn:10,physicalCompletedAt:null});
+  expect(checkedExternalCraftRepairFact({...active,status:'cancelled'},[],first)).toBeNull();
  });
 });
