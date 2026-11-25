@@ -1291,6 +1291,10 @@
     {
       "version": "0308_rework_original_craft_quality_source",
       "checksum": "3b547f6f9e51be2f4bfc7e59be593b9fd4880045a667bccb538fc5b98eb72cf3"
+    },
+    {
+      "version": "0309_original_external_craft_configuration",
+      "checksum": "dec944ce2860cb8e3ab4ea1390a192a3b0c2a1c2559ba1aaf73ec7c1e8820689"
     }
   ]
 }

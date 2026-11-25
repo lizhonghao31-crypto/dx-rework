@@ -15,7 +15,7 @@ const array = (value: unknown): Snapshot[] => Array.isArray(value) ? value.map(o
 const value = (v: unknown): string | null => v == null ? null : v instanceof Date ? v.toISOString() : typeof v === 'boolean' ? v ? '是' : '否' : typeof v === 'string' || typeof v === 'number' ? String(v) : null;
 export function reworkHistoryNode(action: string): FinanceNodeKey | null {
  if (action === 'rework.submit' || action === 'rework.finishing.submit') return 'initiation';
- if (action === 'rework.process_configuration.submit') return 'process_configuration';
+ if (action === 'rework.process_configuration.submit'||action==='rework.process_configuration.external_activate') return 'process_configuration';
  if (action === 'rework.process_configuration.review') return 'ie_review';
  if (action === 'rework.work_task.assign') return 'task_assignment';
  if (action.startsWith('rework.work_report.') || action.startsWith('rework.tail_inspection.') || action.startsWith('rework.ie_precount.')) return 'work_reporting';
@@ -107,21 +107,23 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   if(configuration.configurationId) {
    const created=(await client.query('SELECT created_at FROM rework_process_configurations WHERE configuration_id=$1 AND rework_order_id=$2',[configuration.configurationId,detail.reworkOrderId])).rows[0];
    configuration.createdAt=created?.created_at.toISOString();
-   configuration.submittedAt=[...past].reverse().find(e=>e.action==='rework.process_configuration.submit' && object(e.after.configuration).configurationId===configuration.configurationId)?.at;
-   configuration.reviewedAt=[...past].reverse().find(e=>e.action==='rework.process_configuration.review' && object(e.after.configuration).configurationId===configuration.configurationId)?.at;
+   configuration.submittedAt=[...past].reverse().find(e=>(e.action==='rework.process_configuration.submit'||e.action==='rework.process_configuration.external_activate') && object(e.after.configuration).configurationId===configuration.configurationId)?.at;
+   configuration.reviewedAt=[...past].reverse().find(e=>(e.action==='rework.process_configuration.review'||e.action==='rework.process_configuration.external_activate') && object(e.after.configuration).configurationId===configuration.configurationId)?.at;
    for(const key of ['submittedAt','reviewedAt']) configuration[key]=configuration[key]?new Date(String(configuration[key])).toISOString():null;
   }
   const historicalStatus=selected.after.status ?? selected.after.reworkStatus;
   const configurationResult=ProcessConfigurationResponseSchema.safeParse({reworkOrderId:detail.reworkOrderId,reworkNo:source.reworkNo??detail.reworkNo,reworkStatus:historicalStatus,orderVersion:selected.after.version??selected.after.orderVersion,tailInspectionRequired:source.tailInspectionRequired,specialProcessType:source.specialProcessType,otherCraftDescription:source.otherCraftDescription,configuration});
   if(configurationResult.success && ['process_configuration','ie_review','task_assignment','whole_order_review','final_quantity_ie_review'].includes(node)) {
    page.configuration=configurationResult.data;
-   if(['process_configuration','ie_review','task_assignment'].includes(node)) {
+   const nonExternalConfig=configurationResult.data.configuration?{...configurationResult.data.configuration,
+    items:configurationResult.data.configuration.items.flatMap(item=>item.executionKind==='external_craft'?[]:[{...item,executionKind:item.executionKind}])}:null;
+   if(['process_configuration','ie_review','task_assignment'].includes(node) && !configItems.some(item=>item.executionKind==='external_craft')) {
     const members=(await client.query(`SELECT member.configuration_item_id,member.person_id,member.display_name_snapshot,member.person_type_snapshot FROM rework_process_worker_plans plan JOIN rework_process_worker_plan_members member USING(plan_id) WHERE plan.rework_order_id=$1 AND plan.configuration_id=$2 AND plan.created_at <= $3::timestamptz ORDER BY member.created_at,member.person_id`,[detail.reworkOrderId,configuration.configurationId,selected.at])).rows;
     page.workerPlan=ProcessWorkerPlanResponseSchema.parse({reworkOrderId:detail.reworkOrderId,reworkStatus:configurationResult.data.reworkStatus,orderVersion:configurationResult.data.orderVersion,required:Boolean(configuration.workerPreassignmentRequired),configurationId:configuration.configurationId,configurationVersion:configuration.configurationVersion,configurationStatus:configuration.status,complete:configItems.every(item=>members.some(m=>m.configuration_item_id===item.configurationItemId)),assignments:configItems.map(item=>({configurationItemId:item.configurationItemId,processName:item.processName,executionKind:item.executionKind??'worker',members:members.filter(m=>m.configuration_item_id===item.configurationItemId).map(m=>({personId:m.person_id,displayName:m.display_name_snapshot,personType:m.person_type_snapshot}))}))});
    }
-   if(['whole_order_review','final_quantity_ie_review'].includes(node) && configurationResult.data.configuration) page.wholeOrderReview=await readHistoricalReview(client,detail.reworkOrderId,selected.at,configurationResult.data.configuration,configurationResult.data.tailInspectionRequired,configurationResult.data.orderVersion,configurationResult.data);
+   if(['whole_order_review','final_quantity_ie_review'].includes(node) && nonExternalConfig && (!configItems.some(item=>item.executionKind==='external_craft')||nonExternalConfig.items.length)) page.wholeOrderReview=await readHistoricalReview(client,detail.reworkOrderId,selected.at,nonExternalConfig,configurationResult.data.tailInspectionRequired,configurationResult.data.orderVersion,configurationResult.data);
    if(page.wholeOrderReview) page.iePrecounts.entries=(await client.query(`SELECT entry.configuration_item_id AS "configurationItemId",entry.quantity::float8 quantity,entry.note,person.display_name AS "recordedBy",entry.recorded_at AS "recordedAt" FROM rework_ie_precount_entries entry JOIN app_users person ON person.id=entry.recorded_by WHERE entry.rework_order_id=$1 AND entry.recorded_at <= $2::timestamptz ORDER BY entry.recorded_at DESC`,[detail.reworkOrderId,selected.at])).rows.map(row=>({...row,recordedAt:row.recordedAt.toISOString()}));
-   if(page.wholeOrderReview && configurationResult.data.configuration && !configurationResult.data.configuration.unifiedExecutionRequired) page.tailInspection=await readHistoricalTailInspection(client,detail.reworkOrderId,selected.at,configurationResult.data.configuration.items);
+   if(page.wholeOrderReview && nonExternalConfig && !nonExternalConfig.unifiedExecutionRequired) page.tailInspection=await readHistoricalTailInspection(client,detail.reworkOrderId,selected.at,nonExternalConfig.items);
   }
   const processName = (id:unknown) => value(configItems.find(item=>item.configurationItemId===id)?.processName) ?? '历史工序名称未记录';
   const add = (title:string,columns:string[],rows:unknown[][]) => sections.push({title,columns,rows:rows.map(row=>row.map(value))});
@@ -129,9 +131,15 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
    const result=await client.query({text:sql,values:params,rowMode:'array'});add(title,columns,result.rows);
   };
   if (['process_configuration','ie_review','task_assignment'].includes(node)) {
+   const external=configItems.find(item=>item.executionKind==='external_craft');
+   if(external){
+    add('实际返工方式',['工艺','原问题片数','工人与 IE 计件核价'],[[external.processName,external.plannedQuantity,'不适用']]);
+    fields.push({label:'配置版本',value:value(configuration.configurationVersion)},{label:'尾部确认',value:value(configuration.reviewReason)??selected.reason});
+   }else{
    add('工序与单价',['工序','计划数量','计价单位','单价'],configItems.map(item=>[item.processName,item.plannedQuantity,item.pricingUnit,item.unitPrice]));
    fields.push({label:'配置版本',value:value(configuration.configurationVersion)},{label:'核价结果',value:value(configuration.status)},{label:'变更说明',value:value(configuration.changeReason)},{label:'审核意见',value:value(configuration.reviewReason) ?? selected.reason});
    await querySection('本次工人分配',['工序','工人','人员类型'],`SELECT item.process_name,COALESCE(person.display_name,member.display_name_snapshot),member.person_type_snapshot FROM rework_process_worker_plans plan JOIN rework_process_worker_plan_members member USING(plan_id) JOIN rework_process_configuration_items item USING(configuration_item_id) LEFT JOIN business_people person ON person.person_id=member.person_id WHERE plan.rework_order_id=$1 AND plan.configuration_id=$2 AND plan.created_at <= $3::timestamptz ORDER BY item.position,member.display_name_snapshot`,[detail.reworkOrderId,configuration.configurationId ?? null,selected.at]);
+   }
   }
   if (node==='work_reporting'||node==='task_assignment') {
    const caps=actor.authorizationCapabilities??[actor.authorizationCapability];

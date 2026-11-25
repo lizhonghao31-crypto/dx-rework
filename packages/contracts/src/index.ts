@@ -698,7 +698,7 @@ export const ProcessConfigurationItemResponseSchema = z.object({
   processId: IdSchema.nullable(),
   processVersion: z.number().int().positive().nullable(),
   processName: z.string().min(1),
-  executionKind: ProcessExecutionKindSchema.optional().default("worker"),
+  executionKind: z.enum([...ProcessExecutionKindSchema.options,"external_craft"]).optional().default("worker"),
   pricingUnit: ProcessPricingUnitSchema,
   plannedQuantity: z.number().positive(),
   // Historical configurations created before N02 pricing was mandatory may

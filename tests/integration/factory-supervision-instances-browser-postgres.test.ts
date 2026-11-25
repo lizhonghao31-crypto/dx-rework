@@ -26,6 +26,8 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {ReworkV2SubmissionService} from '../../apps/api/src/rework/v2-submission-service.js';
 import {ensureWithinSourceReceivingActualQuantity} from '../../apps/api/src/rework/receiving-quantity-ceiling.js';
+import {ProcessConfigurationService} from '../../apps/api/src/rework/process-configuration-service.js';
+import {externalCraftRepairProgress} from '../../apps/api/src/production-platform/warehouse-craft-rework-return.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -241,6 +243,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(flow.dispatch(warehouse,ready.id,{...countedDispatch,lines:[{lineId,quantity:10}]},randomUUID())).rejects.toMatchObject({statusCode:409});
   const partial=await flow.dispatch(warehouse,ready.id,{...countedDispatch,lines:[{lineId,quantity:9}]},randomUUID());
   expect(partial.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,sent:9,available:6,releasedAvailable:0}]);
+  const tail={...f.people['tail-supervisor']!,authorizationCapability:'process:configure',authorizationCapabilities:['process:configure']},
+   configuration=new ProcessConfigurationService(f.db),configuredFrom={expectedOrderVersion:submitted.value.version};
+  await expect(configuration.activateExternalCraft(qaActor,draftId,configuredFrom,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const activated=await configuration.activateExternalCraft(tail,draftId,configuredFrom,randomUUID());
+  expect(activated.value).toMatchObject({reworkStatus:'in_progress',configuration:{status:'approved',items:[{executionKind:'external_craft',plannedQuantity:2,unitPrice:null}]}});
+  const outboundRepair=await flow.warehouseCraftRepair(warehouse,ready.id,
+   {...await command(second!.stepId,factories[1]!,'send',in4.factId,2),reworkId:draftId},randomUUID());
+  const sentRepair=outboundRepair.facts.at(-1)!;
+  expect(sentRepair.payload).toMatchObject({stepRef:second!.stepId,fromReturnId:in4.factId,
+   warehouseMotion:{reworkId:draftId,checkId:current.checkId,factoryId:factories[1]}});
+  await expect(flow.warehouseCraftMotion(warehouse,ready.id,
+   await command(second!.stepId,factories[1]!,'return',sentRepair.factId,1),randomUUID())).rejects.toThrow('沿同一返工范围回仓');
+  const repairScope={reworkId:draftId,originalReturnFactId:in4.factId,stepRef:second!.stepId,lineId,factoryId:factories[1]!,quantity:2};
+  const repairProgress=(sheet:typeof outboundRepair)=>externalCraftRepairProgress(repairScope,
+   sheet.facts.map(item=>({fact_id:item.factId,kind:item.kind,occurred_at:item.occurredAt,payload:item.payload})));
+  const recordReturn=async()=>flow.warehouseCraftRepair(warehouse,ready.id,
+   {...await command(second!.stepId,factories[1]!,'return',sentRepair.factId,1),reworkId:draftId},randomUUID());
+  const firstRepairReturn=await recordReturn();
+  expect(repairProgress(firstRepairReturn)).toMatchObject({sent:2,returned:1,remainingToReturn:1,physicalCompletedAt:null});
+  const lastRepairReturn=await recordReturn(),lastFact=lastRepairReturn.facts.at(-1)!;
+  expect(repairProgress(lastRepairReturn)).toMatchObject({sent:2,returned:2,remainingToReturn:0,physicalCompletedAt:lastFact.occurredAt});
+  expect(lastRepairReturn.batches?.find(batch=>batch.factId===lastFact.factId)?.rows).toMatchObject([{lineId,available:1,allowDispatch:false}]);
+  expect((await f.db.query("SELECT count(*)::int AS count FROM rework_work_tasks WHERE rework_order_id=$1",[draftId])).rows[0].count).toBe(0);
  });
  it('counts appended preshrink once and binds the actual current task through the additional group handoff',async()=>{
   const f=h.f,special=await new SpecialCraftLibraryService(f.db).save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST appended-preshrink craft',enabled:true,development:{minutes:60,calendar:'continuous',reminder:{enabled:false,percent:70}},bulk:{minutes:120,calendar:'continuous',reminder:{enabled:false,percent:70}}}},randomUUID());

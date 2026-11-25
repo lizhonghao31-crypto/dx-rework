@@ -347,11 +347,11 @@ export function WorkReportingForm({
       ]);
       if(!live)return;
       setPeople(peopleResult.people);
-      setConfigItems(configuration.configuration?.items.map((item) => ({
+      setConfigItems(configuration.configuration?.items.flatMap((item) => item.executionKind==="external_craft"?[]:[{
         configurationItemId: item.configurationItemId,
         processName: item.executionKind === "tail_inspection" && item.specialProcessType !== "other_craft" ? "整查" : item.processName,
         executionKind: item.executionKind,
-      })) ?? []);
+      }]) ?? []);
     };
     void load().catch((cause:unknown)=>{
       if(live)setMessage(cause instanceof Error?cause.message:"当前节点加载失败");
