@@ -111,7 +111,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }
    await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!);await options?.beforeInstructionPublish?.(id);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
-   await customerQuotationFixture(db,root,id);
+   await customerQuotationFixture(db,root,id,undefined,designer);
    const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:options?.budgetRows??[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
    await budget.save(designer,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.publish(primary,id,2,randomUUID());
    const prepared=await budget.prepareSourcing(primary,id,2,attachments);

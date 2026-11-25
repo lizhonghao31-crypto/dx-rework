@@ -433,7 +433,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const old=await quotes.read(designer,resource),document:BudgetDocument={fabricType:'针织',productCategory:index?'TEST-QUOTE-NEW':'TEST-QUOTE-OLD',monthSeries:'',date:beijingCalendarDate(new Date()),currency:'人民币',freight:'0',cm:'0',salePrice:'',outsourcingScope:'车缝',outsourcingUnitPrice:'5',rows:[{rowId,section:'主料',category:'面料',name:index?'TEST-NEW-MATERIAL':'TEST-OLD-MATERIAL',specification:'40支',unit:'米',supplier:'TEST',consumption:'',unitPrice:index?'12':'10'}],imageAttachmentIds:[]};
    const saved=await quotes.save(designer,resource,{expectedVersion:old.version,document,assignments:[{rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID());
    const filled=await quotes.fillRow(worker,resource,rowId,{expectedVersion:saved.version,consumption:'1'},randomUUID());
-   const confirmed=await quotes.confirm(designer,resource,{expectedVersion:filled.version,customerCode:'PD',customerConfirmedTotal:index?'40':'30',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:index?'TEST CONFIRM NEW':'TEST CONFIRM OLD',confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());quoteVersions.push(confirmed.version);
+   const confirmed=await quotes.confirm(designer,resource,{expectedVersion:filled.version,customerCode:'PD',customerConfirmedTotal:index?'40':'30',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:index?'TEST CONFIRM NEW':'TEST CONFIRM OLD',workbenchPricing:{field:'customerUnitPrice',value:index?'40':'30'},confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());quoteVersions.push(confirmed.version);
    let budget=await budgets.read(merch,id);if(index)budget=await budgets.adoptQuotation(merch,id,{expectedVersion:budget.version,sourceQuoteVersion:confirmed.version},randomUUID());
    const budgetDocument={...budget.document!,productCategory:index?'TEST-BUDGET-NEW':'TEST-BUDGET-OLD',date:beijingCalendarDate(new Date()),imageAttachmentIds:[qImages[index]!]};
    budget=await budgets.save(designer,id,{expectedVersion:budget.version,document:budgetDocument},randomUUID());budget=await budgets.publish(merch,id,budget.version,randomUUID(),confirmed.version);budgetVersions.push(budget.version);
@@ -443,7 +443,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // The selector must search the complete authorized history, not just 15 rows.
   for(let index=0;index<15;index++){
    const current=await quotes.read(designer,resource),saved=await quotes.save(designer,resource,{expectedVersion:current.version,document:{...current.document!,productCategory:'TEST-LATER-'+index},assignments:current.assignments},randomUUID());
-   await quotes.confirm(designer,resource,{expectedVersion:saved.version,customerCode:'PD',customerConfirmedTotal:'40',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST LATER '+index,confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());
+   await quotes.confirm(designer,resource,{expectedVersion:saved.version,customerCode:'PD',customerConfirmedTotal:'40',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST LATER '+index,workbenchPricing:{field:'customerUnitPrice',value:'40'},confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());
   }
   const instructionOrder=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),instructionId=instructionOrder.id;
   for(let index=0;index<2;index++){
@@ -481,7 +481,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     if(kind!=='quotation'){const image=reader.locator(`img[src*="/original-versions/${versions[0]}/attachments/${imageIds[0]}"]`).first();await expect.poll(()=>image.evaluate(element=>(element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);expect(await reader.locator(`img[src*="${imageIds[1]}"]`).count()).toBe(0);}
     else{await expect.poll(()=>tab.page.locator('#quote-confirmed-basis').textContent()).toContain('30');expect(await tab.page.getByText('TEST-OLD-MATERIAL',{exact:true}).count()).toBeGreaterThan(0);}
     expect(await reader.locator('input[type=file]').count()).toBe(0);
-    for(const name of ['保存预算','最终发布','保存草稿','发布制单','记录客户报价确认并检查预算生成条件'])expect(await reader.getByRole('button',{name,exact:true}).count()).toBe(0);
+    for(const name of ['保存预算','最终发布','保存草稿','发布制单','确认报价'])expect(await reader.getByRole('button',{name,exact:true}).count()).toBe(0);
     const entityId=kind==='instruction'?instructionId:id,suffix=kind==='quotation'?`?quoteId=${quoteId}`:'',api=`${h.base}/api/digital-production/orders/${entityId}/${kind}/original-versions/${versions[0]}`;
     if(kind!=='quotation'){const denied=await tab.page.request.get(`${api}/attachments/${imageIds[1]}${suffix}`);expect([403,404]).toContain(denied.status());}expect((await tab.page.request.get(`${h.base}/api/digital-production/orders/${entityId}/${kind}/original-versions/999999${suffix}`)).status()).toBe(404);
     await tab.page.getByRole('button',{name:'切换单据',exact:true}).click();const chooser=tab.page.getByRole('dialog',{name:'切换单据',exact:true});await chooser.waitFor();
@@ -531,8 +531,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const mainRow=tab.page.getByRole('row').filter({hasText:'TEST冲突主料'}),otherRow=tab.page.getByRole('row').filter({hasText:'TEST匹配辅料'});
    await mainRow.getByText(hint,{exact:true}).waitFor();expect(await mainRow.getByRole('cell',{name:'—',exact:true}).count()).toBe(1);
    expect(await otherRow.getByText(hint,{exact:true}).count()).toBe(0);
-   expect(await tab.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isDisabled()).toBe(true);
-   expect(await tab.page.locator('#quote-cost-reference').innerText()).toContain('19.75');
+   expect(await tab.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
+   expect(await otherRow.getByRole('cell',{name:'19.75',exact:true}).count()).toBeGreaterThan(0);
+   expect(await tab.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 待补齐');
    await write(mismatch.version,[{materialId:otherId,unit:'米',consumption:'1'}]);
    await tab.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
    await mainRow.waitFor();await expect.poll(()=>mainRow.getByText(hint,{exact:true}).count()).toBe(0);
@@ -560,7 +561,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const quotePage=`/ui/digital-quotation?kind=order&id=${id}`;
   const budgetApi=(orderId:string)=>`${h.base}/api/digital-production/orders/${orderId}/budget`;
   const confirmationUrl=`${h.base}/api/digital-production/orders/${id}/quotation/confirm`;
-  const confirmationButton='记录客户报价确认并检查预算生成条件';
+  const confirmationButton='确认报价';
   const operator=await h.open(merch.actorId,1165,{},quotePage);
   const first=await h.open(designer.actorId,1165,{},quotePage);
   const second=await first.context.newPage();
@@ -588,7 +589,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    };
    await assertLocked(operator.page,id);
    const fillConfirmation=async(page:Page)=>{
-    await page.getByLabel('客户确认金额',{exact:true}).fill('20');
+    await page.getByLabel('客户单件报价（元/件）',{exact:true}).fill('20');
+    await page.getByRole('button',{name:'用于本单客户确认',exact:true}).click();
+    expect(await page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('20');
     await page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-20T09:00');
     await page.getByLabel('客户确认依据',{exact:true}).fill('TEST客户确认单件20元');
    };
@@ -695,7 +698,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await d.page.goto(h.base+workbenchPath);
    await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
    expect(await d.page.getByRole('button',{name:'添加主料',exact:true}).count()).toBe(0);
-   expect(await d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isDisabled()).toBe(true);
+   expect(await d.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
    expect(await d.page.locator('.quotation-editor').innerText()).not.toContain('[object Object]');
    expect(await d.page.locator('.quotation-editor').innerText()).not.toContain('sheet.status');
    const w=await h.open(worker.actorId,1165,{},path),i=await h.open(ie.actorId,1165,{},path);
@@ -721,7 +724,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      expectedVersion:published.version,scopeRef:'整款',action:'publish',
      body:{...published.body,consumptionRows:[{materialId,unit:'米',consumption:'1.5'}]}},randomUUID());
     await d.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
-    await expect.poll(()=>d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).isEnabled()).toBe(true);
+    expect(await d.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
     await expect.poll(()=>d.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 40 元/件');
     const rate=d.page.getByLabel('报价倍率（%）',{exact:true}),price=d.page.getByLabel('客户单件报价（元/件）',{exact:true});
     await rate.fill('130');
@@ -789,7 +792,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      await panel.screenshot({path:join(h.evidence,`r4-pricing-${width}.png`)});
     }
     await d.page.setViewportSize({width:1165,height:960});
-    await d.page.getByLabel('客户确认金额',{exact:true}).fill('42');
+    await d.page.getByLabel('客户单件报价（元/件）',{exact:true}).fill('42');
+    await d.page.getByRole('button',{name:'用于本单客户确认',exact:true}).click();
+    expect(await d.page.getByLabel('客户确认金额',{exact:true}).inputValue()).toBe('42');
     await d.page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-20T09:00');
     await d.page.getByLabel('客户确认依据',{exact:true}).fill('TEST真实确认42，成本40不是客户售价');
     const confirmationPath=`${h.base}/api/digital-production/sources/${source.sourceId}/quotation/confirm`;
@@ -803,7 +808,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      return route.abort('failed');
     });
     try{
-     await d.page.getByRole('button',{name:'记录客户报价确认并检查预算生成条件',exact:true}).click();
+     await d.page.getByRole('button',{name:'确认报价',exact:true}).click();
      const recover=d.page.getByRole('button',{name:'使用原内容核对报价提交',exact:true});
      await recover.waitFor();
      expect(committedStatus).toBe(200);
@@ -861,6 +866,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     }
     await d.page.getByLabel('查看报价版本',{exact:true}).selectOption('');
     await expect.poll(()=>oldSheet.innerText()).toContain('协作草稿');
+    const primary=h.f.people.merchandiser!;
+    const convert=await d.page.request.post(`${h.base}/api/digital-production/sources/${source.sourceId}/confirm`,{
+     headers:{'idempotency-key':randomUUID()},data:DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+      designStyleNo:confirmed.designStyleNo,orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:primary.actorId,
+      lines:[{color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:5}]}]}),
+    });
+    expect(convert.status(),await convert.text()).toBe(200);
+    const orderId=(await convert.json()).productionOrderId;
+    const follow=await h.open(primary.actorId,1165,{},`/ui/digital-production?budget=${orderId}`);
+    try{
+     const response=await follow.page.request.get(`${h.base}/api/digital-production/orders/${orderId}/budget`);
+     expect(response.status()).toBe(200);
+     expect(await response.json()).toMatchObject({productionOrderId:orderId,canEdit:true,version:1,
+      comparison:{quoteId:confirmed.quoteId,quoteVersion:frozen,baseline:(await quotes.read(designer,resource,undefined,frozen)).document,confirmation:{customerConfirmedTotal:'42'}}});
+     expect((await h.db.query('SELECT quote_id,quote_version FROM digital_budget_quote_conversions WHERE production_order_id=$1',[orderId])).rows)
+      .toEqual([{quote_id:confirmed.quoteId,quote_version:frozen}]);
+    }finally{await follow.close();}
     await d.page.screenshot({path:join(h.evidence,'designer-1165.png'),fullPage:true});
     await w.page.screenshot({path:join(h.evidence,'worker-1165.png'),fullPage:true});
     // Same authenticated session after native role revocation, not a Lab role switch.

@@ -17,7 +17,8 @@ export async function formalOrderQuantity(db:Database,orderId:string):Promise<nu
 // Called only inside an authenticated command transaction holding the shared
 // lifecycle lock. GET/read operations never create drafts or adopt old orders.
 export async function hasCurrentBudgetCraftBasis(db:Database,quote:AssembledQuotation,stored:SecondaryCraftApprovalRef[]|null,lock:boolean){
- if(!requiredCraftRows(quote).length&&!await hasUnmappedSecondaryCraft(db,quote))return true;
+ if(await hasUnmappedSecondaryCraft(db,quote))return false;
+ if(!requiredCraftRows(quote).length)return true;
  if(!Array.isArray(stored)||!await secondaryCraftReady(db))return false;
  const {required,confirmed}=await approvedSecondaryCraftRows(db,quote,lock);
  return required.length>0&&confirmed.size===required.length&&stored.length===required.length

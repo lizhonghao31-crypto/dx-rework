@@ -1,198 +1,224 @@
 {
   "version": 1,
   "risk": "full",
-  "base": "4cced4c86195a0e06de15498d3caa7b8fd35220d",
-  "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
+  "base": "d1705aada1e5701c572d9303fa7b15505482df48",
+  "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
   "rules": [
     {
-      "source": "Approved Workbench v11.5 §6.1–6.5, V10/V11, I01–I06 and F01–F03, with C6 joint activation expressly deferred.",
-      "rule": "Compose one globally filtered and ordered authorized IE directory of three independent original domains. Preserve row, role and original way back; render the exact display price without creating a cost or workflow fact.",
+      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
+      "rule": "Approve or return the exact currently submitted craft version as the authenticated canonical Root or the individually bound verified Wu Yunfeng. Record real authority and never substitute the notified person for the actual decision actor.",
       "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/ie-authorized-directory.ts",
-        "apps/api/src/production-platform/ie-directory-reader.ts",
-        "apps/api/src/production-platform/ie-directory-routes.ts",
-        "apps/api/src/production-platform/ie-processing-directory.ts",
-        "apps/api/src/reporting/management-reporting-orders.ts",
-        "apps/api/src/reporting/management-reporting-service.ts",
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing/sourcing-case-read.ts",
-        "apps/api/src/sourcing/sourcing-ie-directory.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/production-platform/secondary-craft-approval-authority.ts",
+        "apps/api/src/production-platform/secondary-craft-approval-todos.ts",
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
         "apps/web/src/components.tsx",
-        "apps/web/src/ie-processing-center.tsx",
-        "apps/web/src/ie-unified-directory-routes.ts",
-        "apps/web/src/ie-unified-directory-source.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "tests/unit/ie-authorized-directory.test.ts",
-        "tests/unit/platform-modules.test.ts"
+        "apps/web/src/secondary-craft-quotation-page.tsx",
+        "apps/api/migrations/0305_secondary_craft_decision_authority.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "apps/api/src/access/business-authority.ts"
-      ],
-      "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/sourcing-mobile-workspace.test.ts",
-        "tests/unit/rework-query-navigation.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/ie-authorized-directory.test.ts"
-      ],
-      "checks": [
-        "c4-prepush-static",
-        "c4-prepush-unit",
-        "c4-prepush-protocol",
-        "c4-prepush-native"
-      ],
-      "initialization": "Use the same existing adapters and schema, batch only the selected original row metadata, and keep bare and old deep links. No migration, retrospective update or duplicate status table.",
-      "dateAndPermission": "Resolve each original source with its own live read capability and same actor before paging in a read-only snapshot. Existing source identity, current round and quote versions, rush grouping of old readers and all prior business clocks remain authoritative; revoked/cross-tenant selectors cannot grant rights.",
-      "expectation": "Signed IE sees the three legal original types across pages, with the current returned row retaining exact prior price; click each legal original then return to the same page and focused row. The ordinary assigned IE saves a new exact price without clearing return state, then explicitly resubmits the exact original field via its existing command; wrong roles and malformed filters are rejected."
-    },
-    {
-      "source": "Approved Workbench v11.5 §6.1–6.5, V10/V11, I01–I06 and F01–F03, with C6 joint activation expressly deferred.",
-      "rule": "Show only the released technical, size, material and style-image basis of the exact current IE row, and return the correct original craft requirement and style image without widening edit/approval rights.",
-      "writes": [
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/quotation-display-basis.ts",
-        "apps/web/src/quotation-basis-image.tsx",
-        "apps/web/src/quotation-basis.css",
-        "tests/helpers/render-authorized-quotation-images.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/development-document-snapshot.ts",
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/tools/attachments.ts",
+        "apps/api/src/production-platform/secondary-craft-suppliers.ts",
+        "apps/api/src/production-platform/secondary-craft-development-basis.ts",
+        "apps/api/src/access/business-authority.ts",
         "apps/api/src/production-platform/access-policy.ts"
       ],
       "oldTests": [
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+      ],
+      "checks": [
+        "c6-static",
+        "c6-unit",
+        "c6-protocol",
+        "c6-native",
+        "c6-original-fixtures"
+      ],
+      "initialization": "Append nullable decision authority, preserve all existing approvals as original verified Wu evidence, and retain submitted-version, actual actor, unique decision and immutability rules. Preserve the existing recipient when eligible; only the other eligible actor may approve.",
+      "dateAndPermission": "Signed Root is validated against the canonical active bootstrap identity; Wu is an individually bound active owner. Preserve exact craft, scope, supplier version, original maker eligibility, time choice, and original task/notification ownership.",
+      "expectation": "Both legitimate actors independently decided real submitted versions, racing legitimate actors created exactly one row, other owner and maker were rejected, old versions and DB-only unauthorized inserts did not win. Pricing readiness is explicit until the joint schema exists."
+    },
+    {
+      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
+      "rule": "Keep exact customer-price calculation and independent recoverable draft. All current governed confirmation entrypoints require actual designer, exact amount and scope, complete authorized current inputs, no unresolved reviews and actual applicable craft evidence.",
+      "writes": [
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-workbench.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/quotation-workbench-pricing.tsx",
+        "apps/web/src/quotation-pricing-draft-receipt.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "tests/unit/customer-quotation.test.ts",
+        "tests/unit/quotation-pricing-draft-receipt.test.ts",
+        "tests/unit/quotation-workbench-confirmation.test.ts",
+        "tests/unit/quotation-workbench-preview.test.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "apps/api/src/production-platform/development-document-snapshot.ts"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/unit/customer-quotation.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/unit/quotation-pricing-draft-receipt.test.ts"
+      ],
+      "checks": [
+        "c6-static",
+        "c6-unit",
+        "c6-protocol",
+        "c6-native",
+        "c6-original-fixtures"
+      ],
+      "initialization": "Use the original pricing draft table and native command receipt, do not copy pricing into a confirmation on save. Reuse immutable workbench enrollment; legacy manual workflow retains its original basis. Do not stamp dates or backfill old records.",
+      "dateAndPermission": "Preserve business time and actual customer confirmation date; seller authority derives from original current order/source and active designer, not survey display strings or a browser-only check. Detect unrepresented source craft evidence and do not allow old payload to bypass the active gate.",
+      "expectation": "Actual save and response loss restore one exact draft; legacy raw requests, wrong authority, old version and amount mismatch cannot create confirmation or budget. Ordinary current technical and IE roles retain original write/review paths."
+    },
+    {
+      "source": "Approved v11.5 Workbench §7.2–7.4, G3 and ENT03–05, C6 only (final print addendum leaves these clauses unchanged).",
+      "rule": "Budget consumes the same current authorized adoption, with exact confirmed quote evidence. Pure development may confirm without creating a formal order; later formal conversion inherits that exact confirmation once.",
+      "writes": [
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/customer-quotation-fixture.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/budget-service.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/development-electronic-handover.ts"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts"
+      ],
+      "newTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
       "checks": [
-        "c4-prepush-static",
-        "c4-prepush-unit",
-        "c4-prepush-protocol",
-        "c4-prepush-native"
+        "c6-static",
+        "c6-unit",
+        "c6-protocol",
+        "c6-native",
+        "c6-original-fixtures"
       ],
-      "initialization": "No new storage metadata or copied file. Approved source version and round determine the exact asset. Missing version has no fallback to another version, latest file, another round, or a draft.",
-      "dateAndPermission": "Authorize exact quote row or exact maker/approver version before each media grant. Verify original attachment class, binding, MIME and exact document membership. No supplier directory write, generic file read, new pricing permission or timing change.",
-      "expectation": "The original signed browser response resolves to the expected image ID and actual decodable signed bytes; an unrelated attachment and wrong document version fail. Original quote draft, exact receipt, technical handover and role revocation assertions remain."
-    },
-    {
-      "source": "Approved Workbench v11.5 §6.1–6.5, V10/V11, I01–I06 and F01–F03, with C6 joint activation expressly deferred.",
-      "rule": "Use the same craft directory table and conservative original approval contract. Find authorized rows by order ID, accepted formal PO, customer or craft, and preserve current original state, exact unit price and row navigation.",
-      "writes": [
-        "apps/api/src/production-platform/secondary-craft-quotation.ts",
-        "packages/contracts/src/secondary-craft-quotation.ts",
-        "apps/web/src/secondary-craft-directory-view.ts",
-        "apps/web/src/secondary-craft-quotation-page.tsx",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
-        "tests/unit/secondary-craft-directory-view.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/secondary-craft-approval-authority.ts",
-        "apps/api/src/production-platform/secondary-craft-suppliers.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/web/src/list-pagination.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/secondary-craft-directory-view.test.ts"
-      ],
-      "checks": [
-        "c4-prepush-static",
-        "c4-prepush-unit",
-        "c4-prepush-protocol",
-        "c4-prepush-native"
-      ],
-      "initialization": "Retain original makers, master data and quotation versions; no activation or backfill. Unassigned/modality data absent is not given a fabricated factory or zero price. Old C6 approval paths stay usable under their unchanged scope.",
-      "dateAndPermission": "Native actor rules still decide whether actual line/manufacturer terms are visible and writable. Searching quoted rows is not access to wholesale supplier maintenance. Reject wrong actor, wrong version and direct bypass.",
-      "expectation": "Real maker uses true PO/customer search, original row and local return, authorized manufacturer, save and submitted receipt plus the existing legacy approval path; pre-R6 locks still reject new commercial writes."
+      "initialization": "No historical writes. Test fixtures that are not historical Root-authored manual quotes now exercise the actual original designer command and retain their prior exact budget amounts.",
+      "dateAndPermission": "Preserve original lead merchandiser and isolated sibling scope, immutable snapshots and original budget review. No quote alone creates an order. Keep rollout paused on a same-candidate Acceptance until C5 joint readiness; no deployment in this PR.",
+      "expectation": "Signed merchandiser remains locked until real designer confirmation, a sibling stays locked, approved basis change makes writes fail, pure source confirmation first then real native formal order creates precisely one budget from its exact immutable prior version."
     }
   ],
   "checks": [
     {
-      "id": "c4-prepush-static",
+      "id": "c6-static",
       "kind": "command",
-      "command": "Scoped ESLint on all changed TS/TSX + npm run typecheck -w @dx-rework/api + npm run typecheck -w @dx-rework/web + git diff --check",
-      "context": "Locked Node 22 workspace. No assertions weakened and only C4 tracked/untracked source included.",
+      "command": "ESLint on changed TS and TSX; npm run typecheck -w @dx-rework/api; npm run typecheck -w @dx-rework/web; npm run db:migrate:lint; git diff --check",
+      "context": "Locked Node 22 workspace and precise source list. Replays normal migration checksum and sequence checks.",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T08:24:34Z",
-      "endedAt": "2026-11-25T08:25:23Z",
-      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "05b7ce73a5d056f516a8f00799b425c898b7213a",
-      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-static.log",
-      "logSha256": "155dcb146c7b87cde51a53ca4fdf659091a7f7738702acc4dbba24131d87932c"
+      "startedAt": "2026-11-25T09:10:13Z",
+      "endedAt": "2026-11-25T09:11:04Z",
+      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
+      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-static.log",
+      "logSha256": "5e03fd8d69c0157e523a4b51cb6f5527cf2dacac8393983356f36efaa3230959"
     },
     {
-      "id": "c4-prepush-unit",
+      "id": "c6-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/ie-authorized-directory.test.ts tests/unit/secondary-craft-directory-view.test.ts tests/unit/platform-modules.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-pr03-contract.test.ts tests/unit/rework-query-navigation.test.ts --reporter=verbose --reporter=json",
-      "context": "Locked Node 22 default Vitest. Native capability, PMC, original sourcing and rework route contracts, and C4 directory projection checks.",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/customer-quotation.test.ts tests/unit/quotation-material-unit.test.ts tests/unit/quotation-pricing-draft-receipt.test.ts tests/unit/quotation-workbench-confirmation.test.ts tests/unit/quotation-workbench-preview.test.ts tests/unit/secondary-craft-directory-view.test.ts tests/unit/platform-modules.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=verbose --reporter=json",
+      "context": "Locked Node 22. Exact pricing/receipt, workbench actual confirmation, owner and craft projection, and original PMC authorization.",
       "status": "passed",
       "exitCode": 0,
-      "passed": 80,
+      "passed": 82,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:24:34Z",
-      "endedAt": "2026-11-25T08:24:42Z",
-      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "05b7ce73a5d056f516a8f00799b425c898b7213a",
-      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-unit.log",
-      "logSha256": "c80522c5dda7fff6d7a57739670323270ca958911617868b63d14b2dcce2c9c6",
+      "startedAt": "2026-11-25T09:10:13Z",
+      "endedAt": "2026-11-25T09:10:23Z",
+      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
+      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-unit.log",
+      "logSha256": "6a5eef3bd16269d21f31d6517ec4175d27e47ce2b2fa3acf42786fd6153a4646",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e599486f2546dbdb449c8ed5f412f565958cbe7800f3a207f3aa051e0074bfb3"
+          "sha256": "6d44c66da6eb3a7a1d00434a0b89df63f86c33075ce33ac23a4c71868aea76f0"
         }
       ]
     },
     {
-      "id": "c4-prepush-protocol",
+      "id": "c6-protocol",
       "kind": "tests",
       "command": "node --test scripts/ci/pr-gate-controller.test.mjs scripts/ci/ci-gate-runtime.test.mjs",
-      "context": "Locked Node 22 existing controller and runtime protocols. Refresh exact route inventory and keep existing semantic time annotations.",
+      "context": "Original CI control and runtime protocols, migration classification, and the unchanged time-source inventory.",
       "status": "passed",
       "exitCode": 0,
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:24:34Z",
-      "endedAt": "2026-11-25T08:24:36Z",
-      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "05b7ce73a5d056f516a8f00799b425c898b7213a",
-      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-protocol.log",
-      "logSha256": "b2973cb34a51bc5121fa8f6fe0de3d10422be844b3a7dda367a759dc3f4fd550"
+      "startedAt": "2026-11-25T09:10:13Z",
+      "endedAt": "2026-11-25T09:10:15Z",
+      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
+      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-protocol.log",
+      "logSha256": "e4270e2bc315d92bc4f6f0909ec03e41308b4c1230c65f1809de8fd4d834ad04"
     },
     {
-      "id": "c4-prepush-native",
+      "id": "c6-native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts --reporter=verbose --reporter=json",
-      "context": "Locked Node 22, original two-worker signed Chromium business chain and guarded PostgreSQL DB names. The image relay verifies real backend signing and intended attachment ID, substituting only the private test storage bytes. No Acceptance or production data.",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json",
+      "context": "Guarded dual database names and native signed Chromium, isolated schema, original ordinary actors and real commands. No live system data or settings.",
       "status": "passed",
       "exitCode": 0,
-      "passed": 12,
+      "passed": 29,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T08:24:34Z",
-      "endedAt": "2026-11-25T08:25:52Z",
-      "sourceFingerprint": "2e0230265d208af26ec36a6e6654a05bcd7f744fc05fb68a2d8b88ef403ea4aa",
-      "testedHead": "05b7ce73a5d056f516a8f00799b425c898b7213a",
-      "log": "/workspace/dx-v115-c4-evidence/c4-prepush-native.log",
-      "logSha256": "cd49a7ef026a77107430496df08b55550adef016ec516d3a01edaf55859e558d",
+      "startedAt": "2026-11-25T09:10:13Z",
+      "endedAt": "2026-11-25T09:11:36Z",
+      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
+      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-native.log",
+      "logSha256": "68d3b88fef50fe518c02dcc46d0599f7b0425487476745502c02591c6163a04e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "834b7fb7f3248868c2d8621740c4ea889d0f3cf9ac9960c8dbdafd33cb6e7b5e"
+          "sha256": "c85c9e8e3df296985f4e3d20c35818f29b976f399db8a72de0b4e0dcc629393c"
+        }
+      ]
+    },
+    {
+      "id": "c6-original-fixtures",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 tests/integration/acceptance-sla-clock-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts -t 'preserves clock scope through native owner factory-date approval|P09' --reporter=verbose --reporter=json",
+      "context": "Only the two named native upstream regression groups: four scoped/ordinary approval paths and two P09 original sourcing paths. All unselected cases are explicitly skipped.",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 167,
+      "startedAt": "2026-11-25T09:11:36Z",
+      "endedAt": "2026-11-25T09:11:47Z",
+      "sourceFingerprint": "3338bb4fbdccce932eb243c1737978abfd0db33a1cf10d1c06a2b59f8483d76a",
+      "testedHead": "87ead8ffd3e1a5ad320d095e0c9b1103097ba7fc",
+      "log": "/workspace/dx-v115-c6-evidence/prepush/c6-original-fixtures.log",
+      "logSha256": "3b2771a99028d754ebf05056a61cddf229538c3e77d1b0a459bd4bb1d3d756b8",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "57c0f2209e9060a0894d259d616603381d7e3932596c4a6ce1d47398f8930a11"
         }
       ]
     }

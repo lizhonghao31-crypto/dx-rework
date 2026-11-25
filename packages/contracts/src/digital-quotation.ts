@@ -73,6 +73,7 @@ export type UnifiedIeDirectoryEntry=z.infer<typeof UnifiedIeDirectoryEntrySchema
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;
+  requiresWorkbenchPricing?:true;
   craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;

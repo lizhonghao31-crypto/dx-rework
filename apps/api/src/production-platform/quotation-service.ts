@@ -25,6 +25,7 @@ import {developmentDocumentSnapshot} from './development-document-snapshot.js';
 import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
 import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
+import {secondaryCraftDecisionAuthorityReady} from './secondary-craft-approval-authority.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
 import {developmentSourceLifecycle} from './development-source-lifecycle.js';
 
@@ -48,6 +49,15 @@ async function quotationRoles(db:Database,actor:TrustedActorContext,roleScope:re
  const access=new DigitalProductionAccessPolicy(db);
  for(const role of roleScope)if(actor.actorRoles.includes(role)&&await access.activeRole(actor.actorId,role))active.add(role);
  return active;
+}
+async function newWorkbenchQuotation(db:Database,actor:TrustedActorContext,resource:QuotationResource,context:{workbenchPolicy:boolean;sourceId:string|null;row:Record<string,unknown>;designerId:string|null;quote?:QuoteRow|undefined},authorityReady?:boolean){
+ if(!context.workbenchPolicy)return false;
+ const active=authorityReady??await secondaryCraftDecisionAuthorityReady(db);
+ // A historically Root-authored manual quote has no designer workflow.
+ // This is not an alternative entry for another person's quote or a numbered source.
+ if(active&&(!isRootActor(actor)||context.designerId!==actor.actorId||context.quote?.assembly))return true;
+ if(resource.kind==='source')return context.row.workbench_generated_number===true;
+ return context.sourceId!==null&&(await db.query("SELECT to_jsonb(s)->>'workbench_generated_number' AS numbered FROM digital_production_sources s WHERE source_id=$1",[context.sourceId])).rows[0]?.numbered==='true';
 }
 export class DigitalQuotationService{
  constructor(private readonly database:Pool,private readonly creationEnabled:boolean){}
@@ -161,12 +171,15 @@ export class DigitalQuotationService{
   const confirmedBy=c.full&&c.workbenchPolicy&&confirmed?.confirmed_by_internal
    ?(await db.query('SELECT display_name FROM app_users WHERE id=$1',[confirmed.confirmed_by_internal])).rows[0]?.display_name:undefined;
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
+  const requiresWorkbenchPricing=Boolean(c.confirm&&q&&version===undefined&&await newWorkbenchQuotation(db,actor,resource,c));
+  const canConfirm=c.confirm&&(!requiresWorkbenchPricing||c.designerId===actor.actorId&&c.roles.has('sample_designer'));
   const assessed=q&&version===undefined&&c.confirm;
   const craftRows=q&&version===undefined?requiredCraftRows(q):[];
   const released=q&&craftRows.length>0?await releasedCraftRows(db,q):[];
   const approved=assessed&&released.length>0?await approvedSecondaryCraftRows(db,q,false):null;
-  const craftApprovalState=assessed&&(craftRows.length>0||await hasUnmappedSecondaryCraft(db,q))
-   ?approved?.required.length&&approved.confirmed.size===approved.required.length?'complete' as const:'waiting' as const:undefined;
+  const unmapped=assessed?await hasUnmappedSecondaryCraft(db,q):false;
+  const craftApprovalState=assessed&&(craftRows.length>0||unmapped)
+   ?!unmapped&&approved?.required.length&&approved.confirmed.size===approved.required.length?'complete' as const:'waiting' as const:undefined;
   let workbenchBudget:QuotationSheet['budget']['workbench'];
   if(c.workbenchPolicy&&c.full&&c.orderId&&version===undefined){
    const canOpen=await new DigitalProductionAccessPolicy(db).allowed(actor,'order',c.orderId,'budget');
@@ -206,8 +219,8 @@ export class DigitalQuotationService{
   return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
-   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),
-   canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&c.confirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
+   document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),...(requiresWorkbenchPricing?{requiresWorkbenchPricing:true as const}:{}),
+   canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&canConfirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null,...(workbenchBudget?{workbench:workbenchBudget}:{})}};
  }
  async originalVersions(actor:TrustedActorContext,resource:QuotationResource,page:number,q:string){
@@ -421,14 +434,18 @@ export class DigitalQuotationService{
    if(new Date(input.confirmedAt).getTime()>businessNow().getTime())conflict('客户确认时间不能晚于当前时间');
    const document=BudgetDocumentSchema.parse(q.document);
    if(!document.rows.length)conflict('报价须有实际明细');
-   const joint=await secondaryCraftReady(db),applicable=requiredCraftRows(q).length>0||await hasUnmappedSecondaryCraft(db,q);
-   if(!joint&&(applicable||input.workbenchPricing))conflict('联合报价流程尚未就绪');
+   const joint=await secondaryCraftReady(db),unmapped=await hasUnmappedSecondaryCraft(db,q),applicable=requiredCraftRows(q).length>0||unmapped;
+   const authorityReady=(c.workbenchPolicy||input.workbenchPricing)&&await secondaryCraftDecisionAuthorityReady(db);
+   const requiresPricing=await newWorkbenchQuotation(db,actor,resource,c,Boolean(authorityReady));
+   if(requiresPricing&&(c.designerId!==actor.actorId||!c.roles.has('sample_designer')))digitalForbidden();
+   if((!joint&&applicable)||((requiresPricing||input.workbenchPricing)&&(!joint||!authorityReady)))conflict('联合报价流程尚未就绪');
+   if(requiresPricing&&!input.workbenchPricing)conflict('请采用本报价当前成本测算后，再登记客户实际确认');
    let approvals:unknown[]=[],pricing=null;
    if(joint){
     await assertNoOpenQuotationReviews(db,q);
     if(applicable){
      const {required,confirmed}=await approvedSecondaryCraftRows(db,q,true);
-     if(!required.length||confirmed.size!==required.length)conflict('请先完成本报价采用的全部工艺版本审批');
+     if(unmapped||!required.length||confirmed.size!==required.length)conflict('请先完成本报价采用的全部工艺版本审批');
      approvals=[...confirmed.values()];
     }
     if(input.workbenchPricing){

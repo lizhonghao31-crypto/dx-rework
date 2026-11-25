@@ -3595,7 +3595,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)", [imageId, objectKey, bytes.length, sha256, designerId]);
     const document = BudgetDocumentSchema.parse({ fabricType: "梭织", productCategory: "短裤", monthSeries: "", date: "2026-09-30", currency: "人民币", rows: [],
       freight: "0.3", cm: "8.3", salePrice: "48", outsourcingScope: "车缝、整烫", outsourcingUnitPrice: "5.25", imageAttachmentIds: [imageId] });
-    await customerQuotationFixture(database,rootActor(),order.productionOrderId);
+    await customerQuotationFixture(database,rootActor(),order.productionOrderId,undefined,designer);
     const budget = new DigitalBudgetService(database, true);
     return { order, designer, document, imageId, budget };
   };

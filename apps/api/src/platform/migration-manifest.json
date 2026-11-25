@@ -1275,6 +1275,10 @@
     {
       "version": "0304_development_draft_discard",
       "checksum": "a094213bd8c0d25047dd2622b1221f614d11782e3feeb7202e9418c707f1bad5"
+    },
+    {
+      "version": "0305_secondary_craft_decision_authority",
+      "checksum": "61b95671c30399e24607976bfd6482c89f2f4c0d054e2ceed1af06449025721d"
     }
   ]
 }

@@ -476,7 +476,7 @@ export function Shell({
       href: "/ui/sourcing/history",
     });
   }
-  if(!isRoot&&["pattern_room_worker","embroidery_washing_merchandiser","owner_group"].some(hasRole))
+  if(isRoot||["pattern_room_worker","embroidery_washing_merchandiser","owner_group"].some(hasRole))
     sourcingNavigation.push({name:"二次工艺报价与选厂",description:"办理本人负责的工艺报价或审批",href:"/ui/secondary-craft-quotation"});
 
   const cuttingNavigation: NavigationEntry[] = currentUser && canAccessCutting(currentUser)
