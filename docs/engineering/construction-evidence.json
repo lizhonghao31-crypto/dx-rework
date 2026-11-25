@@ -1,230 +1,281 @@
 {
   "version": 1,
+  "base": "7e61cad8bebed19dd91160f7739a5c9a3882a0c8",
+  "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
   "risk": "full",
-  "base": "90bc335db678dc038f15fe9e939b5505251ffc70",
-  "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
   "rules": [
     {
-      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
-      "rule": "Mark full formal workbench handover complete only from four actual effective receipts for the same formal order, valid document/round and original current recipient, while preserving early material investment and original histories.",
+      "rule": "收料用原物料有效版本、原仓管与分批真实收料；预单转正式继承事实、采购欠收与生产欠量分开。",
+      "source": "v11.5 §9.2、§9.3 及 N17–20/N40/N52 原设计工作台施工定稿",
       "writes": [
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "apps/api/src/production-platform/development-electronic-handover.ts",
-        "apps/api/src/production-platform/development-formal-handover-evidence.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/preparation-series-bridge.ts",
+        "apps/api/src/production-platform/journey-selection-access.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
         "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/development-sample-handover.tsx",
-        "apps/web/src/development-sample-handover.css",
-        "packages/contracts/src/digital-development-workspace.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/unit/development-formal-handover-evidence.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/warehouse-adopted-demand.ts",
+        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
+        "apps/api/src/production-platform/warehouse-material-balance.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-work.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/warehouse-adopted-demand.test.ts",
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/production-readiness-fixture.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/development-source-lifecycle.ts",
-        "apps/web/src/production-readiness-panel.tsx"
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/unit/development-formal-handover-evidence.test.ts"
-      ],
+      "initialization": "现有 material_investment、到仓及原指派派生，不初始化第二份任务或重写历史；沿真实当前采用版本及可确定范围。",
+      "dateAndPermission": "只有当前原合法仓库责任可写，旧纯读与无关角色不提权。提交沿实际时间、原前置和现有回执；正式前不造时效。",
+      "expectation": "成功收料留下真实原批次、订正记录与已投/实收/欠口；旧数据缺数量和不同单位不假称齐料，传权边界与正式继承仍成立。",
       "checks": [
-        "c5-protocol",
-        "c5-static",
-        "c5-unit",
-        "c5-native"
-      ],
-      "initialization": "Append formal workbench eligibility only on real native confirmation. No historical backfill, no reinterpretation of frozen legacy evaluation, no early transition, no synthetic timestamp, and no duplicate completion event.",
-      "dateAndPermission": "Existing record tasks and ordinary design/merch authority; actual effective receipt provenance includes current source version, PO quantity snapshot, exact approved pricing and original sample handoff. Preserve prior legitimate event when current receiver or provenance changes.",
-      "expectation": "Real four-receipt completion occurs exactly once on quote-last and sample-last; valid pre-formal material retains its actual time, formal event is never before T0; unmatched prior recipient, read failure, or incomplete quote does not turn green."
+        "pg-native",
+        "signed-creation",
+        "warehouse-unit",
+        "typecheck",
+        "scoped-lint",
+        "preflight"
+      ]
     },
     {
-      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
-      "rule": "Show the approved workbench areas and only linked authorized original document/print versions, preserve exact pagination, retry, scope and return position.",
+      "rule": "面辅料实际发料锁本次真实可用余量，面料验布结论只关联真实到仓批次，验布和预缩原资格保留。",
+      "source": "v11.5 §9.2–9.3、§9.5 的批次、单位、验布/预缩及发料验收",
       "writes": [
-        "apps/web/src/cockpit-detail-r5.css",
-        "apps/web/src/cockpit-document-data.ts",
-        "apps/web/src/cockpit-document-navigation.css",
-        "apps/web/src/cockpit-document-navigation.tsx",
-        "apps/web/src/cockpit-documents-technical.ts",
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/web/src/designer-related-originals.tsx",
-        "apps/web/src/development-workspace-return.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/original-document-directory.tsx",
-        "apps/web/src/digital-development-print.tsx",
-        "apps/web/src/development-customer-feedback-print.tsx",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/bulk-fabric-facts.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
+        "apps/api/src/production-platform/warehouse-instruction-demand.ts",
+        "apps/api/src/production-platform/warehouse-issue-allocation.ts",
+        "apps/api/src/production-platform/warehouse-material-issue.ts",
+        "apps/web/src/bulk-fabric-panel.tsx",
+        "apps/web/src/bulk-materials-panel.tsx",
+        "apps/web/src/bulk-preparation-panel.tsx",
+        "packages/contracts/src/bulk-preparation.ts",
+        "tests/unit/warehouse-issue-allocation.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-document-catalog.ts",
-        "apps/api/src/production-platform/development-document-snapshot.ts",
-        "apps/web/src/development-print-preview.ts"
+        "apps/api/src/production-platform/bulk-fabric-facts.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/warehouse-material-issue.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts"
       ],
       "oldTests": [
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/v2-workspace-navigation.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
-      ],
+      "initialization": "沿现有制单和真实收料/已采用需用，原入仓缺数量/未知单位只供历史读；不补写、不把可用量推成库存。",
+      "dateAndPermission": "受派仓管才能读当前任务或提交，对应验布质量决定仍由原岗位；只认当前业务时钟下原发生时刻。",
+      "expectation": "实际分批、批次有效性、部分发料、验布前置、原 PO 独立与共享材料不重复计算，原版次确认和原流程保持。",
       "checks": [
-        "c5-protocol",
-        "c5-static",
-        "c5-unit",
-        "c5-native"
-      ],
-      "initialization": "Reuse the original scope metadata, authorized version endpoints, read caching and production UI. Keep known authorized legacy originals, active scroll focus and the real retained-record pagination.",
-      "dateAndPermission": "Neither a series-level query nor a document link creates authority to another record. Images must match the persisted exact adopted source/round/PO/version and original allowed attachment binding. Old actual dates are displayed only from identifiable events.",
-      "expectation": "Real normal designer reads fixed original and returns to correct order/filter/position; 21 original entries are still reachable without replacement, and actual pattern-role A4 double print uses the true adopted A image even if a newer B exists. Other-order and finance photo attempts are denied."
+        "pg-native",
+        "warehouse-unit",
+        "typecheck",
+        "scoped-lint",
+        "preflight"
+      ]
     },
     {
-      "source": "Approved v11.5 final workbench plan §8 and C2/C5 revision two-document A4 addendum §4 and §8, G2/G3. Only C5.",
-      "rule": "Keep approved materials and active developer revision workflows, independent exact original publish receipt, and distinct ordinary customer notes vs explicit final customer conclusions.",
+      "rule": "工艺收发与大货发厂写回原账本；工艺批准、前道放行、返工占用及后续工厂分配有稳定原引用。",
+      "source": "v11.5 §9.4、§9.5 和 G4，X3/X5 未同时完成前不启用新的仓库实物办理入口",
       "writes": [
-        "apps/api/src/production-platform/development-revision-comment-basis.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/order-number-repository.ts",
-        "apps/web/src/development-revision-fields.tsx",
-        "apps/web/src/development-technical-workspace.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/designer-order-workbench.tsx",
-        "packages/contracts/src/digital-development-rounds.ts",
-        "packages/contracts/src/digital-development-technical.ts",
-        "packages/contracts/src/digital-development.ts",
-        "apps/api/migrations/0306_development_revision_comment_adoptions.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/warehouse-craft-factory-basis.ts",
+        "apps/api/src/production-platform/warehouse-craft-movement.ts",
+        "apps/api/src/production-platform/warehouse-factory-dispatch-evidence.ts",
+        "apps/api/src/sourcing/sourcing-production-service.ts",
+        "apps/web/src/factory-flow-panel.tsx",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/unit/warehouse-craft-factory-basis.test.ts",
+        "tests/unit/warehouse-craft-movement.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/development-comment-time.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/development-round-repository.ts",
-        "apps/web/src/digital-development-execution-panel.tsx"
+        "apps/api/src/production-platform/factory-step-ledger.ts",
+        "apps/api/src/production-platform/factory-batch-ledger.ts",
+        "apps/api/src/production-platform/factory-flow-routes.ts",
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "apps/api/src/sourcing/production-closure-service.ts"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/production-facts-consistency-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
+      "initialization": "沿原工艺事件和原合同实际发厂；X5 未提供真实占用状态时不注册新物理操作。本次仅在隔离用例用双方接口确认边界，不消费伪造返工历史。",
+      "dateAndPermission": "当前原派工、同准备版和原工艺任务、精确审批与前道实际批次。恢复回执不能产生新数量，保原实际时间与旧工艺路径。",
+      "expectation": "两道工艺两家原厂、分批回仓记本批真实待检数量；严格封住返工占用与发厂超量；向下一批提供原母单/PO、cuttingOrderId、厂及实际发厂引用。",
       "checks": [
-        "c5-protocol",
-        "c5-static",
-        "c5-unit",
-        "c5-native"
+        "pg-native",
+        "warehouse-unit",
+        "typecheck",
+        "scoped-lint",
+        "preflight"
+      ]
+    },
+    {
+      "rule": "仓库首页按当前原授权提供材料、预缩、发料/发厂；独立任务页保原动作、回原筛选/分页和焦点。",
+      "source": "v11.5 §9.2，C1 统一分页/读取提示/表单，原合法角色只看本范围",
+      "writes": [
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/warehouse-native-task-table.tsx",
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "apps/web/src/warehouse-workbench-route.ts"
       ],
-      "initialization": "Add exact original adopted foreign key plus a neutral ordinary note discriminator in the additive migration only. Original created-at and observed business times are distinct, no present date substituted; legacy explicit occurrence and original published snapshots are retained. Basic editorial corrections are isolated audited workbench annotations, not a rewrite of published documents.",
-      "dateAndPermission": "Original sample designer/source eligibility, active membership, version and retry checked by native services. Strict basic-info whitelist permits only existing brand and reference-note fields. Stale, unrelated and forged physical/frozen/price changes are denied. Historic and pending states do not grant arbitrary authority.",
-      "expectation": "Original selected version, comment and original photos are used for revision. Direct native publish and lost response do not create duplicates. A normal note stores transaction time once without technical review and a final request requires an explicit real customer outcome. After commit with failed GET, retry only reads; the former document and formal clock remain byte-for-byte unchanged after legal annotation."
+      "reads": [
+        "apps/web/src/list-pagination.tsx",
+        "apps/web/src/foreground-loading.tsx",
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/factory-flow-panel.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "initialization": "进入当前确切原任务或原材料批次，历史保留只读，采用同一已授权全量计算总数和当前页。",
+      "dateAndPermission": "仓管仅本人实际受派任务，Root 原管理、没有接收人显示待安排；付款、成衣收货、洗水、设计及报价不增加权限或时效。",
+      "expectation": "本人原任务与无权者、有/无数据及回程可验证；选任务后原读取、保存、读回和原下游状态不失。",
+      "checks": [
+        "pg-native",
+        "signed-creation",
+        "warehouse-unit",
+        "typecheck",
+        "scoped-lint",
+        "preflight"
+      ]
     }
   ],
   "checks": [
     {
-      "id": "c5-protocol",
+      "id": "pg-native",
       "kind": "tests",
-      "command": "node --test scripts/ci/*.test.mjs",
-      "context": "Original Light CI protocol, including the time-source inventory and preservation of existing semantic metadata. Exact source plus reviewed C5 inventory.",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-native-warehouse-chain.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/production-facts-consistency-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 285,
+      "passed": 79,
       "failed": 0,
       "skipped": 0,
-      "startedAt": "2026-11-25T11:11:57+00:00",
-      "endedAt": "2026-11-25T11:12:03+00:00",
-      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
-      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
-      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-protocol.log",
-      "logSha256": "627b53c239b4262cc3803baa39fb94ce1cc300c4fb757745490d71c4e51010ba"
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ea7770361b4daf5d2fe24aca8fd86d308bcb38220bea4e4170dc5fdf8f8142ca"
+        }
+      ],
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "isolated PostgreSQL dual test databases, canonical two-worker setting, signed Chromium where the original browser suit is used",
+      "startedAt": "2026-11-25T12:45:40.788Z",
+      "endedAt": "2026-11-25T12:48:08.498Z",
+      "logSha256": "95dbec249d2aa0b83d34f74b2ed2177ed1203fbe1ed6a9996c3b75473335c506",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-native-warehouse-chain.log"
     },
     {
-      "id": "c5-static",
+      "id": "signed-creation",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-warehouse-creation-browser.json tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'resumes an unnumbered draft'",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 23,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "4c7b43be6d621613655de747ba5269bd6ad29ec05871a90a38e4d7bc985948bf"
+        }
+      ],
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "isolated PostgreSQL dual test databases and signed real warehouse/merchandiser browser through original preorder, transfer, historical receipt and return context",
+      "startedAt": "2026-11-25T12:47:06.286Z",
+      "endedAt": "2026-11-25T12:47:40.138Z",
+      "logSha256": "9ba64fd15e4f9b2a45ed580f503f328bf16eb19ae0973fd17a2c8e90a3ad0669",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-warehouse-creation-browser.log"
+    },
+    {
+      "id": "warehouse-unit",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 2 --reporter=dot --reporter=json --outputFile.json=/workspace/dx-v115-x3-evidence/x3-final-unit.json tests/unit/warehouse-*.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 67,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e8dae35e592bb30c3c57266616d830d21f175e6ae0526ddd5a266ad47216bb45"
+        }
+      ],
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "canonical Vitest base config with two workers; X3 quantity and current exact authorization negative cases",
+      "startedAt": "2026-11-25T12:46:22.604Z",
+      "endedAt": "2026-11-25T12:46:27.571Z",
+      "logSha256": "1e3faec360e4ceeec4b61532bb1be146b748e49ae598204e939f8afe491d99ce",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-unit.log"
+    },
+    {
+      "id": "typecheck",
       "kind": "command",
-      "command": "git diff --check <actual base>; node node_modules/eslint/bin/eslint.js --max-warnings=0 <changed TS/TSX>; npm run db:migrate:lint; npm run typecheck -w @dx-rework/web; npm run typecheck -w @dx-rework/api",
-      "context": "Exact current working candidate before commit. Locked repository Node 22. Migration checksum and chronological sequence verified before fresh isolated PostgreSQL use.",
+      "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-25T11:12:08+00:00",
-      "endedAt": "2026-11-25T11:12:57+00:00",
-      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
-      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
-      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-static.log",
-      "logSha256": "a9fc11c279638d9ef02aede9b682ed529ee727846e53f2e6509a3e5af5134b64"
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "repository command across contracts, UI, API and web workspaces",
+      "startedAt": "2026-11-25T12:45:40.487Z",
+      "endedAt": "2026-11-25T12:46:26.099Z",
+      "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-typecheck.log"
     },
     {
-      "id": "c5-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=verbose --reporter=json tests/unit/development-formal-handover-evidence.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/digital-pmc-readonly-access.test.ts",
-      "context": "Existing original directory, return, and PMC role behavior plus pure handover receipt rules, no new role. Runs on the exact candidate.",
+      "id": "scoped-lint",
+      "kind": "command",
+      "command": "git diff --name-only -z 7e61cad8bebed19dd91160f7739a5c9a3882a0c8 -- '*.ts' '*.tsx' | xargs -0 node node_modules/eslint/bin/eslint.js --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "passed": 91,
-      "failed": 0,
-      "skipped": 0,
-      "startedAt": "2026-11-25T11:12:03+00:00",
-      "endedAt": "2026-11-25T11:12:08+00:00",
-      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
-      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
-      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-unit.log",
-      "logSha256": "2ea618ce9dfd236c91f76befa66e643837da26613c8ed0b88c3692732b11b7c6",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "bf3660b9b5bff7c986fdae7c9defb94051dbf6def1ee13b0f6e492720fc91670"
-        }
-      ]
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "scoped original ESLint configuration over actual release X3 diff",
+      "startedAt": "2026-11-25T12:47:06.030Z",
+      "endedAt": "2026-11-25T12:47:06.030Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-source-lint.log"
     },
     {
-      "id": "c5-native",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts -t 'C5 rejects cross-order|C5 completes the formal milestone|submits current revision inputs|opens the seven approved workbench regions|reads an exact original development revision|captures and supplements the original customer approval date|numbers new pure and confirmed orders|resumes an unnumbered draft|keeps the original sample handover receipt|keeps a failed .* precheck|opens the exact native request|shows the ordinary|reads the original customer'",
-      "context": "Same original signed App AuthService, production web build and Chromium, dual isolated guarded PostgreSQL databases, normal two-worker test mode. Synthetic data only. Checks affected cases. Other cases filtered by name and not counted.",
+      "id": "preflight",
+      "kind": "command",
+      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
-      "failed": 0,
-      "skipped": 52,
-      "startedAt": "2026-11-25T11:11:57+00:00",
-      "endedAt": "2026-11-25T11:13:32+00:00",
-      "sourceFingerprint": "47c02ce9c193ec4a63a20b456f091c50738af1d1f755b1c02be950f37d8b1497",
-      "testedHead": "a4724a11bebcd1c2bbd669b407503f15e98325ac",
-      "log": "/workspace/dx-v115-c5-evidence/full-recovery/c5-native.log",
-      "logSha256": "aeae8919d8e70de95cf4e7a4628c37176eb1a1ee82dba598b0a71dfa4f105600",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c1d613649be962865e3803d0e897ef03bf1f8eefa882016bc11eb5425383c88f"
-        }
-      ]
+      "testedHead": "f31802c0b2c124ac6c9fbdaa51fc553ed474e065",
+      "sourceFingerprint": "f50a545ab88bd46c9afe60443833a9f49b7d736178154ab1f424d6514d37d310",
+      "context": "repository preflight, currently pinned migration manifest and time occurrence inventory; no migration added",
+      "startedAt": "2026-11-25T12:47:06.018Z",
+      "endedAt": "2026-11-25T12:47:15.062Z",
+      "logSha256": "73edb49bf543be1eff23f91390e9fe1ecfd5a9bd18ccb742ef617c2b08358337",
+      "logReference": "/workspace/dx-v115-x3-evidence/x3-final-preflight.log"
     }
-  ],
-  "executionBoundary": "Local checks use signed synthetic identities and isolated PostgreSQL. No deploy, live business data, or Acceptance run. Initial Light reported a missing C5 time-site inventory; all original semantic metadata was retained and the unchanged original protocol passed. Full 45597174756 passed non-db but reported two legacy-browser expectation mismatches in the PostgreSQL lane. Both now exercise the approved new sample receipt decoration and separate Customer Opinion and Quotation regions while retaining actual receipt, database, precheck and native retry assertions. Changes after that run are tests and evidence only. Official final GitHub gate and independent Review for this correction remain pending at construction time. C3, C4, C6 and X1/X2 are unchanged and X3–X6 remain separate."
+  ]
 }
