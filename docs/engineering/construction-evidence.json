@@ -2,65 +2,51 @@
   "version": 1,
   "base": "244ea83c391dbc7248fef491b9afbf3476f3d1b7",
   "risk": "full",
-  "sourceFingerprint": "7b31b2d38e8d089a3009adc810d1e7afd15b68bb2cb6b36101f2d5910eeae98d",
+  "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "vitest run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/sourcing-detail-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts",
+      "command": "vitest run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/sourcing-detail-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 133,
+      "passed": 62,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4f4a2c750d6ec4fc506264b878172f4ecb7804d4",
-      "sourceFingerprint": "58b0d37fcf2a07cec06919313643ec7e2c0d9f17001e1e78c318a3d741484c80",
-      "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance. The sole successor edit is a static unit case outside every actual native input path; exact source scope fingerprint verified.",
-      "startedAt": "2026-11-25T20:06:57.082Z",
-      "endedAt": "2026-11-25T20:11:11.805Z",
+      "testedHead": "4abb7f9a67f6656cb72f134c8c7adfc018b218fd",
+      "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
+      "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance.",
+      "startedAt": "2026-11-25T20:37:18.076Z",
+      "endedAt": "2026-11-25T20:40:24.563Z",
       "log": "/workspace/dx-v115-x6-evidence/x6-release-final-native.log",
-      "logSha256": "edf5142b79373a021ec3c165282c177aa62b4743b1ea2ec3fcd0535767b7c143",
+      "logSha256": "8f7e985f4261826985a150c5424fdd0d704a8d255ef35c90d18b28e39db6185c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9dbb5bc719cd322faf573f1c98e4ee26feec396bf0c0d64ef29ea7bb187d1dd2"
+          "sha256": "3b8f3b3a5461f6a5b255dbcd6d0e437deb29a31bd67fc02232fbbab263bdba5f"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/acceptance",
-        "tests/helpers",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "package.json",
-        "package-lock.json",
-        ".node-version"
-      ],
-      "inputFingerprint": "4ff6fbc12c4dbd23e63472df7fc0cf2c4847cc5a9ff4086e057b5a2b4f8fca41"
+      ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-shared-transport-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts tests/unit/craft-database-separation.test.ts",
+      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts tests/unit/craft-database-separation.test.ts",
       "status": "passed",
       "exitCode": 0,
       "passed": 14,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a6bc1b3c184f75e4e3c91aae78d0e9d023ea2745",
-      "sourceFingerprint": "7b31b2d38e8d089a3009adc810d1e7afd15b68bb2cb6b36101f2d5910eeae98d",
-      "context": "Exact static sourcing transport and read-split regression on the current source; no PostgreSQL escalation, production or site access.",
-      "startedAt": "2026-11-25T20:27:00.976Z",
-      "endedAt": "2026-11-25T20:27:03.118Z",
-      "log": "/workspace/dx-v115-x6-evidence/x6-shared-transport-unit.log",
-      "logSha256": "c48a21002b041ba3363ae0a6d3a56a40377e50746cba5b86b6bd1fea9a707173",
+      "testedHead": "4abb7f9a67f6656cb72f134c8c7adfc018b218fd",
+      "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
+      "context": "Exact release-bound workbench role, work identity, pagination and original fabric/craft facts consumers.",
+      "startedAt": "2026-11-25T20:37:18.134Z",
+      "endedAt": "2026-11-25T20:37:22.416Z",
+      "log": "/workspace/dx-v115-x6-evidence/x6-release-final-unit.log",
+      "logSha256": "5108e38e926dd57eeeab8153501a9d8328a313861d9b042f0d44a8a87bbead3d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bc86fa05206440d5f6734237792560efbcd0a5f890520068cf5cbf1b57b19037"
+          "sha256": "3fcd554beeaee7692b359080173aa7455656deb2435259be6dc672f1ea0a96c0"
         }
       ]
     }
@@ -145,7 +131,7 @@
       ],
       "initialization": "Reads existing case/contract version and the original attach authorization.",
       "dateAndPermission": "Old role and special narrow permissions remain on the original service. Retrying the same response uses the same actual body and key.",
-      "expectation": "Signed ordinary actor actually uploads once, recovers the lost response and sees the original current record. No another slot, contract copy or restart. The original craft catalog and rework process database remain independent; the exact craft request still uses the shared bounded submission transport.",
+      "expectation": "Signed ordinary actor recovers a lost response with the same exact key and document. Two stale signed tabs get the real quota rejection before a smaller replacement saves. Original first signed time and slot count are unchanged. Craft and process catalogs remain independent on the same original transport.",
       "checks": [
         "native",
         "unit"
@@ -168,6 +154,7 @@
         "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/craft-database-separation.test.ts",
         "tests/unit/merchandiser-work-candidates.test.ts",
         "tests/unit/workbench-factory-communication.test.ts"
       ],
@@ -191,7 +178,7 @@
     },
     {
       "rule": "Choose the complete original authorized candidate set using lightweight facts without hydrating native todos; original detail and notification clocks remain in their existing domain.",
-      "source": "v11.5 §12.1–12.2 and AGENTS §98",
+      "source": "v11.5 §12.1–12.2 and AGENTS.md line 98",
       "writes": [
         "apps/api/src/production-platform/material-investment-reminder.ts",
         "apps/api/src/production-platform/notification-service.ts",
