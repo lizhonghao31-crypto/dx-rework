@@ -8,7 +8,7 @@ function DepartureEvidence({record,controller}:{record:ExternalPatternRecord;con
 }
 export function DevelopmentExternalPattern({controller}:{controller:ReturnType<typeof useDevelopmentExecution>}){
  const {state,busy,run,externalFiles,upload,urls}=controller;
- if(!state?.slaEnrolled)return null;
+ if(!state?.slaEnrolled&&!state?.deferredTechnicalWorkflow)return null;
  const round=state.sheet.roundNumber??1,records=state.externalPatterns?.filter(row=>row.roundNumber===round)??[],record=records.at(-1);
  const task=record?state.tasks.find(t=>t.taskId===record.taskId):null;
  const date=(value:string)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});

@@ -7,10 +7,12 @@ import {assertOrderTimeRewashInput,OrderTimePlanRepository,type StoredOrderTimeP
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {validateDigitalSlaSnapshot,type DigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
+import {workbenchPreorderPublication} from './development-source-lifecycle.js';
+import {orderTimeCreated} from './order-time-created.js';
 
 type DB=Pick<PoolClient,'query'>;
 type DerivedStart={at:string|null;quality:string;basis:string[]};
-type Timing={derivedStart?:DerivedStart;timeQuality?:string;enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[];calendarRef?:FixedTimelineCalendar|null;parameterKey?:string;notificationEnabled?:boolean;orderTimePlanRef?:string};
+type Timing={derivedStart?:DerivedStart;timeQuality?:string;enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[];calendarRef?:FixedTimelineCalendar|null;parameterKey?:string;notificationEnabled?:boolean;orderTimePlanRef?:string;preorderNonAssessable?:true};
 /** Legacy-shaped consumers keep their contract, with the same adopted finite
  * durations. Exact calendars/reminders stay on the native window metadata. */
 export function orderTimeSnapshot(snapshot:DigitalSlaSnapshot,plan:FrozenOrderTimePlan):DigitalSlaSnapshot{
@@ -41,7 +43,7 @@ export async function orderTimePolicyAt(db:DB,resource:{kind:'source'|'order';id
   AND ($3::timestamptz IS NULL OR (business_time->>'now')::timestamptz<=$3) ORDER BY revision DESC LIMIT 1`,[resource.kind,resource.id,startedAt])).rows[0];
  return row?{plan:FrozenOrderTimePlanSchema.parse(row.input_snapshot.plan),id:row.plan_version_id as string}:null;
 }
-export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;order_time_managed?:boolean;entered_quality?:string;ready_correction?:ReadyCorrection|null},base:Timing|null,enteredAt:string|null,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false):Promise<Timing|null>{
+export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;order_time_managed?:boolean;workbench_generated_number?:boolean;completed_at?:string|Date|null;entered_quality?:string;ready_correction?:ReadyCorrection|null},base:Timing|null,enteredAt:string|null,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false):Promise<Timing|null>{
  // The original factory adapter already resolves each exact physical batch
  // at its own R. Its current selected batch cannot be replaced by the first
  // aggregate task revision from an earlier batch.
@@ -49,7 +51,20 @@ export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind
  const originalCorrection=readyCorrection??task.ready_correction;
  const correctedReady=originalCorrection?{...originalCorrection,at:originalCorrection.at?new Date(originalCorrection.at).toISOString():null}:null;
  if(task.source_id&&base&&correctedReady)base={...base,enteredAt:correctedReady.at,timeQuality:correctedReady.at?'已核实':'缺失',basis:[...base.basis,`ready-correction:${correctedReady.eventId}`]};
- const resource=task.production_order_id?{kind:'order' as const,id:task.production_order_id}:task.source_id?{kind:'source' as const,id:task.source_id}:null;if(!resource)return base;
+ let resource=task.production_order_id?{kind:'order' as const,id:task.production_order_id}:task.source_id?{kind:'source' as const,id:task.source_id}:null;if(!resource)return base;
+ let formalStart:string|null=null;
+ const preorder=resource.kind==='source'&&task.workbench_generated_number?await workbenchPreorderPublication(db,resource.id):null;
+ if(preorder){
+  const orderId=(await db.query<{production_order_id:string}>('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[resource.id])).rows[0]?.production_order_id;
+  const order=orderId?{kind:'order' as const,id:orderId}:null;
+  formalStart=order?(await orderTimeCreated(db,order))?.at??null:null;
+  if(!order||!formalStart||task.completed_at&&new Date(task.completed_at).toISOString()<formalStart){
+   const occurrence=correctedReady?correctedReady.at:base?base.enteredAt:enteredAt;
+   return {enteredAt:occurrence,timeQuality:occurrence?task.entered_quality??'现场登记':'缺失',seconds:null,warningRatio:0.7,
+    basis:[...base?.basis??[],'preorder-publication:'+preorder.event_id],notificationEnabled:false,preorderNonAssessable:true};
+  }
+  resource=order;
+ }
  if(!task.order_time_managed&&!orderTimeAdmission(db)&&!await new OrderTimePlanRepository(db).current(resource))return base;
  const original=(await db.query(`SELECT entered_at,sla_basis,due_at,warning_at,ready_quality,
   (SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1) AS current_basis
@@ -57,7 +72,8 @@ export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind
     WHERE e.task_id=r.task_id AND e.event_kind='ready' AND e.occurred_at=r.entered_at AND (e.event_id=r.event_id OR e.recorded_at<r.changed_at
       OR r.sla_basis->'basis' @> jsonb_build_array('readiness:'||e.event_id::text))
       AND coalesce(e.payload->'nativeReadiness'->>'scopeKind','task')='task' ORDER BY e.recorded_at,e.event_id LIMIT 1) AS ready_quality
-    FROM digital_production_deadline_revisions r WHERE r.task_id=$1 AND r.entered_at IS NOT NULL) original
+    FROM digital_production_deadline_revisions r WHERE r.task_id=$1 AND r.entered_at IS NOT NULL
+     AND (r.sla_basis->>'preorderNonAssessable') IS DISTINCT FROM 'true') original
   ORDER BY CASE WHEN sla_basis->>'timeQuality' IN ('现场登记','已核实') OR ready_quality IN ('现场登记','已核实') THEN 0 ELSE 1 END,revision_id LIMIT 1`,[task.task_id])).rows[0];
  const correction=correctedReady;
  // Identity tags describe a route, not proof that responsibility began. A
@@ -75,7 +91,8 @@ export async function orderTimeNativeTiming(db:DB,task:{task_id:string;task_kind
   const ready=correction?correction.at:explicitUnknown?null:derivedStart?derivedStart.at:(basis.timeQuality==='缺失'||basis.timeQuality===undefined&&task.source_id&&task.entered_quality!==undefined&&!['现场登记','已核实'].includes(task.entered_quality))&&base?base.enteredAt:new Date(original.entered_at).toISOString();
   return {...base,...basis,...(derivedStart?{derivedStart}:{}),enteredAt:ready,timeQuality:ready?(correction?'已核实':derivedStart?.quality??base?.timeQuality??'现场登记'):'缺失',basis:[...(derivedStart?.basis??basis.basis??[]),...(correction?[`ready-correction:${correction.eventId}`]:[]),`task:${task.task_id}:original-responsibility`]};
  }
- const ready=correction?correction.at:base!==null?base.enteredAt:original?.entered_at?new Date(original.entered_at).toISOString():enteredAt;
+ const observedReady=correction?correction.at:base!==null?base.enteredAt:original?.entered_at?new Date(original.entered_at).toISOString():enteredAt;
+ const ready=observedReady&&formalStart&&observedReady<formalStart?formalStart:observedReady;
  const chosen=await orderTimePolicyAt(db,resource,ready);if(!chosen)return base;
  // A started legacy task is an existing responsibility, even when its order
  // later receives an explicit time arrangement. Keep that original native D.

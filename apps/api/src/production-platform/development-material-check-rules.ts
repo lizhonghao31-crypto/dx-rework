@@ -2,7 +2,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {DevelopmentReturnIssue} from '@dx-rework/contracts/digital-development-amendments';
 import {MATERIAL_CHECK_FIELDS,MATERIAL_CHECK_LABELS,type MaterialBulkRules} from '@dx-rework/contracts/digital-development-execution';
-import {developmentSlaPlan} from './development-sla-enrollment.js';
+import {developmentWorkflowVersion} from './development-sla-enrollment.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 type Check={kind:string;items:Array<{materialId:string;physical:boolean}>;at:string};
 type Arrival={materialId:string;at:string};
@@ -48,5 +48,5 @@ export async function readMaterialBulkRules(db:DB,sourceId:string,round:number,d
  const quality=(await db.query(`SELECT f.payload->'materialIds' AS "materialIds" FROM digital_development_execution_facts f WHERE f.source_id=$1 AND f.kind='面料报告' AND f.payload->>'recommendation'='建议停用' AND coalesce((SELECT d.payload->>'decision' FROM digital_development_execution_facts d WHERE d.source_id=$1 AND d.kind='面料决定' AND d.payload->>'reportId'=f.fact_id::text ORDER BY d.sequence DESC LIMIT 1),'')<>'允许使用'`,[sourceId])).rows;
  const basis=checkTaskId?await readMaterialRecheckBasis(db,sourceId,round,checkTaskId,documentVersion):null;
  const supplemental=basis?.supplemental&&latest?.kind==='核配通过'&&latest.items?.some((item:Check['items'][number])=>!item.physical);
- return materialBulkRules(document,latest,arrivals,returns.flatMap(row=>row.issues??[]),quality,Boolean(supplemental&&await developmentSlaPlan(db,sourceId)),basis?.receiptMaterialIds);
+ return materialBulkRules(document,latest,arrivals,returns.flatMap(row=>row.issues??[]),quality,Boolean(supplemental&&await developmentWorkflowVersion(db,sourceId)),basis?.receiptMaterialIds);
 }

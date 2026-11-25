@@ -20,10 +20,10 @@ import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from './task-access-repository.
 import {materialReadiness} from './development-material-readiness.js';
 import type {DevelopmentActualMeasurements,DevelopmentOccurrence} from '@dx-rework/contracts/digital-development-execution';
 import {validateDevelopmentMeasurements} from './development-inspection-evidence.js';
-import {developmentSlaPlan} from './development-sla-enrollment.js';
+import {developmentWorkflowVersion} from './development-sla-enrollment.js';
 import {fixedDevelopmentCutter} from './development-fixed-cutting.js';
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
-import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {developmentNativeRoute} from './development-native-route.js';
 import {fixedTaskPosition} from './fixed-craft-steps.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
 export type DevelopmentRouteAction={actualTime?:DevelopmentOccurrence|undefined;measurements?:DevelopmentActualMeasurements|undefined;making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
@@ -32,7 +32,7 @@ export class DevelopmentRouteService {
  private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query('SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2',[sourceId,taskId])).rows[0]??digitalNotFound();}
  private async recipient(db:PoolClient,sourceId:string,kind:DigitalTaskKind,explicit:string|null,round:number,stepRef?:string){
    const role=DIGITAL_TASK_ROLES[kind],policy=new DigitalProductionAccessPolicy(db);
-   if(kind==='development_cutting'&&await developmentSlaPlan(db,sourceId)){
+   if(kind==='development_cutting'&&await developmentWorkflowVersion(db,sourceId)){
      const fixed=await fixedDevelopmentCutter(db);
      if(explicit&&explicit!==fixed?.assigneeId)fail('开发裁板使用固定人员，不逐单分派');
      return fixed?.valid?fixed.assigneeId:null;
@@ -59,7 +59,7 @@ export class DevelopmentRouteService {
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false,routePosition?:number){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
    const positioning=kind==='development_craft_dispatch'&&await technicalEnrollment(db,sourceId)?(await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_positioning' AND t.state<>'cancelled' ORDER BY t.created_at DESC LIMIT 1`,[sourceId,roundNumber])).rows[0]:null;
-   const adopted=sheet.document?.craftSteps?.some(step=>step.craftKind==='special')?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},roundNumber):null;
+   const adopted=sheet.document?.craftSteps?.some(step=>step.craftKind==='special')?await developmentNativeRoute(db,sourceId,roundNumber):null;
    const position=adopted?.input.route?.find(row=>row.position===routePosition),specialStep=adopted?.input.craftSteps?.find(step=>step.stepId===position?.stepId&&step.craftKind==='special');
    const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,...(routePosition===undefined?{}:{routePosition}),assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber,specialStep?.stepId),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
@@ -82,7 +82,7 @@ export class DevelopmentRouteService {
  async advance(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string,nextAssigneeId:string|null=null){
    const task=await this.task(db,sourceId,taskId);
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
-   const adopted=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},task.route_version);
+   const adopted=await developmentNativeRoute(db,sourceId,task.route_version);
    const fixed=adopted&&adopted.input.sourceVersions.routeRef===task.route_instance_id?adopted.input.route:null;
    const route:DigitalTaskKind[]=fixed?fixed.map(position=>position.kind as DigitalTaskKind):task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
    const position=fixed?await fixedTaskPosition(db,taskId):null;
@@ -124,7 +124,7 @@ export class DevelopmentRouteService {
  async complete(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
    await new DigitalProductionAccessPolicy(db).assert(actor,'task',input.taskId,'execute');
    const task=await this.task(db,sourceId,input.taskId);
-   const currentPlan=await developmentSlaPlan(db,sourceId);
+   const currentPlan=await developmentWorkflowVersion(db,sourceId);
    let inspection: {phase:string;unit:string;sizes:string[];measurements:DevelopmentActualMeasurements;artifactRef?:{id:string;version:number}}|undefined;
    if(currentPlan&&['development_pre_wash_check','development_tail_check'].includes(task.task_kind)){
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
@@ -150,7 +150,7 @@ export class DevelopmentRouteService {
        if(!artifact||!position||position.payload.artifactSetId!==artifact.artifact.artifactSetId||position.payload.artifactVersion!==artifact.artifact.version)fail('相应裁片和当前纸样的定位图尚未形成；设计定位可与裁板并行，但发工艺前须具备有效定位');
      }
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
-     const saved=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},task.route_version),position=await fixedTaskPosition(db,task.task_id);
+     const saved=await developmentNativeRoute(db,sourceId,task.route_version),position=await fixedTaskPosition(db,task.task_id);
      const route:DigitalTaskKind[]=saved&&position?saved.input.route!.map(row=>row.kind as DigitalTaskKind):task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
      const nextKind=route[(position?Number(position.route_position):route.indexOf(task.task_kind))+1];
      const recipient=nextKind?await this.recipient(db,sourceId,nextKind,input.nextAssigneeId,task.route_version,saved?.input.craftSteps?.find(step=>step.stepId===position?.step_id&&step.craftKind==='special')?.stepId):null;

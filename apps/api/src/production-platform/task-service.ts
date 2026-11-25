@@ -34,7 +34,8 @@ import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {fixedTaskTargets,type FixedTaskWorkBinding} from './fixed-task-targets.js';
 import {currentTaskPlanTargets} from './current-task-plan-targets.js';
 import {fixedCraftTiming,FIXED_DEVELOPMENT_CRAFT_TASKS} from './fixed-craft-timing.js';
-import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {developmentSlaPlan,developmentWorkflowVersion} from "./development-sla-enrollment.js";
+import {developmentNativeRoute} from './development-native-route.js';
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
 import {orderTimeNativeTiming} from './order-time-native-timing.js';
@@ -145,6 +146,20 @@ export class DigitalProductionTaskService {
       if (frozen) return frozen;
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
+  }
+  /** The original task and its occurrence stay put. Only open tasks gain a
+   * formal responsibility window when this same source is confirmed. */
+  async adoptPreorderTaskTimingWithClient(client:PoolClient,actor:TrustedActorContext,sourceId:string){
+    const admission=orderTimeAdmission(client);
+    if(admission?.operation.kind!=='confirm_order'||admission.operation.sourceId!==sourceId)fail('仅正式确认事务可采用原预下单任务时效');
+    const tasks=(await client.query<{task_id:string;task_kind:string;entered_at:Date|string}>(`SELECT t.task_id,a.task_kind,t.entered_at
+      FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE a.source_id=$1 AND t.state IN ('ready','blocked') AND t.entered_at IS NOT NULL
+      ORDER BY t.task_id FOR UPDATE OF t`,[sourceId])).rows;
+    for(const task of tasks){
+      const event=await this.event(client,actor,task.task_id,{kind:'source',id:sourceId},'formal_preorder_adopted',admission!.time.now,'现场登记');
+      await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'policy',event);
+    }
   }
   private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>,readyCorrection?:{at:string|null;eventId:string},refreshDerivedStart=false) {
     const task=await this.task(client,taskId);
@@ -385,7 +400,10 @@ export class DigitalProductionTaskService {
     }
     // Enroll only native SLA routes. Older order-scoped development tasks and
     // manually created legacy routes keep their original clock contract.
-    const trackReadiness=Boolean(input.resource.kind==='source'&&fixed?.position.stepId)||NATIVE_READINESS_KINDS.has(input.kind)&&(input.kind.startsWith('development_')
+    // An execution-only route keeps the actual native ready event. There is
+    // no frozen source SLA from which to derive an earlier policy window.
+    const timingRoute=fixed?.saved.input as {executionOnly?:string}|undefined;
+    const trackReadiness=Boolean(input.resource.kind==='source'&&fixed?.position.stepId&&!timingRoute?.executionOnly)||NATIVE_READINESS_KINDS.has(input.kind)&&(input.kind.startsWith('development_')
       ?input.resource.kind==='source'&&Boolean(await developmentSlaPlan(client,input.resource.id))
       :input.resource.kind==='order'&&Boolean((await client.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)
        &&Boolean((await client.query('SELECT 1 FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2 AND workflow_version=2 AND sla_snapshot_id IS NOT NULL',[input.routeId,input.resource.id])).rowCount));
@@ -595,7 +613,7 @@ export class DigitalProductionTaskService {
     return this.transaction(async client => {
       const task = await this.task(client, id, true);
       if(task.task_kind==='development_patch')fail('本次补做人员与金额请在原计件执行单派工或转交，不能只改任务归属');
-      if(task.task_kind==='development_cutting'&&task.source_id&&await developmentSlaPlan(client,task.source_id))fail('开发裁板使用固定人员，请在本单人员安排查看固定岗位设置，不逐单分派');
+      if(task.task_kind==='development_cutting'&&task.source_id&&await developmentWorkflowVersion(client,task.source_id))fail('开发裁板使用固定人员，请在本单人员安排查看固定岗位设置，不逐单分派');
       if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
       if((DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
       return this.command(client, actor, `task-reassign:${id}`, key, { assigneeId }, async () => {
@@ -836,9 +854,9 @@ export class DigitalProductionTaskService {
         const business=nodes.filter(node=>!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(node));
         const rows=(await db.query("SELECT DISTINCT CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END AS node,state FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')",[task.route_instance_id])).rows;
         route={applicable:business.length,completed:business.filter(node=>rows.some(row=>row.node===node&&row.state==='completed')).length,cancelled:business.filter(node=>rows.some(row=>row.node===node&&row.state==='cancelled')&&!rows.some(row=>row.node===node&&row.state==='completed')).length};
-        const savedPlan=await developmentSlaPlan(db,task.source_id);
-        if(savedPlan?.route_schema_version===2){
-          const adopted=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:task.source_id},task.route_version);
+        const workflow=await developmentWorkflowVersion(db,task.source_id);
+        if(workflow===2){
+          const adopted=await developmentNativeRoute(db,task.source_id,task.route_version);
           if(adopted&&adopted.input.sourceVersions.routeRef===task.route_instance_id){
             const positions=(adopted.input.route??[]).filter(position=>!['development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch'].includes(position.kind));
             const actual=(await db.query(`SELECT p.route_position,t.state FROM digital_timeline_task_positions p JOIN digital_production_tasks t USING(task_id)

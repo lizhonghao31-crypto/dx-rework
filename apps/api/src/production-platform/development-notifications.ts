@@ -9,7 +9,7 @@ import type { PoolClient } from "pg";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
-import { developmentSlaPlan } from "./development-sla-enrollment.js";
+import { developmentWorkflowVersion } from "./development-sla-enrollment.js";
 import { receivedDevelopmentAccessories } from "./development-accessory-receipts.js";
 
 export async function projectDevelopmentNotices(db: PoolClient, people: TrustedActorContext[], now = new Date(), includes:(sourceId:string)=>Promise<boolean>=async()=>true) {
@@ -44,13 +44,13 @@ export async function projectDevelopmentNotices(db: PoolClient, people: TrustedA
           await db.query("INSERT INTO digital_production_notification_receipts(event_id,source_event_id,recipient_id) VALUES($1,$1,$2) ON CONFLICT DO NOTHING",[event.event_id,person.actorId]);
       }
     }
-    if(await developmentSlaPlan(db,row.source_id)){
+    if(await developmentWorkflowVersion(db,row.source_id)){
       const receipts=(await externalPatternRecords(db,row.source_id)).filter(r=>r.receivedAt);
       for(const receipt of receipts)await notice({...row,round_number:receipt.roundNumber},`external-pattern-received:${receipt.requestId}`,'外部纸样已收到，附件可查看',true);
     }
     const newTechnical=Boolean(await technicalEnrollment(db,row.source_id));
     const document = await effectiveVerificationDocument(db,row.source_id,row.round_number??1,row.document as DevelopmentDocument);
-    const clerkReceipts = await developmentSlaPlan(db,row.source_id)
+    const clerkReceipts = await developmentWorkflowVersion(db,row.source_id)
       ? await receivedDevelopmentAccessories(db,row.source_id,row.round_number??1,document) : null;
     if (document.craft !== "无" && document.files.some(file => file.kind === "工艺开发板")) await notice(row,`development-craft:${row.source_id}:${row.version}`,"工艺开发板已提交",true);
     const events = (await db.query("SELECT *,expected_date::text AS date FROM digital_development_material_events WHERE source_id=$1 ORDER BY sequence",[row.source_id])).rows;

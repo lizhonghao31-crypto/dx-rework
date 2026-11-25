@@ -1,4 +1,4 @@
-import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {developmentNativeRoute} from './development-native-route.js';
 import {type CraftStepChoice,craftStepLabel} from '@dx-rework/contracts/digital-craft';
 import {assembleQuotation} from './quotation-assembly.js';
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
@@ -11,7 +11,7 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from "./access-policy.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
-import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {developmentWorkflowVersion} from "./development-sla-enrollment.js";
 import {fixedDevelopmentCutter} from "./development-fixed-cutting.js";
 import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from "./task-access-repository.js";
 import {DigitalProductionTaskService} from "./task-service.js";
@@ -50,9 +50,9 @@ export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:s
   const unavailableReason=document.status!=="published"?"本单开发资料尚未发布，请设计师先完成发布。":lifecycle!=="active"?`本单已${lifecycle==="paused"?"暂停，请有权管理人恢复后再安排":"取消，人员历史保留只读"}。`:!hasCurrentWork?"本轮已结束，人员历史保留只读。":!checked?"本轮核料尚未通过，请核料文员先完成本轮材料核验。":null;
   const readyToArrange=unavailableReason===null;
   const rows:DevelopmentArrangement["rows"]=[];
-  const fixed=await developmentSlaPlan(db,sourceId)?await fixedDevelopmentCutter(db):null;
+  const fixed=await developmentWorkflowVersion(db,sourceId)?await fixedDevelopmentCutter(db):null;
   const applicable=route.filter((kind,index)=>kind!=="development_sewing_transfer"||route[index-1]!=="development_craft_confirmation"||route[index+1]!=="development_sewing"||tasks.some(task=>task.task_kind===kind));
-  const adopted=document.document?.craftSteps?.some((step:CraftStepChoice)=>step.craftKind==='special')?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},round):null;
+  const adopted=document.document?.craftSteps?.some((step:CraftStepChoice)=>step.craftKind==='special')?await developmentNativeRoute(db,sourceId,round):null;
   const specialSteps=adopted?.input.craftSteps?.filter(step=>step.craftKind==='special')??[];
   const specialPositions=specialSteps.length?(await db.query("SELECT task_id,step_id FROM digital_timeline_task_positions WHERE route_ref=$1 AND phase='work'",[adopted!.input.sourceVersions.routeRef])).rows:[];
   const specialTaskIds=new Set(specialPositions.filter(p=>specialSteps.some(s=>s.stepId===p.step_id)).map(p=>p.task_id));

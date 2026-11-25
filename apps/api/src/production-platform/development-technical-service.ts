@@ -372,8 +372,8 @@ export class DevelopmentTechnicalService {
    if(!prior&&request.roundNumber!==sheet.roundNumber)conflict('历史轮次不可补造首次交出事实；已有记录可追加有权订正');
    const receipt=request.taskId?(await db.query('SELECT state,completed_at FROM digital_production_tasks WHERE task_id=$1',[request.taskId])).rows[0]:null;
    const receivedAt=receipt?.state==='completed'?receipt.completed_at:request.receivedAt;
-   const cycle=await developmentCycleEvidence(db,sourceId,request.roundNumber,businessNow().toISOString());
-   if(!cycle||input.departedAt!==null&&(Date.parse(input.departedAt)<Date.parse(cycle.publishedAt)||Date.parse(input.departedAt)>businessNow().getTime()||receivedAt&&Date.parse(input.departedAt)>new Date(receivedAt).getTime()))conflict('实际交出时间须在发布后，且不得晚于现在或实际收到');
+   const round=(await db.query<{published_at:Date|string}>('SELECT published_at FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,request.roundNumber])).rows[0];
+   if(!round||input.departedAt!==null&&(Date.parse(input.departedAt)<new Date(round.published_at).getTime()||Date.parse(input.departedAt)>businessNow().getTime()||receivedAt&&Date.parse(input.departedAt)>new Date(receivedAt).getTime()))conflict('实际交出时间须在发布后，且不得晚于现在或实际收到');
    const version=input.expectedVersion+1,quality=input.departedAt===null?'缺失':prior?'已核实':'现场登记';
    // Append verified corrections or an explicit unknown; the original receipt remains on its native task.
    await db.query(`INSERT INTO digital_development_external_intervals(interval_id,version,source_id,round_number,kind,source_task_id,external_pattern_request_id,departed_at,returned_at,time_quality,actor_id,recorded_at,evidence_note)
@@ -442,8 +442,8 @@ export class DevelopmentTechnicalService {
   empty.effective=await effectiveTechnicalEvidence(db,sourceId,selected,scope);
   empty.cycle=await developmentCycleEvidence(db,sourceId,selected,businessNow().toISOString());
   empty.canRecordComment=sheet.canEdit&&await this.technicalRole(db,actor,['sample_designer']);empty.canMaintainTemplates=await this.technicalRole(db,actor);
-  empty.canApproveUrgent=await this.technicalRole(db,actor,['production_management','owner_group']);
-  empty.canRequestUrgent=await this.canRequestUrgent(db,actor,sourceId);
+  empty.canApproveUrgent=Boolean(empty.cycle)&&await this.technicalRole(db,actor,['production_management','owner_group']);
+  empty.canRequestUrgent=Boolean(empty.cycle)&&await this.canRequestUrgent(db,actor,sourceId);
   empty.canTriagePatch=await this.technicalRole(db,actor,['pattern_room_supervisor']);
   empty.patches=(await db.query(`SELECT i.*,d.decision,p.task_id,l.order_id FROM digital_development_patch_issues i LEFT JOIN digital_development_patch_decisions d USING(issue_id)
    LEFT JOIN digital_development_patch_tasks p ON p.issue_id=i.issue_id AND p.purpose='work' LEFT JOIN digital_development_pattern_links l USING(source_id)

@@ -51,7 +51,7 @@ export class FixedTimelineAdoptionRepository{
  async existing(resource:BusinessTimeScope,round?:number):Promise<FixedTimelineAdoption|null>{
   if(!await this.available())return null;
   const rows=(await this.db.query(`SELECT * FROM digital_timeline_adoptions WHERE resource_kind=$1
-   AND ${resource.kind==='order'?'production_order_id':'source_id'}=$2 ${resource.kind==='source'&&round!==undefined?'AND round_number=$3':''}
+   AND ${resource.kind==='order'?'production_order_id':'source_id'}=$2 ${resource.kind==='source'?`AND input_snapshot->>'executionOnly' IS NULL ${round!==undefined?'AND round_number=$3':''}`:''}
    ORDER BY round_number DESC LIMIT 1`,resource.kind==='source'&&round!==undefined?[resource.kind,resource.id,round]:[resource.kind,resource.id])).rows;
   return rows[0]?adoption(rows[0]):null;
  }

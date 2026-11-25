@@ -3,16 +3,26 @@ import type {DigitalTaskKind} from './task-access-repository.js';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
 import {frozenWorkDefinition as definition,frozenCraftDefinition,frozenCraftChoice,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 type Work=FixedTimelineInput['work'][number];
+/** Physical positions are independent of the policy which may later time them. */
+export function developmentRoutePositions(routeKinds:readonly DigitalTaskKind[],craftSteps:Array<CraftStepChoice&{stepId:string}>){
+ let craftIndex=-1;
+ return routeKinds.map((kind,position)=>{
+  const shared=kind==='development_craft_dispatch'||kind==='development_craft_confirmation';
+  const step=kind==='development_craft_dispatch'?craftSteps[++craftIndex]:kind==='development_craft_confirmation'?craftSteps[craftIndex]:['development_printing','development_embroidery'].includes(kind)?craftSteps[craftIndex]:null;
+  const nodeId=step&&(shared||step.craftKind==='special')?`${kind}:${step.stepId}`:kind;
+  const phase=kind==='development_craft_dispatch'?'dispatch' as const:kind==='development_craft_confirmation'?'confirmation' as const:'work' as const;
+  return {kind,position,nodeId,...(step?{stepId:step.stepId,phase}:{})};
+ });
+}
 /** Shared pure adopted route construction. The caller supplies original inputs;
  * the settings calculator supplies clearly temporary inputs, never actual A. */
 export function fixedDevelopmentWork(initial:FixedWorkInputs,sourceId:string,round:number,routeKinds:readonly DigitalTaskKind[],craftSteps:Array<CraftStepChoice&{stepId:string}>,dual:boolean,washing:'免洗'|'内洗'|'外洗',hasAccessories:boolean){
- const work:Work[]=[],route:NonNullable<FixedTimelineInput['route']>=[];let previous:string|null=null,craftIndex=-1;
+ const work:Work[]=[],route=developmentRoutePositions(routeKinds,craftSteps);let previous:string|null=null;
   const ref=(id:string)=>`source:${sourceId}:round:${round}:work:${id}`;
-  for(const [position,kind]of routeKinds.entries()){
+  for(const {kind,nodeId:id,stepId}of route){
    const shared=kind==='development_craft_dispatch'||kind==='development_craft_confirmation';
-   const step=kind==='development_craft_dispatch'?craftSteps[++craftIndex]:kind==='development_craft_confirmation'?craftSteps[craftIndex]:['development_printing','development_embroidery'].includes(kind)?craftSteps[craftIndex]:null;
-   const id=step&&(shared||step.craftKind==='special')?`${kind}:${step.stepId}`:kind,key=step&&!shared?craftParameterKey(step,'development'):kind==='development_material_recheck'?'development_materials':kind;
-   route.push({kind,position,nodeId:id,...(step?{stepId:step.stepId,phase:kind==='development_craft_dispatch'?'dispatch':kind==='development_craft_confirmation'?'confirmation':'work'}:{})});
+   const step=stepId?craftSteps.find(choice=>choice.stepId===stepId):null;
+   const key=step&&!shared?craftParameterKey(step,'development'):kind==='development_material_recheck'?'development_materials':kind;
    if(shared&&step){
     const parent=step.craftKind==='special'?`development_printing:${step.stepId}`:`development_${step.craftKind}`,policy=definition(initial,kind==='development_craft_confirmation'?'development_craft_return':'development_craft_dispatch');
     work.push({id,parameterKey:kind==='development_craft_confirmation'?'development_craft_return':kind,dependsOn:[],...policy,includedIn:parent,includedPosition:kind==='development_craft_confirmation'?'end':'start',canonicalWorkRef:`source:${sourceId}:round:${round}:step:${step.stepId}:${kind}`,accountingRole:'included'});

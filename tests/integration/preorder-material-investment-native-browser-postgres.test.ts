@@ -210,6 +210,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/order-time/check')&&
     r.request().postDataJSON()?.operation?.kind===kind);
    const publishCheck=checkFor('development_publish'),confirmCheck=checkFor('confirm_order');
+   const directConfirm=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===base+'/confirm').catch(()=>null);
    await page.getByRole('button',{name:'提交并确认订单',exact:true}).click();
    const check=await publishCheck;expect(check.status(),await check.text()).toBe(200);
    const publishOutcome=await check.json();
@@ -228,7 +229,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      const applied=await requests.apply(root,requestId,{expectedVersion:pending.version,fingerprint:pending.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
      expect(applied.state).toBe('applied');
     });
-   }else expect(['sufficient','not_applicable'],outcome.coverage.join('；')).toContain(outcome.feasibility);
+   }else{
+    expect(['sufficient','not_applicable'],outcome.coverage.join('；')).toContain(outcome.feasibility);
+    const confirmed=await directConfirm;
+    if(!confirmed)throw Error('Missing native formal confirmation response after successful time check');
+    expect(confirmed.status(),await confirmed.text()).toBe(200);
+   }
    const formal=()=>h.db.query<{production_order_id:string}>('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[original.sourceId]);
    await expect.poll(async()=>(await formal()).rowCount).toBe(1);
    const orderId=(await formal()).rows[0]!.production_order_id;

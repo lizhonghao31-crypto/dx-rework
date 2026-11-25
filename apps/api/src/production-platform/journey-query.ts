@@ -1,6 +1,6 @@
 import {readCockpitDevelopmentSupply,readCockpitMaterialActions,readCockpitMaterialSupplements,readCockpitOwnerApprovals,readCockpitInstructionActions} from './cockpit-actionable.js';
 import {cockpitHomeFacts,readCockpitFactoryScopes} from './cockpit-home-facts.js';
-import {effectiveDevelopmentSourceSql} from './development-source-lifecycle.js';
+import {effectiveDevelopmentSourceSql,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {commentTimeColumns} from './development-comment-time.js';
 import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
@@ -556,6 +556,8 @@ export class DigitalJourneyQuery {
     capture?.tasks(visibleTasks.map(task=>({id:task.task_id,routeInstanceId:task.route_instance_id})));
     const documentTables=sid&&sourceAccess?await developmentReadTables(db):null;
     const document=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.documents} WHERE source_id=$1`,[sid])).rows[0]:null;
+    const preorder=sid&&sourceAccess&&source?.workbench_generated_number&&document?.status==='draft'
+      ?await workbenchPreorderPublication(db,sid):null;
     const revisions=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.rounds} WHERE source_id=$1 ORDER BY round_number`,[sid])).rows:[];
     const latestRound=revisions.at(-1)?.round_number??(document?1:null);
     const effectiveRound=sid?(await db.query("SELECT coalesce(max(round_number),1)::int AS round FROM digital_development_rounds WHERE source_id=$1",[sid])).rows[0].round:null;
@@ -607,7 +609,9 @@ export class DigitalJourneyQuery {
     const {creator,designer}=identity;
     if(sourceAccess&&sid) {
       setFact("product_development","completed",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(source!.created_at),{id:creator,name:designer});
-      setFact("development_publish",currentDocument?(document?.status==="published"||round&&round>1?"completed":"active"):"uncreated",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(currentDocument?.published_at),{id:creator,name:designer}).operator=currentDocument?.published_by?{id:currentDocument.published_by,name:null}:null;
+      const publication=setFact("development_publish",currentDocument?(preorder||document?.status==="published"||round&&round>1?"completed":"active"):"uncreated",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),preorder?.document_version??currentDocument?.version??currentDocument?.document_version??null)],preorder?.business_time.now??iso(currentDocument?.published_at),{id:creator,name:designer});
+      publication.operator=currentDocument?.published_by?{id:currentDocument.published_by,name:null}:null;
+      if(preorder){publication.sla='not_set';publication.completionResult=null;publication.overdueSeconds=null;}
       for(const [key,reference] of Object.entries(inherited) as Array<[string,{taskId:string;roundNumber:number}]>) {
         if(!journeyDefinition(key))continue;
         const value=emptyNode(key,"inherited",round);value.inheritedFrom={taskId:reference.taskId,round:reference.roundNumber};

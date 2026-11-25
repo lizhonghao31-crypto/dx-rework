@@ -9,6 +9,7 @@ import {createIndependentDevelopmentRevision} from './development-revision-sourc
 import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {captureDeferredDevelopmentRoute,deferredDevelopmentRoute} from './development-native-route.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {developmentRevisionForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
@@ -120,7 +121,8 @@ export class DevelopmentRoundService {
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
   await validateAuxiliaryReferences(db,input.document,sheet.document!);
   await validateSpecialCraftChoices(db,input.document.craftSteps??[],sheet.document?.craftSteps??[],'development');
-  const errors=developmentPublishErrors(input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
+  const deferred=Boolean(sheet.preorderPublication&&await deferredDevelopmentRoute(db,sourceId));
+  const errors=developmentPublishErrors(deferred?{...input.document,customerOrderDraft:undefined}:input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');
   if(input.origin!=='内部发现'&&!returnTaskId&&!patternReworkRoundId&&await developmentSlaPlan(db,sourceId)){
@@ -128,7 +130,7 @@ export class DevelopmentRoundService {
     return createIndependentDevelopmentRevision(db,actor,sourceId,input);
   }
   const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
-  const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,savedPlan?.route_schema_version);
+  const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,deferred?2:savedPlan?.route_schema_version);
   // A changed material gets its own identity; old arrivals never certify a replacement.
   for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!sameDevelopmentMaterialBasis(old,material))material.materialId=randomUUID();}
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
@@ -156,15 +158,21 @@ export class DevelopmentRoundService {
   if(await technicalEnrollment(db,sourceId)&&!route.includes('development_pattern')&&!await publishedTechnicalArtifact(db,sourceId,roundNumber))fail('本次技术依据已改变，原成果不能沿用；请将纸样加入受影响节点后再发布，当前草稿与原轮次保持');
   if(savedPlan?.timeline_schema_version===2)await captureDevelopmentTimeline(db,actor.actorId,sourceId,roundNumber,routeId,route,document,sheet.version+1,
     `development-round:${sourceId}:${roundNumber}`,await new ContextBusinessClock(this.database,db).read({kind:'source',id:sourceId}));
+  const recordPublication=async(eventId:string)=>db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[eventId,actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId||native?.current_round_id?{nativeRoundId:patternReworkRoundId??native!.current_round_id}:{})})]);
+  if(deferred){
+    const eventId=randomUUID();await recordPublication(eventId);
+    await captureDeferredDevelopmentRoute(db,actor.actorId,sourceId,roundNumber,routeId,route,document,sheet.version+1,eventId,
+      await new ContextBusinessClock(this.database,db).read({kind:'source',id:sourceId}));
+  }
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
   await new DevelopmentTechnicalService(this.database,this.enabled).ensurePositionForRound(db,actor,sourceId,roundNumber,routeId,returnTaskId);
-  if(await developmentSlaPlan(db,sourceId)){
+  if(deferred||savedPlan){
     const designer=(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0].created_by;
     await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(returnTaskId?{authorizingTaskId:returnTaskId}:{}),kind:'development_shipping',routeId,routeVersion:roundNumber,occurrence:roundNumber,
       assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,'sample_designer')?designer:null});
   }
-  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId||native?.current_round_id?{nativeRoundId:patternReworkRoundId??native!.current_round_id}:{})})]);
+  if(!deferred)await recordPublication(randomUUID());
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
   await assembleQuotation(db,sourceId,actor.actorId,undefined,rawBasis);
   return {sourceId,roundNumber};

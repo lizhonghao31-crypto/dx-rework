@@ -13,7 +13,7 @@ export type DevelopmentDocumentSnapshot={
  * publication rows, never the effective/current views or an unpublished draft.
  * A missing version has no fallback to another round or to the latest revision.
  */
-export async function developmentDocumentSnapshot(db:Database,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentDocumentSnapshot|undefined>{
+export async function developmentDocumentSnapshot(db:Database,sourceId:string,roundNumber:number,documentVersion:number,includePreorder=false):Promise<DevelopmentDocumentSnapshot|undefined>{
  if(!Number.isSafeInteger(roundNumber)||roundNumber<1||!Number.isSafeInteger(documentVersion)||documentVersion<1)return undefined;
  const [rounds,amendments]=await Promise.all([developmentRoundsAvailable(db),developmentAmendmentsAvailable(db)]);
  const parts=[`SELECT d.document,to_jsonb(d) AS metadata_record
@@ -22,6 +22,9 @@ export async function developmentDocumentSnapshot(db:Database,sourceId:string,ro
   FROM digital_development_rounds r WHERE r.source_id=$1 AND r.round_number=$2 AND r.document_version=$3`);
  if(amendments)parts.push(`SELECT a.document,to_jsonb(a) AS metadata_record
   FROM digital_development_amendments a WHERE a.source_id=$1 AND a.round_number=$2 AND a.document_version=$3`);
+ if(includePreorder)parts.push(`SELECT p.document,jsonb_build_object('published_at',p.business_time->>'now','published_by',event.actor_id) AS metadata_record
+  FROM digital_development_preorder_publications p JOIN audit_events event ON event.id=p.event_id
+  WHERE p.source_id=$1 AND $2::integer=1 AND p.document_version=$3`);
  const {rows}=await db.query<{document:DevelopmentDocument;metadata_record:Record<string,unknown>}>(parts.join('\nUNION ALL\n'),[sourceId,roundNumber,documentVersion]);
  if(rows.length>1)throw new Error('开发单所选轮次与资料版本存在冲突，未读取其他版本');
  const row=rows[0];
@@ -38,7 +41,7 @@ export function developmentSnapshotContainsFile(snapshot:DevelopmentDocumentSnap
 /** Metadata only. Filtering precedes the total/page in one statement; document
  * bodies and attachments are fetched only after a concrete version is selected.
  */
-export async function developmentPublishedVersions(db:Database,sourceId:string,page:number,q:string):Promise<DevelopmentPublishedVersions>{
+export async function developmentPublishedVersions(db:Database,sourceId:string,page:number,q:string,includePreorder=false):Promise<DevelopmentPublishedVersions>{
  const [rounds,amendments]=await Promise.all([developmentRoundsAvailable(db),developmentAmendmentsAvailable(db)]);
  const parts=[`SELECT 1 AS round_number,d.version AS document_version,d.published_at,NULL::text AS reason,'initial' AS publication_kind
   FROM digital_development_documents d WHERE d.source_id=$1 AND d.status='published'`];
@@ -46,6 +49,8 @@ export async function developmentPublishedVersions(db:Database,sourceId:string,p
   FROM digital_development_rounds r WHERE r.source_id=$1`);
  if(amendments)parts.push(`SELECT a.round_number,a.document_version,a.published_at,a.reason,'amendment' AS publication_kind
   FROM digital_development_amendments a WHERE a.source_id=$1`);
+ if(includePreorder)parts.push(`SELECT 1,p.document_version,(p.business_time->>'now')::timestamptz,'预下单发布','preorder'
+  FROM digital_development_preorder_publications p WHERE p.source_id=$1`);
  const row=(await db.query<{total:number;items:DevelopmentPublishedVersions['items']}>(`WITH published AS (${parts.join('\nUNION ALL\n')}),
   matching AS (SELECT * FROM published WHERE $2::text='' OR strpos(lower('开发单 第'||round_number||'轮 资料版本 '||document_version||' '||COALESCE(reason,'')),lower($2))>0),
   chosen AS (SELECT * FROM matching ORDER BY document_version DESC,round_number DESC,publication_kind LIMIT 15 OFFSET $3)

@@ -1,336 +1,317 @@
 {
   "version": 1,
-  "base": "55d3c5a46468e75b0624e5bfabdbc19a126dfb27",
+  "base": "35e25a01f8486f3f35c96930344c1b9b5c6cfa57",
   "risk": "full",
-  "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
+  "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
   "rules": [
     {
-      "rule": "原开发来源从无号保留到一次性绑定并使用可追溯的原子流水。",
-      "source": "v11.5 §2.2、§2.3、§2.4、N08、N49 和 G2 的合并与启用边界。",
+      "rule": "新编号草稿只保存及恢复，尚未具备材料交接、投料、正式安排任务或报价编辑资格。",
+      "source": "批准的 v11.5 §3.2.1–2、N01 至 N04、G2。",
       "writes": [
-        "apps/api/migrations/0302_digital_order_number_identity.sql",
+        "apps/api/migrations/0303_workbench_preorder_publication.sql",
         "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/development-source-lifecycle.ts",
-        "apps/api/src/production-platform/order-number-repository.ts",
-        "packages/contracts/src/digital-order-number.ts",
-        "packages/contracts/package.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/digital-order-number-postgres.test.ts"
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/whole-order-deletion-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/order-time-created.ts",
-        "apps/api/src/production-platform/access-policy.ts"
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/whole-order-deletion-service.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-production-identity-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/digital-order-number-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "复用原来源 UUID、现有数字订单身份和注册表。新迁移附加设置版本、前缀流水及编号占用保护，不改旧数据和原设置。",
-      "dateAndPermission": "预留和发号没有有效时效。正式发布及转正仍由原命令行使权限与记录可信事件，提前写和删除后的重用被禁止。",
-      "expectation": "同一来源从空号恢复，并发不同号码，历史编号跳过，删除先取得来源锁则不分号，业务字段空值保留，原事件出现后转正同号，两个 PO 不改。999 后 1000，已发号码不可修改。",
+      "initialization": "新表与当前来源生命周期以稳定原 UUID 关联。不批量回填，未经过新编号入口的原预下单继续按原规则。",
+      "dateAndPermission": "设计师和跟单用原真实授权。数据库在原事务禁止未生效草稿的材料和任务写入。保既有历史版本不动。",
+      "expectation": "未发布原服务拒绝交接、投料上传和报价写入。直接验证数据库材料和任务写入被拦。取消后无发布事实。旧浏览器仍可用原保存与转单。",
       "checks": [
-        "pg",
-        "browser",
-        "non-db",
+        "business",
+        "commercial",
+        "unit",
         "preflight",
-        "lint",
-        "types"
+        "types",
+        "lint"
       ]
     },
     {
-      "rule": "原生产管理设置合法角色维护稳定代码，预览只读。",
-      "source": "v11.5 §2.1、§2.2、N09、N49、V03 和 ENT54。",
+      "rule": "预下单业务发布、确切原资料版本、有效跟单交接由同一事务落地。",
+      "source": "批准的 v11.5 §3.2.1–3、N03、N29、A11、H02。",
       "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/package.json",
-        "package-lock.json",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/order-number-settings.tsx",
-        "apps/web/src/order-number-settings.css",
-        "packages/contracts/src/digital-production-read-requests.ts",
-        "tests/integration/r5-settings-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/access-service.ts",
-        "apps/api/src/production-platform/customer-merchandiser-defaults.ts",
-        "apps/web/src/development-entry-controls.tsx",
-        "apps/web/src/system-dialog.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/integration/order-time-settings-postgres.test.ts",
-        "tests/unit/client-request-id.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/integration/digital-order-number-postgres.test.ts"
-      ],
-      "initialization": "原设置模块打开才读取当前配置和有效设计师。服务器按真实姓名生成建议，版本化保存，Astryx 局部渲染和原等待提示。",
-      "dateAndPermission": "Root 和有效供应链总监走原身份校验。普通设计师和 PMC 无写权限，测试时钟上下文不能改公司设置。销售年份必须来自真实输入。",
-      "expectation": "实测原 App 管理员保存、重复流程与冲突反馈、DEV/P00 演算不消耗流水、普通身份不可读设置，1165 和 390 界面内无字段溢出。",
-      "checks": [
-        "pg",
-        "browser",
-        "non-db",
-        "preflight",
-        "lint",
-        "types"
-      ]
-    },
-    {
-      "rule": "母单显示与检索同源，专业编号、子单版本、原授权和 UUID 路由保留。",
-      "source": "v11.5 §2.3、§2.4、N10 和现有工作台模块范围。",
-      "writes": [
-        "apps/api/src/production-platform/development-revision-source.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-document-snapshot.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-search-metadata.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-notification-toast.tsx",
-        "apps/web/src/digital-production-workspaces.tsx",
-        "packages/contracts/src/digital-production-notifications.ts",
-        "tests/unit/digital-notification-child-context.test.ts"
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-home-projection.ts",
-        "apps/api/src/production-platform/budget-sourcing-adapter.ts",
-        "apps/web/src/digital-development-print.tsx",
-        "apps/web/src/production-instruction-print.tsx"
+        "apps/api/src/production-platform/development-workspace-query.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/preparation-todos.ts"
       ],
       "oldTests": [
+        "tests/integration/development-amendment-postgres.test.ts",
         "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/unit/digital-notification-child-context.test.ts"
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/digital-order-number-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "根来源及正式单继续读取原设计业务号，独立复版通过实际根关系取得母单号。通知只对已授权对象呈现已发号码。",
-      "dateAndPermission": "仍按全体授权搜索再取页，原 ERP 与 PO 等专业号以及任务/子单路由不变，原记录/版本与真实业务时点不由号码派生。",
-      "expectation": "同一已发号和真实关联贯穿来源、确认双 PO、复版、详情、导出、原打印资料及通知。原有无可信映射记录维持原读法。",
+      "initialization": "复用原来源、附件及材料交接。同事务存精确开发快照和真实审计事件，未注册新对外命令。",
+      "dateAndPermission": "以绑定来源的真实业务时钟保存轻发布，只使用在职有效跟单，原历史资料和范围独立。",
+      "expectation": "两并发提交或重试只发布和交接一次。历史原版与原文一致，现行工作区可读，原草稿箱不再显示。合法技术补资料不提前采用时效。",
       "checks": [
-        "pg",
-        "browser",
-        "non-db",
+        "business",
+        "historical",
+        "commercial",
+        "unit",
         "preflight",
-        "lint",
-        "types"
+        "types",
+        "lint"
       ]
     },
     {
-      "rule": "原座舱详情在宽卡片保水平并排，在紧凑卡片将差值排在日期下，完整、无重叠，原证照仍可读。",
-      "source": "已合入 #1094 的 150px 内容区间、Full 45458446895 R5-08 及相同隔离环境的两版实测。",
+      "rule": "正式订单沿原核算和审批首次取得 T0，原 A/B、投料事实及适用前置保留。",
+      "source": "批准的 v11.5 §3.2.4–6、N29、N30、A11、H02。",
       "writes": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/order-time-automatic.ts",
+        "apps/api/src/production-platform/order-time-native-timing.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/task-page-read-context.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-detail-r5.css",
-        "apps/web/src/cockpit-detail.tsx"
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/api/src/production-platform/order-time-native-commands.ts",
+        "apps/api/src/production-platform/preparation-series-bridge.ts",
+        "apps/api/src/production-platform/material-investment-risk-history.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/development-responsibility-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "复用原真实签名 App、隔离低权限 PostgreSQL、原开发资料和真实技术证照。调整既有断言，无业务写入或样式变化。",
-      "dateAndPermission": "原计划发生时间、责任读法、附件授权、历史原版本及返回路径均由既有流程继续核对。",
-      "expectation": "在 1585px 和 1165px 原视口实测两种布局均存在，原日期内容、差值间隔、对齐和边界有几何断言。",
+      "initialization": "不替预下单来源创建有效 SLA 计划。正式确认沿原 adopted version、原任务身份和原冻结路径。",
+      "dateAndPermission": "T0 为审批或正式确认的实际成功时刻，未开始不能造时钟，已完成实绩不改。未完任务仅在实际前置齐备后采用正式责任。",
+      "expectation": "A 实投完成，确认后不再催办。B 待审批保持无正式时效，随后只在 T0 采用并保已有实投日期。真实预下单任务 entered_at 保持不动，原原生浏览器仍可正式确认且读取原资料。",
       "checks": [
-        "responsive",
-        "preflight"
+        "business",
+        "historical",
+        "commercial",
+        "unit",
+        "preflight",
+        "types",
+        "lint"
+      ]
+    },
+    {
+      "rule": "合法开发提交保留独立的实际路线、技证版本、材料验证、角色和原洗前尺寸，不提前启用监督或考核。",
+      "source": "批准的 v11.5 §3.2.3、§3.2.5 及 #1100 精确首轮 Codex Review P1。",
+      "writes": [
+        "apps/api/src/production-platform/development-arrangement.ts",
+        "apps/api/src/production-platform/development-cycle-evidence.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-fixed-cutting.ts",
+        "apps/api/src/production-platform/development-material-check-rules.ts",
+        "apps/api/src/production-platform/development-material-readiness.ts",
+        "apps/api/src/production-platform/development-native-route.ts",
+        "apps/api/src/production-platform/development-notifications.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/development-supply.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-task-route.ts",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
+        "apps/api/src/production-platform/style-label-model-compatibility.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/development-external-pattern.tsx",
+        "apps/web/src/development-result-upload.tsx",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/src/production-platform/development-inspection-evidence.ts",
+        "apps/api/src/production-platform/fixed-craft-steps.ts",
+        "apps/api/src/production-platform/development-task-timing.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-responsibility-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "initialization": "原技术登记和真实版次资料保存在各自业务表，原任务位置和工艺关系共享底层记录。专用执行态只保存路线位置与关联，无目标、工期或公司时效，原冻结读取明确排除。",
+      "dateAndPermission": "预下单状态继续只允许真正有效的原跟单、核料文员、板房师傅及尾查人员办理；检查尺寸和引用原 PLT，正式时效按正式确认版本开始。",
+      "expectation": "原角色按原顺序完成技术 PLT、纸样、裁板和车板，原洗前步骤不能不录尺寸直接完成。正式订单没有真实确认前看不到 SLA 或时效提醒，原资料和实绩仍可读取。",
+      "checks": [
+        "business",
+        "historical",
+        "commercial",
+        "unit",
+        "preflight",
+        "types",
+        "lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pg",
+      "id": "business",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-final-pg.json tests/integration/digital-order-number-postgres.test.ts tests/integration/digital-production-identity-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
-      "context": "Canonical PostgreSQL 94 tests retained from the detached previously tested candidate with independently matched complete SQL, API, shared contracts, fixtures and runner input paths. Only the unrelated settings browser request ID caller and non-DB fixture changed. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
-      "sourceFingerprint": "192193fd3f079215af9a850af4c54b24940b4297639f33e1574a28a4f5f7c5b6",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-business.json tests/integration/production-readiness-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/development-technical-postgres.test.ts",
+      "context": "Canonical PostgreSQL plus original signed Chromium using the isolated database resources and Node 22, two workers. Current native readiness, A and B policies, approvals, original creation and legacy preorder.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "inputPaths": [
-        "apps/api",
-        "apps/web/src/digital-development-editing.ts",
-        "apps/web/src/client-request-id.ts",
-        "packages",
-        "tests/integration/digital-order-number-postgres.test.ts",
-        "tests/integration/digital-production-identity-postgres.test.ts",
-        "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/helpers",
-        "tests/inspection-report-fixture.ts",
-        "scripts",
-        "vitest.config.ts",
-        "package.json",
-        "package-lock.json"
-      ],
-      "inputFingerprint": "41f771650ae35cdad894f942ed72bebf025500f8d352f1541a66145e661d2cf3",
-      "startedAt": "2026-11-24T17:47:16.736Z",
-      "endedAt": "2026-11-24T17:48:52.162Z",
-      "log": "/workspace/dx-x1-evidence/x1-final-pg.log",
-      "logSha256": "8e1dd34ee54a55ba1f021bda6c34733401c57ef4f9abcd346d5aeae61d6ffa8b",
-      "passed": 94,
+      "startedAt": "2026-11-25T01:03:32.926Z",
+      "endedAt": "2026-11-25T01:06:46.474Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-business.log",
+      "logSha256": "1e8bd396506e02ce14e629082d9e05f2800ae56dd31599f0a9ba6908976de92e",
+      "passed": 152,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "048261433e394061c141a3349fc5d7ab952d8e3c08f8b929eb9b2ed5179486a6"
+          "sha256": "eeb2fb0193de97751a095f4c1af62293254556b5da6e8b82cb9464d125392e69"
         }
       ]
     },
     {
-      "id": "browser",
+      "id": "historical",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-browser.json tests/integration/r5-settings-native-browser-postgres.test.ts",
-      "context": "Canonical real PostgreSQL and signed Chromium. Entire existing settings suite with actual save, typed task preview and manager / normal-role boundary, using the client request helper. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
-      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-historical.json tests/integration/development-amendment-postgres.test.ts tests/integration/development-responsibility-postgres.test.ts tests/integration/digital-journey-postgres.test.ts",
+      "context": "Canonical PostgreSQL with a single worker. Original development amendments and responsibility, Journey current and historical consistency.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:08:59.981Z",
-      "endedAt": "2026-11-24T18:09:39.782Z",
-      "log": "/workspace/dx-x1-evidence/x1-ci-browser.log",
-      "logSha256": "5bb97de61195d539c86ff452f434241f5af14ad589d16c6b88a27495ddb90e8e",
-      "passed": 9,
+      "startedAt": "2026-11-25T01:07:18.890Z",
+      "endedAt": "2026-11-25T01:08:24.584Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-historical.log",
+      "logSha256": "c69e4ded008e9f5b5a524408125ddeaa2528ff7b6ca60aa57cfdf31d52b7852b",
+      "passed": 69,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "93b281365fe9357b56dfe6b47e1f3e42b34d60527dc3efde7c8cc4515af991ed"
+          "sha256": "40633e6b9d7937191dee19afdf022a935a4353e0d8bedb213c4e5b9fd36c6586"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "tests/fixtures",
-        "tests/helpers",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "tests/acceptance",
-        "tests/integration/r5-settings-native-browser-postgres.test.ts"
-      ],
-      "inputFingerprint": "657c0c2f97cdf4a743d03f5eab147db7ba070fff3c63355a66310a41b5a8e744"
+      ]
     },
     {
-      "id": "non-db",
+      "id": "commercial",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x1-evidence/x1-ci-env-suites.json tests/unit/production-dashboard-query.test.ts tests/unit/responsibility-panels-component.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/client-request-id.test.ts tests/unit/digital-notification-child-context.test.ts",
-      "context": "Exact original Node22 and npm10 with all database URLs empty. Replays the two failing CI guards and the three prior local import-only failures after placing the same locked Astryx files physically under this worktree. The original broad run and complementary suite results stay distinct. The later change is confined to the R5-08 responsive test and documentation. These declared inputs are equal to the prior checked tree.",
-      "sourceFingerprint": "71f9515745b7e19404319d00a43c7e591f10c0625421815f130a798a53a44929",
-      "testedHead": "bcdec23b487e7032301b47a9ae28ae54f9ce3056",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-commercial.json tests/integration/customer-quotation-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts",
+      "context": "Canonical PostgreSQL for original hand-written quotation and Journey read-model coverage with the current model, using assigned roles and original fixtures.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:15:22.044Z",
-      "endedAt": "2026-11-24T18:15:28.989Z",
-      "log": "/workspace/dx-x1-evidence/x1-ci-env-suites.log",
-      "logSha256": "565c84e6eeaec282d6e89af945a41a6f97da88b27a3d87ade77e235f419a5442",
-      "passed": 60,
+      "startedAt": "2026-11-25T01:06:46.526Z",
+      "endedAt": "2026-11-25T01:07:18.830Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-commercial.log",
+      "logSha256": "42ed76eed50998ad15aac5adb5398e4a62aaa91abf8a489e1c6e63bebaaf3887",
+      "passed": 36,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "939b1a9cb4ab7ba658240d5320cf7839be682366061b846af8c772227bec8ce5"
+          "sha256": "dd81a3f3de00a3d88ed8734d89b1db86c2e63f28249a593223d12e803eef0d14"
         }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "tests/fixtures",
-        "tests/helpers",
-        "vitest.config.ts",
-        "tests/unit"
-      ],
-      "inputFingerprint": "8e7be21df2e13094a1151b7c378710bdca17c8617e90b148dda031e08c3b3129"
+      ]
     },
     {
-      "id": "responsive",
+      "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-      "context": "Original signed App, guarded CI-shaped dual PostgreSQL and existing two-worker configuration. Exact baseline and pre-fix candidate reproduced the same original R5-08 failure. Fixed assertion verifies both pre-existing layout modes, exact documents, versions and original return.",
-      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
-      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/dx-x2-evidence/x2-candidate2-non-db.json tests/unit/development-material-readiness.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/order-time-publication-intent.test.ts tests/unit/production-readiness-contract.test.ts",
+      "context": "Original Node and root Vitest with no database URLs. Existing PMC read-only permissions and time/material contracts.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:49:24.046Z",
-      "endedAt": "2026-11-24T18:51:46.020Z",
-      "log": "/workspace/dx-x1-evidence/x1-r508-responsive.log",
-      "logSha256": "6bfd72c7a0702362243920f1b3a81eef37a533084d2e56dc0bab8d5a2a5e6e3f",
-      "passed": 25,
+      "startedAt": "2026-11-25T01:04:59.716Z",
+      "endedAt": "2026-11-25T01:05:04.638Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-non-db.log",
+      "logSha256": "107eec778bbd6380c12c4a5e06193c7c3b31ebfca9bc317203c163f236d9992c",
+      "passed": 63,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "54c13d6e7620536e2aeb79f76123e4b00e5e9e15248a32fa9478ce6711ce1cc3"
+          "sha256": "7c12636ba8857494907d4e1cb268d5618a1682c46f4f9c1f0a94d1be925a89be"
         }
       ]
     },
     {
       "id": "preflight",
       "kind": "command",
-      "command": "git diff --check && npm run test:preflight",
-      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
-      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
-      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "command": "git diff --check && node scripts/acceptance/time-site-inventory.mjs && npm run db:migrate:lint && npm run test:preflight",
+      "context": "Original repository syntax, time-source audit, migration digest/manifest and canonical regression-plan checks.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:50:07Z",
-      "endedAt": "2026-11-24T18:51:34Z",
-      "log": "/workspace/dx-x1-evidence/x1-responsive-preflight.log",
-      "logSha256": "9f41d9e3382e1a8310d6ed5a4de54e7e48a86aee368e7976722cd226971135e1"
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "npm run lint",
-      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
-      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
-      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-24T18:50:07Z",
-      "endedAt": "2026-11-24T18:51:34Z",
-      "log": "/workspace/dx-x1-evidence/x1-responsive-lint.log",
-      "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
+      "startedAt": "2026-11-25T01:03:32.782Z",
+      "endedAt": "2026-11-25T01:03:41.270Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-preflight.log",
+      "logSha256": "e26e54db8c0d1a0f47d4bcb062c00eadc287329c82779e13a1b9cf25d37d5e2f"
     },
     {
       "id": "types",
       "kind": "command",
       "command": "npm run typecheck",
-      "context": "Canonical Node 22 and npm 10 candidate check after the responsive browser assertion correction.",
-      "sourceFingerprint": "2fe1408904d2682915c020a4885861820755699053acc38ff8175fe036849eac",
-      "testedHead": "3da7770c9f5ac6dd7a78523713d05d736fa6a7b8",
+      "context": "Original TypeScript workspace check using the current compiled shared contracts.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-24T18:50:07Z",
-      "endedAt": "2026-11-24T18:51:34Z",
-      "log": "/workspace/dx-x1-evidence/x1-responsive-typecheck.log",
+      "startedAt": "2026-11-25T01:03:41.318Z",
+      "endedAt": "2026-11-25T01:04:26.574Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-typecheck.log",
       "logSha256": "6d081bfaba9bfcd0c9d46e3b2b0437c2b2e3a89b8db719bdd9715c0c4f01d988"
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "context": "Original repository ESLint check with warnings treated as errors.",
+      "sourceFingerprint": "b97a629ba5fdd270b237d8e4c26e641f3ccc427d379a26ac7ea5a208d8f45607",
+      "testedHead": "b787d885074131a34111d5a17c3724f73ea20f72",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-25T01:04:26.578Z",
+      "endedAt": "2026-11-25T01:04:59.466Z",
+      "log": "/workspace/dx-x2-evidence/x2-candidate2-lint.log",
+      "logSha256": "d361ac9bfda80738d223ed5e56dcf1cc2097526d7e1279a47146dada9637efcc"
     }
   ]
 }

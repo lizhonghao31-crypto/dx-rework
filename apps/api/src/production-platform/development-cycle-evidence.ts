@@ -10,16 +10,23 @@ import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {OrderTimeRuleSchema,orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {scheduleElapsed} from './fixed-schedule-progress.js';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+import {orderTimePolicyAt} from './order-time-native-timing.js';
+import {orderTimeCreated} from './order-time-created.js';
 
-const cycleValues=(value:Record<string,unknown>)=>DevelopmentCycleValuesSchema.parse(Object.fromEntries(Object.entries(value).filter(([key])=>key!=='orderTimeCycle')));
+const cycleValues=(value:Record<string,unknown>)=>DevelopmentCycleValuesSchema.parse(Object.fromEntries(Object.entries(value).filter(([key])=>key!=='orderTimeCycle'&&key!=='deferredPreorder')));
 
-export async function captureTechnicalEnrollment(db:PoolClient,actorId:string,sourceId:string,eventKey:string){
+export async function captureTechnicalEnrollment(db:PoolClient,actorId:string,sourceId:string,eventKey:string,preorder=false){
  if(!(await db.query("SELECT to_regclass('digital_development_technical_enrollments') AS relation")).rows[0]?.relation)return;
- if(!(await db.query("SELECT 1 FROM audit_events WHERE id=$1 AND entity_id=$2 AND ((action='digital_source_created' AND actor_id=$3::uuid) OR (action='digital_development_first_published' AND after_state->>'createdBy'=$3::text))",[eventKey,sourceId,actorId])).rowCount)throw Error('Technical enrollment requires real source creation');
+ const evidence=preorder?`SELECT 1 FROM audit_events a JOIN digital_development_preorder_publications p ON p.source_id=$2::uuid
+  JOIN digital_production_sources s ON s.source_id=p.source_id WHERE a.id=$1 AND a.action='digital_development_preorder_technical_released'
+  AND a.entity_id=$2::text AND a.after_state->>'preorderEventId'=p.event_id::text AND s.created_by=$3::uuid`
+  :"SELECT 1 FROM audit_events WHERE id=$1 AND entity_id=$2 AND ((action='digital_source_created' AND actor_id=$3::uuid) OR (action='digital_development_first_published' AND after_state->>'createdBy'=$3::text))";
+ if(!(await db.query(evidence,[eventKey,sourceId,actorId])).rowCount)throw Error('Technical enrollment requires real source creation');
  const policy=(await db.query('SELECT * FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 1')).rows[0];
  const values=DevelopmentCycleValuesSchema.parse(policy.values_json);
  await db.query(`INSERT INTO digital_development_technical_enrollments(source_id,rule_version,policy_version,values_json,created_by,event_key)
-  VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(source_id) DO NOTHING`,[sourceId,DEVELOPMENT_TECHNICAL_RULE,policy.version,JSON.stringify(values),actorId,eventKey]);
+  VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(source_id) DO NOTHING`,[sourceId,DEVELOPMENT_TECHNICAL_RULE,policy.version,
+  JSON.stringify({...values,...(preorder?{deferredPreorder:true}:{})}),actorId,eventKey]);
 }
 export async function captureTechnicalRound(db:PoolClient,actorId:string,sourceId:string,round:number,publishedAt:string,internalWashMinutes:number,warningRatio:number){
  const enrolled=await technicalEnrollment(db,sourceId);if(!enrolled)return;
@@ -31,6 +38,18 @@ export async function captureTechnicalRound(db:PoolClient,actorId:string,sourceI
 export async function developmentCycleEvidence(db:TechnicalDB,sourceId:string,round:number,now:string):Promise<DevelopmentCycleStatus|null>{
  if(!await technicalEnrollment(db,sourceId))return null;
  const saved=(await db.query('SELECT * FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,round])).rows[0];if(!saved)return null;
+ const publishedAt=new Date(saved.published_at).toISOString();
+ const preorder=saved.values_json.deferredPreorder===true;
+ let formalStart:string|undefined,formalPlan:Awaited<ReturnType<typeof orderTimePolicyAt>>=null;
+ if(preorder){
+  const order=(await db.query<{production_order_id:string}>('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0];
+  if(!order)return null;
+  const resource={kind:'order' as const,id:order.production_order_id};
+  formalStart=(await orderTimeCreated(db,resource))?.at;
+  if(!formalStart||now<formalStart)return null;
+  formalPlan=await orderTimePolicyAt(db,resource,formalStart);
+  if(!formalPlan)return null;
+ }
  const values=cycleValues(saved.values_json);
  const urgent=(await db.query('SELECT * FROM digital_development_urgent_events WHERE source_id=$1 AND round_number=$2 ORDER BY revision DESC LIMIT 1',[sourceId,round])).rows[0];
  const approved=Boolean((await db.query("SELECT 1 FROM digital_development_urgent_events WHERE source_id=$1 AND round_number=$2 AND action='approve'",[sourceId,round])).rowCount);
@@ -39,6 +58,7 @@ export async function developmentCycleEvidence(db:TechnicalDB,sourceId:string,ro
   WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind IN ('development_tail_check','development_patch_tail_check')
    AND t.state='completed' ORDER BY t.completed_at NULLS LAST,t.task_id LIMIT 1`,[sourceId,round])).rows[0];
  const completedAt=completed?.completed_at&&['现场登记','已核实'].includes(completed.completed_quality)?new Date(completed.completed_at).toISOString():null;
+ if(formalStart&&completedAt&&completedAt<formalStart)return null;
  const intervals=(await db.query(`SELECT DISTINCT ON(i.interval_id) i.*,t.state AS task_state,t.completed_at AS task_returned_at,t.completed_quality AS task_return_quality FROM digital_development_external_intervals i
   LEFT JOIN digital_production_tasks t ON t.task_id=i.source_task_id WHERE i.source_id=$1 AND i.round_number=$2 ORDER BY i.interval_id,i.version DESC`,[sourceId,round])).rows;
  const externalPapers=(await externalPatternRecords(db,sourceId)).filter(r=>r.roundNumber===round);
@@ -59,16 +79,18 @@ export async function developmentCycleEvidence(db:TechnicalDB,sourceId:string,ro
   native.push({id:`native:${sent.fact_id}`,departedAt:sent.completed_at?new Date(sent.completed_at).toISOString():null,returnedAt:returned?.completed_at?new Date(returned.completed_at).toISOString():null,
    credible:['现场登记','已核实'].includes(sent.completed_quality)&&(!returned?.completed_at||['现场登记','已核实'].includes(returned.completed_quality)),closed:returned?.state==='completed'||returned?.state==='cancelled'});
  }
- const perOrder=saved.values_json.orderTimeCycle,selected=perOrder?OrderTimeRuleSchema.nullable().parse(approved?perOrder.urgent:perOrder.normal):null;
+ const perOrder=formalPlan?{version:'order-time-cycle-v1',normal:orderTimeRule(formalPlan.plan,'development_cycle_normal')?.rule??null,
+  urgent:orderTimeRule(formalPlan.plan,'development_cycle_urgent')?.rule??null}:saved.values_json.orderTimeCycle;
+ const selected=perOrder?OrderTimeRuleSchema.nullable().parse(approved?perOrder.urgent:perOrder.normal):null;
  if(perOrder&&perOrder.version!=='order-time-cycle-v1')throw Error('本轮开发周期版本不受支持');
  const calendar=perOrder?selected?.calendar??null:null,minutes=selected?.kind==='supervision'?selected.minutes:null;
- const result=calculateDevelopmentCycle({publishedAt:new Date(saved.published_at).toISOString(),completedAt,internalCompleted:!!completed,
+ const result=calculateDevelopmentCycle({publishedAt:formalStart&&formalStart>publishedAt?formalStart:publishedAt,completedAt,internalCompleted:!!completed,
   now,allowedDays:perOrder?calendar&&minutes!==null?minutes/1440:null:approved?values.urgentDays:values.normalDays,warningRatio:selected?selected.reminder.percent/100:Number(saved.warning_ratio),intervals:[...manual,...native]},calendar?{
    elapsedSeconds:(from,to)=>scheduleElapsed(from,to,calendar)*60,
    shiftSeconds:(from,seconds)=>Date.parse(shiftFixedTimeline(new Date(from).toISOString(),seconds/60,calendar)),
   }:undefined);
  return {ruleVersion:DEVELOPMENT_TECHNICAL_RULE,policyVersion:saved.policy_version,roundNumber:round,mode:approved?'urgent':'normal',
-  publishedAt:new Date(saved.published_at).toISOString(),completedAt,internalCompleted:!!completed,
+  publishedAt,completedAt,internalCompleted:!!completed,
   internalSeconds:result.internalSeconds,excludedSeconds:result.excludedSeconds,allowedSeconds:result.allowedSeconds,state:result.state,
   precisionReasons:result.openExternal?[...result.precisionReasons,'真实外发进行中，截止随实际回收更新']:result.precisionReasons,dueAt:result.dueAt,
   ...(perOrder?{calendarRef:calendar}:{}),urgentRevision:urgent?.revision??0,urgentState:urgent?.action==='approve'?'approved':urgent?.action==='reject'?'rejected':urgent?'requested':'none'};

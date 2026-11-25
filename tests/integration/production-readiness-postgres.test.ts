@@ -14,6 +14,7 @@ import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platf
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
@@ -59,11 +60,13 @@ import {DigitalProductionIdentityService} from '../../apps/api/src/production-pl
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
+import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
 import {productionReadiness,styleLabelCuttingReason} from '../../apps/api/src/production-platform/production-readiness-repository.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {DevelopmentWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
@@ -91,6 +94,55 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return service.record(kind==='material_investment'?p.primary:p.warehouse,resource,{kind,scopeRef:'whole',expectedVersion:prior?.version??0,state,occurredAt:state==='unknown'?null:businessNow().toISOString(),note:'TEST actual native material record',quantities:kind==='material_investment'?[{lineId:null,materialId:p.document.materials[0]!.materialId,name:'TEST棉布',quantity:100,unit:'米'}]:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
  };
  const order=async(p:Awaited<ReturnType<typeof setup>>)=>identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:p.style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:p.primary.actorId,lines:[{formalPoNo:`TEST-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),p.sourceId);
+ it('X2 does not hand over a saved numbered preorder until it is effectively published',async()=>{
+  const designer=f.people['sample-designer']!,primary=f.people.merchandiser!;
+  const current=await identity.orderNumberSettings(f.root);
+  await identity.saveOrderNumberSettings(f.root,{expectedVersion:current.version,...current.values,
+   designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+  const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
+   numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P01'}},randomUUID());
+  expect(orderNumber).toBe('PDMLH2027P01-001');
+  const resource={kind:'source' as const,id:sourceId},photo=await f.image(designer);
+  const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{...documentFixture(photo,{available:false}),
+   quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],customerOrderDraft:{withOrder:true,stage:'preorder',
+    order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,
+     primaryMerchandiserId:primary.actorId,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
+     lines:[{color:'',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,colorForeign:null,deliveryDate:null,
+      sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
+  expect(draft).toMatchObject({status:'draft',publishedAt:null,productionOrderId:null,taskId:null});
+  const handover={kind:'design_handover' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,
+   occurredAt:businessNow().toISOString(),note:'TEST draft saving is not handover',quantities:[],evidenceIds:[photo],
+   sourceDocumentVersion:draft.version,recipientId:primary.actorId};
+  await expect(service.record(designer,resource,handover,randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(service.authorizeAttachmentUpload(designer,resource)).rejects.toMatchObject({statusCode:409});
+  const quoteRow=randomUUID();
+  await expect(new DigitalQuotationService(f.db,true).save(designer,resource,{expectedVersion:0,
+   document:{fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',freight:'',cm:'',salePrice:'',
+    outsourcingScope:'',outsourcingUnitPrice:'',imageAttachmentIds:[],rows:[{rowId:quoteRow,section:'主料',category:'',
+     name:'TEST棉布',specification:'TEST',unit:'米',supplier:'TEST',consumption:'',unitPrice:''}]},
+   assignments:[{rowId:quoteRow,technicalAssigneeId:null,priceAssigneeId:designer.actorId,priceRole:'sample_designer'}]},randomUUID()))
+   .rejects.toMatchObject({code:'QUOTATION_CONFLICT',statusCode:409});
+  expect((await f.db.query('SELECT 1 FROM digital_quotation_documents WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+  await expect(f.db.query(`INSERT INTO digital_preparation_material_versions
+    (record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
+    VALUES($1,1,'source',$2,'design_handover','whole','ready',$3,$4,$5,CURRENT_TIMESTAMP)`,
+  [randomUUID(),sourceId,handover.occurredAt,JSON.stringify(handover),designer.actorId])).rejects.toMatchObject({code:'23514'});
+  await expect(service.read(primary,resource)).rejects.toMatchObject({statusCode:403});
+  const taskClient=await f.db.connect();
+  try{
+   await taskClient.query('BEGIN');
+   await expect(new DigitalProductionTaskService(f.db).createWithClient(taskClient,f.root,{resource,kind:'development_materials',
+    routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null})).rejects.toMatchObject({code:'23514'});
+  }finally{await taskClient.query('ROLLBACK');taskClient.release();}
+  expect(await service.read(designer,resource)).toMatchObject({facts:[],history:[],canRecord:[]});
+  expect((await materialInvestmentTodos(f.db,primary)).some(item=>item.entityId===sourceId)).toBe(false);
+  expect(await orderTimeCreated(f.db,resource)).toBeNull();
+  expect(await new OrderTimePlanRepository(f.db).current(resource)).toBeNull();
+  await new DigitalProductionTaskService(f.db).controlResource(designer,resource,'cancel','TEST取消未发布的预下单',randomUUID());
+  await expect(forms.publishPreorder(designer,sourceId,draft.version,randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await f.db.query('SELECT 1 FROM digital_development_preorder_publications WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+  expect((await f.db.query("SELECT 1 FROM audit_events WHERE entity_id=$1 AND action='digital_development_preorder_published'",[sourceId])).rowCount).toBe(0);
+ });
  for(const external of [false,true])it(`P01 records each PO cutting gate only after its actual labels and retains earlier PO readiness (${external?'external':'internal'})`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
   const ready=await run(async()=>{
@@ -931,6 +983,142 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const patternOrders=new PatternRoomOrderService(fixture.db,new TodoProjectionService(new TodoService(fixture.db)),{ordersEnabled:true});
   return {f:fixture,db:fixture.db,patternOrders,orderTimeRequests:new OrderTimeRequestService(fixture.db,orderTimeNativeExecutor(fixture.db,true,patternOrders))};
  };
+ it.each([true,false])('X2 publishes one preorder and starts the original formal route only at T0, color matching=%s',async(requiresColorMatching)=>{
+  const h=await materialTimerFixture(),persona=f.people['sample-designer']!,merch=f.people.merchandiser!,root=f.root;
+  const capabilities=(await f.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows.map(row=>row.capability);
+  const designer={...persona,authorizationCapabilities:capabilities};
+  const calendars=new OrderTimeSettingsService(f.db,true,true),currentCalendar=await calendars.read(root);
+  const purchase=currentCalendar.current.nodes.material_investment;
+  if(purchase?.kind!=='event')throw Error('TEST missing original purchase lead time');
+  await calendars.save(root,{expectedVersion:currentCalendar.version,values:{...currentCalendar.current,
+   nodes:{...currentCalendar.current.nodes,material_investment:{...purchase,accessoriesLeadTime:{minutes:1440,calendar:'continuous'}}}}},randomUUID());
+  const started='2026-11-20T04:00:00.000Z',investedAt='2026-11-22T04:00:00.000Z',formalAt='2026-12-01T04:00:00.000Z';
+  const scene=await f.scene(started),identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true,h.patternOrders);
+  const settings=await identity.orderNumberSettings(root);
+  await identity.saveOrderNumberSettings(root,{...settings.values,expectedVersion:settings.version,designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+  const original=await f.runtime.run(scene,designer,async()=>{
+   const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
+    numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P02'}},randomUUID());
+   const resource={kind:'source' as const,id:sourceId},base=initialDevelopmentDocument(),photo=await f.image(designer);
+   const material={...base.materials[0]!,name:'TEST 预下单主布',quantity:'75米',supplier:'TEST 面料供应商',specification:'TEST 已知原布规格'};
+   const accessory={...material,materialId:randomUUID(),category:'辅料' as const,label:'辅料',name:'TEST 后续辅料',quantity:'12件',expectedDate:'2026-11-24'};
+   const document=DevelopmentDocumentSchema.parse({...base,materials:[material,accessory],files:[{attachmentId:photo,kind:'款图'}],
+    productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'preorder',
+     order:{customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
+      primaryMerchandiserId:merch.actorId,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]}}});
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID()),key=randomUUID();
+   await expect(forms.publish(designer,sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(forms.publishPreorder(designer,sourceId,saved.version+1,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const published=await Promise.all([forms.publishPreorder(designer,sourceId,saved.version,key),forms.publishPreorder(designer,sourceId,saved.version,randomUUID())]);
+   expect(published).toEqual([{sourceId,version:saved.version,publishedAt:started},{sourceId,version:saved.version,publishedAt:started}]);
+   expect(await forms.publishPreorder(designer,sourceId,saved.version,key)).toEqual(published[0]);
+   expect(await forms.read(designer,sourceId)).toMatchObject({preorderPublication:{at:started,documentVersion:saved.version},productionOrderId:null,taskId:null});
+   const archived=(await f.db.query(`SELECT document_version,document FROM digital_development_preorder_publications WHERE source_id=$1`,[sourceId])).rows;
+   expect(archived).toEqual([{document_version:saved.version,document:saved.document}]);
+   expect(await forms.publishedVersion(designer,sourceId,1,saved.version)).toMatchObject({document:saved.document,publishedAt:started});
+   const listed=(await forms.publishedVersions(designer,sourceId,1)).items;
+   expect(listed).toMatchObject([{documentVersion:saved.version,reason:'预下单发布'}]);
+   expect(new Date(listed[0]!.publishedAt).toISOString()).toBe(started);
+   expect((await identity.developmentDrafts(designer,1,orderNumber!)).items).toEqual([]);
+   expect((await identity.sources(designer,1,orderNumber!)).items).toMatchObject([{sourceId}]);
+   const handover=(await service.read(designer,resource)).facts.find(row=>row.kind==='design_handover')!;
+   expect(handover).toMatchObject({version:1,recipientId:merch.actorId,occurredAt:started,investmentScopeBasis:{preorder:true}});
+   expect((await service.read(designer,resource)).history).toHaveLength(1);
+   expect(await orderTimeCreated(f.db,resource)).toBeNull();
+   expect(await new OrderTimePlanRepository(f.db).current(resource)).toBeNull();
+   await expect(h.orderTimeRequests.check(designer,{kind:'arrangement',resource})).rejects.toMatchObject({statusCode:409});
+   let developmentTaskId:string|null=null;
+   if(requiresColorMatching){
+    const category=(await f.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+    const price=await new PatternRoomPriceService(f.db).quote(root,'category',category.price_id);
+    const current=await forms.read(designer,sourceId);
+    const technical=await forms.save(designer,sourceId,{expectedVersion:current.version,document:{...current.document!,
+     quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',measurements:[{name:'胸围',values:['48']}],patternCategoryId:category.price_id}},randomUUID());
+    const released=await forms.publish(designer,sourceId,technical.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version});
+    developmentTaskId=released.taskId;
+    expect(developmentTaskId).toBeTruthy();
+    const recorded=(await f.db.query('SELECT state,entered_at,entered_quality FROM digital_production_tasks WHERE task_id=$1',[developmentTaskId])).rows[0];
+    expect(recorded).toMatchObject({state:'ready',entered_at:new Date(started),entered_quality:'现场登记'});
+    expect(await new DigitalProductionTaskService(f.db).read(root,developmentTaskId!)).toMatchObject({dueAt:null,warningAt:null,slaHours:null});
+    expect(await orderTimeCreated(f.db,resource)).toBeNull();
+    expect(await new OrderTimePlanRepository(f.db).current(resource)).toBeNull();
+   }
+   return {resource,sourceId,orderNumber,handover,material,accessory,developmentTaskId};
+  });
+  if(requiresColorMatching){
+   // The ordinary workbench can read other orders. Don't attach this
+   // single-order simulated clock to that broader authorized read.
+   const workspace=await new DevelopmentWorkspaceQuery(new DigitalJourneyQuery(f.db)).designer(designer,
+    DevelopmentWorkspaceFilterSchema.parse({search:original.orderNumber,layout:'workbench'}));
+   expect(workspace.items).toMatchObject([{view:'developing',journey:{sourceId:original.sourceId,orderId:null}}]);
+  }
+  await f.advance(scene,investedAt);
+  const fact=await f.runtime.run(scene,merch,async()=>{
+   expect(await materialInvestmentTodos(f.db,merch,{todoId:original.handover.recordId})).toMatchObject([{dueAt:null}]);
+   const quantities=[{materialId:original.material.materialId,lineId:null,name:original.material.name,quantity:75,unit:'米'}];
+   if(requiresColorMatching)quantities.push({materialId:original.accessory.materialId,lineId:null,name:original.accessory.name,quantity:12,unit:'件'});
+   const state=await service.record(merch,original.resource,{kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'ready',
+    occurredAt:investedAt,note:'TEST 预下单期间实际投料',quantities,evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+   expect(state.materialInvestmentReminder).toBeUndefined();
+   return state.facts.find(row=>row.kind==='material_investment')!;
+  });
+  await f.advance(scene,formalAt);
+  const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:original.orderNumber,orderDate:'2026-11-20',
+   requiresColorMatching,productionPlanning:{craftSteps:[],preshrink:false},primaryMerchandiserId:merch.actorId,
+   lines:[{formalPoNo:`${original.orderNumber}-PO`,color:'黑',customerWarehouseArrivalDate:requiresColorMatching?'2027-04-30':'2026-12-02',sizes:[{size:'M',quantity:2}]}]});
+  let approvedOrderId:string|null=null;
+  if(!requiresColorMatching){
+   const operation={kind:'confirm_order' as const,sourceId:original.sourceId,input};
+   const pending=await f.runtime.run(scene,designer,async()=>{
+    await expect(identity.createOrder(designer,input,randomUUID(),original.sourceId)).rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
+    const check=await h.orderTimeRequests.check(designer,operation);
+    expect(check.feasibility).toBe('insufficient');
+    return h.orderTimeRequests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST 短交期按原申请审批'},randomUUID());
+   });
+   expect(await new OrderTimePlanRepository(f.db).current(original.resource)).toBeNull();
+   const applied=await f.runtime.run(scene,root,async()=>{
+    const current=await h.orderTimeRequests.read(root,pending.requestId);
+    const approval={expectedVersion:current.version,fingerprint:current.check.fingerprint,overrides:{},acceptLate:true},key=randomUUID();
+    const result=await h.orderTimeRequests.apply(root,pending.requestId,approval,key);
+    expect(await h.orderTimeRequests.apply(root,pending.requestId,approval,key)).toEqual(result);
+    return result;
+   });
+   expect(applied).toMatchObject({state:'applied',result:{orderId:expect.any(String)}});
+   approvedOrderId=applied.result!.orderId;
+  }
+  const created=approvedOrderId?await f.runtime.run(scene,designer,()=>identity.read(designer,approvedOrderId!)):await f.runtime.run(scene,designer,async()=>{
+   const key=randomUUID(),result=await identity.createOrder(designer,input,key,original.sourceId);
+   expect(await identity.createOrder(designer,input,key,original.sourceId)).toEqual(result);
+   return result;
+  });
+  const resource={kind:'order' as const,id:created.productionOrderId};
+  await f.runtime.run(scene,merch,async()=>{
+   expect(await orderTimeCreated(f.db,resource)).toMatchObject({at:formalAt});
+   expect(await orderTimeCreated(f.db,original.resource)).toBeNull();
+   const plan=await new OrderTimePlanRepository(f.db).current(resource);
+   expect(plan?.input.frameworkContext).toMatchObject({route:requiresColorMatching?'A':'B',acceptedAt:{value:formalAt}});
+   if(original.developmentTaskId){
+    const clocks=(await f.db.query(`SELECT entered_at::text,due_at::text,sla_basis FROM digital_production_deadline_revisions
+     WHERE task_id=$1 ORDER BY revision_id`,[original.developmentTaskId])).rows;
+    expect(clocks).toHaveLength(2);
+    expect(clocks[0]).toMatchObject({due_at:null,sla_basis:{preorderNonAssessable:true}});
+    expect(new Date(clocks[1]!.entered_at).toISOString()).toBe(formalAt);
+    expect(clocks[1]!.due_at).toBeTruthy();
+    const originalTime=(await f.db.query('SELECT entered_at FROM digital_production_tasks WHERE task_id=$1',[original.developmentTaskId])).rows[0]!.entered_at;
+    expect(new Date(originalTime).toISOString()).toBe(started);
+   }
+   const state=await service.read(merch,resource);
+   expect(state.facts.find(row=>row.kind==='design_handover')).toMatchObject({recordId:original.handover.recordId,occurredAt:started});
+   expect(state.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:fact.recordId,occurredAt:investedAt,state:requiresColorMatching?'ready':'partial'});
+   if(requiresColorMatching){
+    expect(state.materialInvestmentReminder).toBeUndefined();
+    expect(await materialInvestmentTodos(f.db,merch,{todoId:original.handover.recordId})).toEqual([]);
+   }else{
+    expect(state.materialInvestmentReminder).toMatchObject({startedAt:formalAt});
+    expect(await materialInvestmentTodos(f.db,merch,{todoId:original.handover.recordId})).toMatchObject([{route:{entityId:created.productionOrderId}}]);
+   }
+  });
+ });
  it.each([true,false])('keeps the original purchase record and calendar after real formal conversion, preorder=%s',async(preorder)=>{
   const h=await materialTimerFixture();
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,root=h.f.root,style='TEST-FORMAL-PREORDER-'+randomUUID();

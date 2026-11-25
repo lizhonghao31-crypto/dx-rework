@@ -2383,5 +2383,39 @@
       "guard_digital_order_number_history"
     ],
     "sequences": []
+  },
+  "0303_workbench_preorder_publication": {
+    "checksum": "464cecb0116dcfad25b6b39f0ad34b5aac3465b02c73b205f7c5ac36c882528a",
+    "tables": [
+      "digital_production_sources",
+      "audit_events",
+      "digital_development_documents",
+      "digital_development_revision_sources",
+      "digital_production_orders",
+      "digital_development_first_publications",
+      "digital_development_source_lifecycle",
+      "digital_preparation_material_versions",
+      "digital_production_task_access"
+    ],
+    "functions": [],
+    "references": [
+      "digital_production_sources",
+      "audit_events",
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_preorder_publications"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "guard_workbench_preorder_publication",
+      "guard_workbench_preorder_publication_handover",
+      "workbench_source_is_numbered_draft",
+      "guard_workbench_preorder_draft_evidence",
+      "guard_workbench_draft_task"
+    ],
+    "sequences": []
   }
 }
