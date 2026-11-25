@@ -2666,5 +2666,29 @@
       "rework_source_receiving_actual_quantity"
     ],
     "sequences": []
+  },
+  "0313_external_craft_repair_continuation": {
+    "checksum": "dbaaacbc6a45910c2d4a6a179573f0ff44d2253990e33374936de97f74ea9587",
+    "tables": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "operation_events",
+      "rework_orders"
+    ],
+    "functions": [
+      "guard_rework_original_craft_quality_source"
+    ],
+    "references": [
+      "rework_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "craft_repair_can_continue",
+      "craft_repair_unallocated",
+      "original_external_craft_return_snapshot_matches"
+    ],
+    "sequences": []
   }
 }

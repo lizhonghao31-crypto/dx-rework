@@ -399,7 +399,7 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   }
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-WH-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST second craft factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST warehouse native scoped factory'}));
   const cutQuantity=440,firstReturn=400,sameFactoryReturn=40,oldOccupied=20,secondSend=380,firstSecondReturn=80,problemReturn=300,
-   outsidePieces=20,returnPortion=10,inspectedPieces=290,passedPieces=270,heldPieces=30;
+   problemPieces=20,outsidePieces=10,returnPortion=5,inspectedPieces=290,passedPieces=270,heldPieces=30;
   const ready=await f.bulkReady('特殊工艺',undefined,1,f.sourcing,{quantity:cutQuantity,craftSteps});
   const resource={kind:'order' as const,id:ready.id},quoteService=new DigitalQuotationService(f.db,true);
   // Seed only the assembled row identities in this disposable schema. The native
@@ -580,8 +580,8 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   const originalReportPhoto=await f.image(qc);
   const inspected={expectedRevision:(await flow.read(f.root,ready.id)).revision,stepRef:second!.stepId,returnFactId:in4.factId,note:'TEST count remaining physical return',
    checks:[{lineId,result:'需处理' as const,problem:'TEST twenty affected pieces',treatment:'',attachmentIds:[originalReportPhoto],
-    quantityScope:{inspectedQuantity:inspectedPieces,qualifiedQuantity:passedPieces,problemQuantity:outsidePieces,unit:'片' as const}}]};
-  await expect(flow.qc(qc,ready.id,{...inspected,checks:[{...inspected.checks[0]!,quantityScope:{inspectedQuantity:problemReturn+1,qualifiedQuantity:problemReturn+1-outsidePieces,problemQuantity:outsidePieces,unit:'片'}}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+    quantityScope:{inspectedQuantity:inspectedPieces,qualifiedQuantity:passedPieces,problemQuantity:problemPieces,unit:'片' as const}}]};
+  await expect(flow.qc(qc,ready.id,{...inspected,checks:[{...inspected.checks[0]!,quantityScope:{inspectedQuantity:problemReturn+1,qualifiedQuantity:problemReturn+1-problemPieces,problemQuantity:problemPieces,unit:'片'}}]},randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(flow.qc(warehouse,ready.id,inspected,randomUUID())).rejects.toMatchObject({statusCode:403});
   const counted=await flow.qc(qc,ready.id,inspected,randomUUID()),current=counted.checks.find(check=>check.returnFactId===in4.factId)!;
   expect(counted.batches?.find(batch=>batch.factId===in4.factId)?.rows).toMatchObject([{lineId,available:problemReturn,releasedAvailable:passedPieces}]);
@@ -592,21 +592,21 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    await expect(readQualityWarehouseCraftOccupation(dispositionClient,disposition)).resolves.toEqual({...disposition,lines:[{lineId,quantity:heldPieces}]});
    await expect(readQualityWarehouseCraftOccupation(dispositionClient,{...disposition,stepRef:first!.stepId})).resolves.toBeNull();
   }finally{dispositionClient.release();}
-  await expect(readCurrentCraftProblem(f.db,locate)).resolves.toMatchObject({problemQuantity:outsidePieces,qualifiedQuantity:passedPieces,actualReturned:problemReturn,sourceSendFactId:out2.factId,factoryId:factories[1]});
+  await expect(readCurrentCraftProblem(f.db,locate)).resolves.toMatchObject({problemQuantity:problemPieces,qualifiedQuantity:passedPieces,actualReturned:problemReturn,sourceSendFactId:out2.factId,factoryId:factories[1]});
   await expect(readCurrentCraftProblem(f.db,{...locate,stepRef:first!.stepId})).resolves.toBeNull();
   const sourceTx=await f.db.connect();
   try{
    await sourceTx.query('BEGIN');
    await expect(lockCraftProblemForOriginalRework(sourceTx,warehouse,locate)).rejects.toMatchObject({statusCode:403});
    await expect(lockCraftProblemForOriginalRework(sourceTx,qc,locate)).resolves.toMatchObject({
-    evidence:{checkId:current.checkId,problemQuantity:outsidePieces,unit:'片'},source:{taskId:qcTask.task_id},
+    evidence:{checkId:current.checkId,problemQuantity:problemPieces,unit:'片'},source:{taskId:qcTask.task_id},
    });
    await expect(lockCraftProblemForOriginalRework(sourceTx,qc,{...locate,checkId:randomUUID()})).rejects.toMatchObject({statusCode:409});
   }finally{await sourceTx.query('ROLLBACK');sourceTx.release();}
   const rework=new ReworkInitiationService(f.db,'anchor-test');
   const qaActor={...qc,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
   const origin={scope:locate,execution:'factory' as const,quantity:outsidePieces};
-  await expect(rework.createCraftDraft(qaActor,{...origin,quantity:outsidePieces+1},randomUUID())).rejects.toMatchObject({statusCode:400});
+  await expect(rework.createCraftDraft(qaActor,{...origin,quantity:problemPieces+1},randomUUID())).rejects.toMatchObject({statusCode:400});
   const qcEntry=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&status=completed&search=${encodeURIComponent(qualityStyle)}`);
   let entered:Awaited<ReturnType<ReworkInitiationService['createCraftDraft']>>;
   let startKey:string;
@@ -696,6 +696,8 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
   const execution=new WorkReportingService(f.db),assigner={...tail,authorizationCapability:'work:assign',authorizationCapabilities:['work:assign']};
   const active=(await execution.list(assigner,draftId));
   expect(active).toMatchObject({reworkStatus:'in_progress',tasks:[],externalRepair:{requiredQuantity:outsidePieces,returnedQuantity:returnPortion,physicalCompletedAt:null}});
+  const nextOrigin={...origin,continueAfterReworkId:draftId,quantity:problemPieces-outsidePieces};
+  await expect(rework.createCraftDraft(qaActor,nextOrigin,randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(execution.completeExecution(assigner,draftId,{expectedOrderVersion:active.orderVersion},randomUUID())).rejects.toThrow('尚未全部实际回仓');
   const lastRepairReturn=await recordReturn(),lastFact=lastRepairReturn.facts.at(-1)!;
   expect(repairProgress(lastRepairReturn)).toMatchObject({sent:outsidePieces,returned:outsidePieces,remainingToReturn:0,physicalCompletedAt:lastFact.occurredAt});
@@ -717,6 +719,61 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    expect(replay.headers()['idempotency-replayed']).toBe('true');
    expect(await replay.json()).toEqual(n04);
   }finally{await completedTab.close();}
+  await expect(rework.createCraftDraft(qaActor,{...nextOrigin,continueAfterReworkId:randomUUID()},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(rework.createCraftDraft(qaActor,{...nextOrigin,quantity:nextOrigin.quantity+1},randomUUID())).rejects.toMatchObject({statusCode:400});
+  expect((await rework.createCraftDraft(qaActor,origin,randomUUID())).value.reworkOrderId).toBe(draftId);
+  const repairTab=await h.open(qc.actorId,1165,{},`/ui/digital-production?workspace=quality&status=completed&search=${encodeURIComponent(qualityStyle)}`);
+  let remainder:typeof entered.value;
+  try{
+   await repairTab.page.getByRole('row').filter({hasText:`${problemReturn} 片 /`}).getByRole('link',{name:'查看原检查',exact:true}).click();
+   await repairTab.page.getByRole('group',{name:'续办本批剩余外厂返修',exact:true}).waitFor();
+   await repairTab.page.getByRole('textbox',{name:'本次实际返工片数',exact:true}).fill(String(nextOrigin.quantity));
+   const sent=repairTab.page.waitForResponse(response=>new URL(response.url()).pathname==='/api/rework-orders/craft-quality/drafts'&&response.request().method()==='POST');
+   await repairTab.page.getByRole('button',{name:'打开原返工草稿',exact:true}).click();
+   const issued=await sent;
+   expect(issued.status(),await issued.text()).toBe(201);
+   expect(issued.request().postDataJSON()).toEqual(nextOrigin);
+   remainder=await issued.json();
+  }finally{await repairTab.close();}
+  const remainderId=remainder.reworkOrderId;
+  expect(remainderId).not.toBe(draftId);
+  expect((await rework.createCraftDraft(qaActor,nextOrigin,randomUUID())).value.reworkOrderId).toBe(remainderId);
+  expect((await f.db.query(`SELECT rework_order_id,craft_rework_after_id,rework_quantity::int AS quantity FROM rework_orders
+    WHERE source_craft_qc_check_id=$1 ORDER BY craft_rework_after_id NULLS FIRST`,[current.checkId])).rows).toEqual([
+   {rework_order_id:draftId,craft_rework_after_id:null,quantity:outsidePieces},
+   {rework_order_id:remainderId,craft_rework_after_id:draftId,quantity:nextOrigin.quantity},
+  ]);
+  const allocationClient=await f.db.connect();
+  try{
+   await allocationClient.query('BEGIN');
+   const eventId=randomUUID(),requestId=randomUUID();
+   const audit=await allocationClient.query(`INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,
+     action,entity_type,entity_id,before_state,after_state)
+     SELECT $2,$3,actor_id,actor_roles,authorization_capability,'rework.draft.update',entity_type,entity_id,after_state,
+       after_state||jsonb_build_object('reworkQuantity',$4::int,'version',$5::int)
+     FROM operation_events WHERE entity_id=$1 AND action='rework.draft.create'`,
+    [remainderId,eventId,requestId,nextOrigin.quantity+1,remainder.version+1]);
+   expect(audit.rowCount).toBe(1);
+   await allocationClient.query("SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",[eventId,requestId]);
+   await expect(allocationClient.query(`UPDATE rework_orders SET rework_quantity=rework_quantity+1,version=version+1
+     WHERE rework_order_id=$1`,[remainderId])).rejects.toMatchObject({code:'23514',message:'rework quantity exceeds unallocated original craft pieces'});
+  }finally{await allocationClient.query('ROLLBACK');allocationClient.release();}
+  const secondSubmission=await submit.submit(qaActor,remainderId,{expectedVersion:remainder.version},randomUUID());
+  expect(secondSubmission.value).toMatchObject({status:'pending_process_configuration',attachmentIds:[],originalCraftQuality:{checkId:current.checkId,execution:'factory'}});
+  await configuration.activateExternalCraft(tail,remainderId,{expectedOrderVersion:secondSubmission.value.version},randomUUID());
+  const secondRepairSend=await nativeFlow.warehouseCraftRepair(warehouse,ready.id,{
+   ...await command(second!.stepId,factories[1]!,'send',in4.factId,nextOrigin.quantity),reworkId:remainderId,
+  },randomUUID());
+  const secondSent=secondRepairSend.facts.at(-1)!;
+  expect(secondSent.payload).toMatchObject({fromReturnId:in4.factId,warehouseMotion:{reworkId:remainderId,checkId:current.checkId}});
+  const secondRepairReturn=await nativeFlow.warehouseCraftRepair(warehouse,ready.id,{
+   ...await command(second!.stepId,factories[1]!,'return',secondSent.factId,nextOrigin.quantity),reworkId:remainderId,
+  },randomUUID());
+  const secondReturned=secondRepairReturn.facts.at(-1)!;
+  expect(secondReturned.payload).toMatchObject({sendFactId:secondSent.factId,lines:[{lineId,quantity:nextOrigin.quantity}],warehouseMotion:{reworkId:remainderId}});
+  await expect(execution.completeExecution(assigner,remainderId,{expectedOrderVersion:(await execution.list(assigner,remainderId)).orderVersion},randomUUID()))
+   .resolves.toMatchObject({value:{reworkStatus:'pending_order_review',externalRepair:{requiredQuantity:nextOrigin.quantity,returnedQuantity:nextOrigin.quantity}}});
+  await expect(rework.createCraftDraft(qaActor,{...nextOrigin,continueAfterReworkId:remainderId,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:400});
   const review=new WholeOrderReviewService(f.db),tailReviewer={...tail,authorizationCapability:'submission:audit',authorizationCapabilities:['submission:audit']},
    ie={...f.people.ie!,authorizationCapability:'process:review',authorizationCapabilities:['process:review']};
   const approval={expectedOrderVersion:n04Version,temporaryCoefficients:[]};

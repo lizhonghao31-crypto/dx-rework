@@ -14,7 +14,8 @@ import {FactoryBatchPanel} from './factory-batch-panel.js';
 import type {qualityRecordTarget} from './quality-workbench-route.js';
 
 type Target=Extract<ReturnType<typeof qualityRecordTarget>,{kind:'craft'}>;
-type Remedy={reworkId:string;execution:'factory'|'internal';status:string;quantity:number;canConfirmReinspection:boolean};
+type Remedy={reworkId:string;execution:'factory'|'internal';status:string;quantity:number;canConfirmReinspection:boolean;
+ remainingExternalQuantity?:number;priorReworks?:Array<{reworkId:string;quantity:number}>};
 const urls=createWebUrls(import.meta.env.BASE_URL);
 type Props={sheet:FactoryFlowSheet;target:Target;busy:boolean;paused:boolean;parentWriting:RefObject<boolean>;save:(path:string,body:Record<string,unknown>)=>Promise<void>;
  upload:(key:string,files:File[])=>Promise<void>;images:Record<string,string[]>;previews:Record<string,Array<{attachmentId:string;url:string}>>;
@@ -60,14 +61,16 @@ export function CraftOriginalQuality({sheet,target,busy,paused,parentWriting,sav
  useDigitalDetailNavigationGuard(unknown||!canCount&&Boolean(images[target.lineId]?.length)||(remaining>0||Boolean(remedy?.canConfirmReinspection))&&Boolean(images[photoKey]?.length||failed.length),posting,pendingWrite,'本次检查的图片或原返工草稿回执尚未确认，仍要离开？');
  if(!task||!batch||!line||!actual||!original)return <p role="alert">原工艺检查的任务、回仓或 PO 范围已变化，请返回质量中心重新读取。</p>;
  const canWrite=task.canExecute&&task.state==='ready'&&!task.paused&&!sheet.dispatched&&!paused;
- const max=latest?.quantityScope?.problemQuantity??0;
- const eligible=Boolean(canWrite&&max&&target.stepRef&&sheet.preparationId&&original.payload.warehouseMotion&&remedyRead?.key===proofKey&&!remedyError&&!remedy);
+ const continuation=remedy?.execution==='factory'&&(remedy.remainingExternalQuantity??0)>0?remedy.reworkId:null;
+ const max=remedy?(continuation?remedy.remainingExternalQuantity??0:0):latest?.quantityScope?.problemQuantity??0;
+ const eligible=Boolean(canWrite&&max&&target.stepRef&&sheet.preparationId&&original.payload.warehouseMotion&&remedyRead?.key===proofKey&&!remedyError);
  const create=async()=>{
   if(!eligible||!latest||writing.current)return;
   const quantity=Number(amount);
   if(!Number.isInteger(quantity)||quantity<=0||quantity>max){setLocalError(`请输入 1 至 ${max} 的实际返工片数。`);return;}
   const body=JSON.stringify({scope:{orderId:sheet.orderId,preparationId:sheet.preparationId,stepRef:target.stepRef,
-   returnFactId:target.returnFactId,lineId:target.lineId,checkId:latest.checkId},execution:mode,quantity});
+   returnFactId:target.returnFactId,lineId:target.lineId,checkId:latest.checkId},execution:continuation?'factory':mode,quantity,
+   ...(continuation?{continueAfterReworkId:continuation}:{})});
   if(draftAttempt.current?.body!==body)draftAttempt.current={body,key:createClientRequestId()};
   writing.current=true;setPosting(true);setLocalError('');
   try{
@@ -114,8 +117,9 @@ export function CraftOriginalQuality({sheet,target,busy,paused,parentWriting,sav
   {canWrite&&!canCount&&<FactoryBatchPanel sheet={sheet} busy={busy} paused={paused} action="qc" save={save} upload={upload} images={images} previews={previews}
    qcSource={{stepRef:target.stepRef,returnFactId:target.returnFactId,lineId:target.lineId}}/>}
   {eligible&&!reworkId&&<form onSubmit={event=>{event.preventDefault();void create();}}><fieldset disabled={posting}>
-   <legend>按本次已核实问题发起原返工</legend><p>原问题范围 {max} 片，开草稿不占用或放行实物。</p>
-   <Selector label="返工办理方" value={mode} isDisabled={unknown} options={[{value:'factory',label:'原工艺厂返修'},{value:'internal',label:'本厂尾部返工'}]} onChange={value=>{if(value==='factory'||value==='internal')setMode(value);}}/>
+   <legend>{continuation?'续办本批剩余外厂返修':'按本次已核实问题发起原返工'}</legend>
+   <p>{continuation?'同批剩余可返修':'原问题范围'} {max} 片，开草稿不占用或放行实物。</p>
+   {!continuation&&<Selector label="返工办理方" value={mode} isDisabled={unknown} options={[{value:'factory',label:'原工艺厂返修'},{value:'internal',label:'本厂尾部返工'}]} onChange={value=>{if(value==='factory'||value==='internal')setMode(value);}}/>}
    <TextInput label="本次实际返工片数" value={amount} isDisabled={unknown} onChange={setAmount}/><Button type="submit" label={unknown?'核对原返工草稿回执':'打开原返工草稿'}/>
   </fieldset></form>}
   {remedy?.canConfirmReinspection&&canWrite&&<form onSubmit={event=>{
@@ -126,5 +130,6 @@ export function CraftOriginalQuality({sheet,target,busy,paused,parentWriting,sav
     <Button type="submit" label="确认本批原返工复检合格"/>
   </fieldset></form>}
   {(reworkId??remedy?.reworkId)&&<a href={urls.pageUrl(`ui/tasks/${reworkId??remedy!.reworkId}`)+(back?'?'+new URLSearchParams({returnTo:back}):'')}>查看原返工单</a>}
+  {remedy?.priorReworks?.map(row=><a key={row.reworkId} href={urls.pageUrl(`ui/tasks/${row.reworkId}`)+(back?'?'+new URLSearchParams({returnTo:back}):'')}>查看此前返工（{row.quantity} 片）</a>)}
  </section>;
 }

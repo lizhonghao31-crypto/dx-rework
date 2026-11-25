@@ -1,7 +1,7 @@
 import {reworkTransitionRejection} from "../platform/business-rejection-guidance.js";
 import {linkDigitalRework} from "../production-platform/receiving-link-adapter.js";
 import {linkNewDigitalChild} from "../production-platform/child-link-repository.js";
-import {currentCraftProblemForRework,lockCraftProblemAuthority,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
+import {currentCraftProblemForRework,lockCraftProblemAuthority,readCraftRemediationScope,type CraftProblemLocator} from "../production-platform/quality-craft-problem-scope.js";
 import {lockGarmentReworkAuthority,lockOriginalGarmentReworkOrder,readGarmentReworkSource} from "../production-platform/garment-quality.js";
 import type {GarmentReworkSource} from '@dx-rework/contracts/order-closure';
 import { createHash, randomUUID } from "node:crypto";
@@ -59,7 +59,7 @@ type ReworkDraftSource = Readonly<{
   receivingBatchId: string | null;
   styleNo: string | null;
 }>;
-type OriginalCraftDraft=Readonly<{scope:CraftProblemLocator;execution:"internal"|"factory";quantity:number}>;
+type OriginalCraftDraft=Readonly<{scope:CraftProblemLocator;execution:"internal"|"factory";quantity:number;continueAfterReworkId?:string|undefined}>;
 type ReworkOrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
@@ -286,11 +286,13 @@ export class ReworkInitiationService {
       if(originalCraft&&craft){
         if(!Number.isSafeInteger(originalCraft.quantity)||originalCraft.quantity<1||originalCraft.quantity>craft.evidence.problemQuantity)
           throw new ApplicationError("VALIDATION_ERROR",`本次返工不能超过原工艺问题范围 ${craft.evidence.problemQuantity} 片`,400);
-        const active=(await client.query<{rework_order_id:string}>(
-          "SELECT rework_order_id FROM rework_orders WHERE source_craft_qc_check_id=$1 AND status NOT IN ('cancelled','deleted')",
-          [craft.evidence.checkId],
-        )).rows[0];
-        if(active)return this.getOwnedWithClient(client,actor.actorId,active.rework_order_id);
+        const anchor=originalCraft.continueAfterReworkId??null;
+        const scope=await readCraftRemediationScope(client,craft.evidence.checkId);
+        const existing=scope.rows.find(row=>row.after_id===anchor);
+        if(existing)return this.getOwnedWithClient(client,actor.actorId,existing.rework_id);
+        if(anchor&&(originalCraft.execution!=='factory'||scope.tip?.rework_id!==anchor||!scope.tip.finished))
+          throw new ApplicationError('CONFLICT','原外厂返修尚未完成或剩余范围已更新，请刷新原检查',409);
+        if(originalCraft.quantity>scope.available)throw new ApplicationError('VALIDATION_ERROR',`原工艺问题剩余可返工 ${scope.available} 片`,400);
       }
       const garment=originalGarment?await this.lockGarmentDraftSource(client,actor,originalGarment):null;
       if(garment){
@@ -361,8 +363,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}${craft?",source_craft_qc_check_id,craft_rework_execution":""}${garment?',source_garment_qc_event_id':''}
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""}${craft?",$24,$25":""}${garment?',$24':''})`,
+           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}${craft?",source_craft_qc_check_id,craft_rework_execution,craft_rework_after_id":""}${garment?',source_garment_qc_event_id':''}
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""}${craft?",$24,$25,$26":""}${garment?',$24':''})`,
         [
           reworkOrderId,
           next.styleNo,
@@ -388,7 +390,7 @@ export class ReworkInitiationService {
           next.specialProcessType,
           next.otherCraftDescription,
           ...(kind === "inhouse_finishing" ? [kind] : []),
-          ...(craft?[craft.evidence.checkId,originalCraft!.execution]:[]),
+          ...(craft?[craft.evidence.checkId,originalCraft!.execution,originalCraft!.continueAfterReworkId??null]:[]),
           ...(garment?[garment.sourceEventId]:[]),
         ],
       );

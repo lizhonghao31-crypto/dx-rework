@@ -80,6 +80,19 @@ export async function lockCraftProblemForOriginalRework(db:PoolClient,actor:Trus
  return currentCraftProblemForRework(db,locator,await lockCraftProblemAuthority(db,actor,locator));
 }
 
+/** One original command identity for each explicitly selected physical portion.
+ * Only a real, completed external work step exposes the next remaining scope. */
+export async function readCraftRemediationScope(db:Pick<PoolClient,'query'>,checkId:string){
+ const {rows}=await db.query<{rework_id:string;after_id:string|null;execution:'factory'|'internal';status:string;quantity:number;finished:boolean}>(`SELECT r.rework_order_id AS rework_id,
+    r.craft_rework_after_id AS after_id,r.craft_rework_execution AS execution,r.status,r.rework_quantity::int AS quantity,
+    r.craft_rework_execution='factory' AND craft_repair_can_continue(r.rework_order_id,$1) AS finished
+  FROM rework_orders r WHERE r.source_craft_qc_check_id=$1 AND r.status NOT IN ('cancelled','deleted') ORDER BY r.created_at,r.rework_order_id`,[checkId]);
+ const parents=new Set(rows.flatMap(row=>row.after_id?[row.after_id]:[]));
+ const tip=rows.find(row=>!parents.has(row.rework_id))??null;
+ const available=(await db.query<{remaining:number}>(`SELECT craft_repair_unallocated($1,NULL)::int AS remaining`,[checkId])).rows[0]?.remaining??0;
+ return {rows,tip,available};
+}
+
 export async function reworkCraftLocator(db:PoolClient,actor:TrustedActorContext,reworkId:string){
  // The staged source is immutable. Legacy rows (including schemas without
  // this field) retain the original command before any craft-specific reads.

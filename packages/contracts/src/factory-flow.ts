@@ -22,7 +22,8 @@ export type WarehouseCraftWorkChoice={id:string;kind:'send'|'return';stepRef:str
  factoryId:string;factoryName:string;reworkId?:string;lines:Array<{lineId:string;poNumber:string|null;color:string;remaining:number}>};
 export type WarehouseCraftWorkSheet={orderId:string;preparationId:string;revision:number;choices:WarehouseCraftWorkChoice[]};
 export const OriginalCraftReworkDraftSchema=z.object({scope:z.object({orderId:z.uuid(),preparationId:z.uuid(),stepRef:z.uuid(),returnFactId:z.uuid(),lineId:z.uuid(),checkId:z.uuid()}).strict(),
- execution:z.enum(['internal','factory']),quantity:craftCheckCount.positive()}).strict();
+ execution:z.enum(['internal','factory']),quantity:craftCheckCount.positive(),continueAfterReworkId:z.uuid().optional()}).strict()
+ .refine(input=>!input.continueAfterReworkId||input.execution==='factory',{path:['continueAfterReworkId'],message:'仅原外厂返修可续办同批剩余片数'});
 export const FactoryQcSchema=z.object({...base,stepRef:z.string().uuid().optional(),returnFactId:z.string().uuid().optional(),internalReworkId:z.uuid().optional(),checks:z.array(z.object({lineId:z.string().uuid(),result:z.enum(['合格','需处理']),allowDispatch:z.boolean().optional(),dispatchReason:z.string().trim().max(2000).optional(),problem:z.string().trim().max(2000).default(''),treatment:z.string().trim().max(2000).default(''),attachmentIds:z.array(z.string().uuid()).max(10).default([]),quantityScope:CraftCheckQuantityScopeSchema.optional()}).strict()).min(1).max(20)}).strict();
 export const FactoryDispatchSchema=z.object({...base,lines:FactoryScopeSchema.optional(),returnFactId:z.string().uuid().optional(),occurredAt:z.iso.datetime({offset:true}).optional(),supplierId:z.string().uuid()}).strict();
 export const FactoryFollowupSchema=z.object({...base,kind:z.enum(['船样寄出','工厂到料','到料清点']),lineIds:z.array(z.string().uuid()).min(1).max(100).optional(),occurredAt:z.iso.datetime({offset:true}).nullable(),trackingNumber:z.string().trim().max(200).default('')}).strict();

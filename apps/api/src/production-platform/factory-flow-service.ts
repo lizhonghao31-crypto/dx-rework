@@ -28,7 +28,7 @@ import {warehouseFactoryDispatchEvidence} from './warehouse-factory-dispatch-evi
 import {readWarehouseCraftFactoryBasis} from './warehouse-craft-factory-basis.js';
 import {availableWarehouseCraftQuantities,qualifyWarehouseCraftMovement,type WarehouseCraftMotion,type WarehouseCraftOccupationReader} from './warehouse-craft-movement.js';
 import {canReadExactOriginalQualityPhoto,exactUnboundQualityPhotos,factoryInspectionQualityAttachment,type OriginalQualityPhotoReference} from './original-quality-photo.js';
-import {countedCraftCheck,readCurrentCraftProblem,type CraftProblemLocator} from './quality-craft-problem-scope.js';
+import {countedCraftCheck,readCraftRemediationScope,readCurrentCraftProblem,type CraftProblemLocator} from './quality-craft-problem-scope.js';
 import {internalCraftReinspection} from './internal-craft-quality-reinspection.js';
 import {checkedExternalCraftRepairFact,lockExternalCraftRepair,readExternalCraftRepairProof} from './warehouse-craft-rework-return.js';
 type DB=Pick<Pool|PoolClient,'query'>;
@@ -167,16 +167,16 @@ export class FactoryFlowService{
    if(!task||sheet.preparationId!==locator.preparationId)return digitalForbidden();
    const evidence=await readCurrentCraftProblem(db,locator);
    if(!evidence){await db.query('COMMIT');return null;}
-   const original=(await db.query<{rework_id:string;execution:'factory'|'internal';status:string;quantity:number}>(`SELECT rework_order_id AS rework_id,
-     craft_rework_execution AS execution,status,rework_quantity::int AS quantity FROM rework_orders
-     WHERE source_craft_qc_check_id=$1 AND status NOT IN ('cancelled','deleted')`,[locator.checkId])).rows[0];
+   const allocation=await readCraftRemediationScope(db,locator.checkId),original=allocation.tip;
    if(!original){await db.query('COMMIT');return null;}
    const available=sheet.batches?.find(row=>row.factId===locator.returnFactId&&row.stepRef===locator.stepRef)?.rows.find(row=>row.lineId===locator.lineId)?.available??0;
    const proof=original.execution==='internal'&&task.state==='ready'&&!task.paused&&!sheet.dispatched?
     await internalCraftReinspection(db,{...locator,reworkId:original.rework_id,currentCheckId:locator.checkId},{unit:'片',inspectedQuantity:original.quantity,
       qualifiedQuantity:original.quantity,problemQuantity:0},available,evidence.actualReturned,false):null;
    await db.query('COMMIT');
-   return {reworkId:original.rework_id,execution:original.execution,status:original.status,quantity:original.quantity,canConfirmReinspection:Boolean(proof)};
+   return {reworkId:original.rework_id,execution:original.execution,status:original.status,quantity:original.quantity,canConfirmReinspection:Boolean(proof),
+    remainingExternalQuantity:original.execution==='factory'&&original.finished?allocation.available:0,
+    priorReworks:allocation.rows.filter(row=>row.rework_id!==original.rework_id).map(row=>({reworkId:row.rework_id,quantity:row.quantity}))};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async warehouseCraftWork(actor:TrustedActorContext,id:string):Promise<WarehouseCraftWorkSheet>{

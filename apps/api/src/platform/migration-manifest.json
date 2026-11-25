@@ -1307,6 +1307,10 @@
     {
       "version": "0312_original_garment_quality_rework",
       "checksum": "b9739700ff20970d5ae5a483d5f73178861a6ffe2436c036694ec09a1ceae954"
+    },
+    {
+      "version": "0313_external_craft_repair_continuation",
+      "checksum": "dbaaacbc6a45910c2d4a6a179573f0ff44d2253990e33374936de97f74ea9587"
     }
   ]
 }
