@@ -16,6 +16,7 @@ import {ProductionReportingService} from '../../apps/api/src/sourcing/production
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
 import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
 import {pendingReceivingView} from '../../apps/api/src/receiving/pending-receiving-view.js';
+import {qualityCenterFactoryDirectory} from '../../apps/api/src/production-platform/quality-center-factory-directory.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('original production completion and receipt correction facts',()=>{
@@ -81,10 +82,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const assignedQc=f.people.qc!,qcTask=(await flow.read(f.root,r.id)).tasks.find(task=>task.taskKind==='factory_production_qc')!;
    await new DigitalProductionTaskService(f.db).reassign(f.root,qcTask.taskId,assignedQc.actorId,randomUUID());
    const production=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
+   const factoryQuery={page:1,search:'TEST anchor factory',status:'open' as const};
+   const waiting=await qualityCenterFactoryDirectory(f.db,assignedQc,factoryQuery);
+   expect(waiting).toMatchObject({total:1,items:[{orderId:r.id,taskId:qcTask.taskId,productionId:production,factoryDecisionId:null,quantity:10,inspected:false}]});
+   await expect(qualityCenterFactoryDirectory(f.db,f.people.warehouse!,factoryQuery)).rejects.toMatchObject({statusCode:403});
    const reports=new ProductionReportingService(f.db),day='2026-11-21';await reports.report(f.root,production,{position:1,businessDate:day,quantity:10},randomUUID());
    expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{factoryDecisionId:null,expectedQuantity:10,
     factoryShipmentRecorded:false,balance:{actualDispatched:10,remaining:10,status:'pending'}}]);
    await reports.execute(f.root,production,'complete',{businessDate:day,confirmed:true},randomUUID());await reports.execute(f.root,production,'ship',{businessDate:day,confirmed:true},randomUUID());
+   const process=await flow.read(assignedQc,r.id);
+   await flow.productionQc(assignedQc,r.id,{expectedRevision:process.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),
+    checks:[{lineId:waiting.items[0]!.lineId,result:'合格',problem:''}],note:'TEST original factory inspection'},randomUUID());
+   expect(await qualityCenterFactoryDirectory(f.db,assignedQc,factoryQuery)).toMatchObject({total:0,items:[]});
+   expect(await qualityCenterFactoryDirectory(f.db,assignedQc,{...factoryQuery,status:'inspected'})).toMatchObject({total:1,items:[{productionId:production,result:'合格',inspected:true}]});
    const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
    const created=await receiving.create(receiver,{cuttingOrderId:r.cuts[0]!.cutting_order_id,productionOrderId:production,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]},randomUUID());
    const quality=(await garmentQuality(f.db,r.id))[0]!;
