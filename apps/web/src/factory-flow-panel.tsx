@@ -104,7 +104,7 @@ function CurrentFactoryFlowPanel({orderId,onClose,warehouseDispatchTask}:Props){
    <Button disabled={busy} onClick={()=>void guarded(reload).catch(()=>undefined)}>刷新原检查</Button></div>
   <h2>二次工艺回仓检查</h2>{error&&<p role="alert">{error}</p>}{readError&&<p role="alert">{readError}</p>}
   {loading&&<p role="status">正在读取原工艺检查…</p>}
-  {sheet&&<CraftOriginalQuality key={`${qualityTarget.returnFactId}:${qualityTarget.lineId}`} sheet={sheet} target={qualityTarget} busy={busy} paused={paused}
+  {sheet&&<CraftOriginalQuality key={`${qualityTarget.returnFactId}:${qualityTarget.lineId}`} sheet={sheet} target={qualityTarget} busy={busy} paused={paused} parentWriting={writing}
    save={save} upload={upload} images={images} previews={previews} failedUploads={failedUploads}
    removePendingPhoto={removePendingPhoto} clearFailed={key=>setFailedUploads(current=>({...current,[key]:[]}))}/>}
  </Surface></DocumentGuardContext.Provider>;

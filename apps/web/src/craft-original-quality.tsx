@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState,type RefObject} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Selector} from '@astryxdesign/core/Selector';
@@ -16,10 +16,10 @@ import type {qualityRecordTarget} from './quality-workbench-route.js';
 type Target=Extract<ReturnType<typeof qualityRecordTarget>,{kind:'craft'}>;
 type Remedy={reworkId:string;execution:'factory'|'internal';status:string;quantity:number;canConfirmReinspection:boolean};
 const urls=createWebUrls(import.meta.env.BASE_URL);
-type Props={sheet:FactoryFlowSheet;target:Target;busy:boolean;paused:boolean;save:(path:string,body:Record<string,unknown>)=>Promise<void>;
+type Props={sheet:FactoryFlowSheet;target:Target;busy:boolean;paused:boolean;parentWriting:RefObject<boolean>;save:(path:string,body:Record<string,unknown>)=>Promise<void>;
  upload:(key:string,files:File[])=>Promise<void>;images:Record<string,string[]>;previews:Record<string,Array<{attachmentId:string;url:string}>>;
  failedUploads:Record<string,File[]>;removePendingPhoto:(key:string,id:string)=>void;clearFailed:(key:string)=>void};
-export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,images,previews,failedUploads,removePendingPhoto,clearFailed}:Props){
+export function CraftOriginalQuality({sheet,target,busy,paused,parentWriting,save,upload,images,previews,failedUploads,removePendingPhoto,clearFailed}:Props){
  const task=sheet.tasks.find(row=>row.taskKind==='bulk_qc'&&row.taskId===target.taskId&&(row.stepRef??null)===target.stepRef);
  const batch=sheet.batches?.find(row=>row.factId===target.returnFactId&&(row.stepRef??null)===target.stepRef);
  const line=sheet.lines.find(row=>row.lineId===target.lineId),actual=batch?.rows.find(row=>row.lineId===target.lineId);
@@ -37,6 +37,7 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
  const [localError,setLocalError]=useState(''),[created,setCreated]=useState<{checkId:string;reworkId:string}|null>(null),[posting,setPosting]=useState(false),[unknown,setUnknown]=useState(false);
  const reworkId=created&&created.checkId===latest?.checkId?created.reworkId:null;
  const draftAttempt=useRef<{body:string;key:string}|null>(null),writing=useRef(false);
+ const pendingWrite=useMemo(()=>({get current(){return writing.current||parentWriting.current;}}),[parentWriting]);
  const photoKey=`quality:${target.returnFactId}:${target.lineId}`;
  const failed=failedUploads[photoKey]??[];
  const proofPath=task?.canExecute&&target.stepRef&&sheet.preparationId&&latest?.quantityScope?.problemQuantity?
@@ -56,7 +57,7 @@ export function CraftOriginalQuality({sheet,target,busy,paused,save,upload,image
   return()=>abort.abort();
  },[proofPath,proofKey,refresh]);
  const remaining=actual?.uninspectedQuantity??(!history.length?actual?.returned??0:0);
- useDigitalDetailNavigationGuard(unknown||!canCount&&Boolean(images[target.lineId]?.length)||(remaining>0||Boolean(remedy?.canConfirmReinspection))&&Boolean(images[photoKey]?.length||failed.length),posting,writing,'本次检查的图片或原返工草稿回执尚未确认，仍要离开？');
+ useDigitalDetailNavigationGuard(unknown||!canCount&&Boolean(images[target.lineId]?.length)||(remaining>0||Boolean(remedy?.canConfirmReinspection))&&Boolean(images[photoKey]?.length||failed.length),posting,pendingWrite,'本次检查的图片或原返工草稿回执尚未确认，仍要离开？');
  if(!task||!batch||!line||!actual||!original)return <p role="alert">原工艺检查的任务、回仓或 PO 范围已变化，请返回质量中心重新读取。</p>;
  const canWrite=task.canExecute&&task.state==='ready'&&!task.paused&&!sheet.dispatched&&!paused;
  const max=latest?.quantityScope?.problemQuantity??0;

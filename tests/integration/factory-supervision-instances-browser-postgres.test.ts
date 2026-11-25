@@ -142,10 +142,19 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
      checks:[{lineId:line.lineId,result:'需处理',problem:'TEST actual issue, fault quantity not established'}]},
    });
    expect(inspected.status(),await inspected.text()).toBe(200);
-   expect((await inspected.json()).productionChecks).toEqual([expect.objectContaining({lineId:line.lineId,productionId:production,
+   const inspectedPlant=await inspected.json(),savedHistory=inspectedPlant.productionInspectionHistory[0];
+   expect(inspectedPlant.productionChecks).toEqual([expect.objectContaining({lineId:line.lineId,productionId:production,
     result:'需处理',problem:'TEST actual issue, fault quantity not established'})]);
+   expect(savedHistory).toMatchObject({productionId:production,factoryDecisionId:null,checks:[{lineId:line.lineId}]});
+   expect(savedHistory.checks[0]).not.toHaveProperty('attachmentIds');
    await tab.page.reload();
    await tab.page.getByText('TEST actual issue, fault quantity not established',{exact:true}).waitFor();
+   const historyEntry=tab.page.getByText('工厂检查历史',{exact:true});
+   await historyEntry.click();
+   const history=historyEntry.locator('..');
+   await history.getByText('TEST actual issue, fault quantity not established',{exact:false}).waitFor();
+   expect(await history.innerText()).toContain(savedHistory.operator);
+   expect(await history.innerText()).toContain(new Date(savedHistory.occurredAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}));
    expect(await tab.page.getByRole('button',{name:/返工/}).count()).toBe(0);
    expect((await f.db.query('SELECT count(*)::int AS count FROM rework_orders')).rows[0].count).toBe(beforePlant);
    await tab.page.getByRole('button',{name:'返回来源',exact:true}).click();
@@ -500,8 +509,15 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
     await panel.getByRole('button',{name:'保存本批检查',exact:true}).click();
     const saved=await response;expect(saved.status(),await saved.text()).toBe(200);return saved;
    };
-   const photo=await routeIsolatedQualityPhotos(continuation.context,f.storage);
-   await panel.getByLabel('上传质检报告图片',{exact:true}).setInputFiles(photo);
+   const uploadStarted=Promise.withResolvers<void>(),uploadProceed=Promise.withResolvers<void>();
+   const photo=await routeIsolatedQualityPhotos(continuation.context,f.storage,()=>{uploadStarted.resolve();return uploadProceed.promise;});
+   try{
+    await panel.getByLabel('上传质检报告图片',{exact:true}).setInputFiles(photo);
+    await uploadStarted.promise;
+    await continuation.page.locator('nav[aria-label="主导航"] a[href="/ui/my-tasks"]').click();
+    expect(new URL(continuation.page.url()).searchParams.get('qualityReturn')).toBe(in3.factId);
+    expect(await continuation.page.locator('[data-system-dialog-kind="confirm"]').count()).toBe(0);
+   }finally{uploadProceed.resolve();}
    await panel.getByRole('img',{name:'待提交质检报告 1',exact:true}).waitFor();
    const firstResponse=await runCheck(firstInspected),firstPayload=firstResponse.request().postDataJSON();
    expect(firstPayload.checks[0].attachmentIds).toHaveLength(1);
