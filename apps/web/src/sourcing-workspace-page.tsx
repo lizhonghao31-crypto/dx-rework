@@ -3,7 +3,7 @@ import {registerSessionInvalidator} from "./auth-session.js";
 import { SourcingPriceReapplicationPanel,emptySourcingPriceReapplicationDraft } from "./sourcing-price-reapplication.js";
 import { SourcingPriceReapplicationStateSchema } from "@dx-rework/contracts";
 import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
-import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
+import {request,requestSubmission,SourcingRequestError,type ApiSchema} from "./sourcing-api-client.js";
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
 import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
 import { SearchableSelect } from "./search-select.js";
@@ -12,7 +12,7 @@ import { PoDateSummary } from "./po-delivery-dates.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import { type PoDeliveryDate } from "@dx-rework/contracts";
 import {FactorySettlementPanel} from "./factory-settlement-panel.js";
-import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
+import { contractReturnFileError, finishContractReturnUpload, submitSourcingContractReturn, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import {readBudgetSourcingDraft,saveBudgetSourcingDraft,clearBudgetSourcingDraft,recoverBudgetSourcingManual,type BudgetSourcingDraft} from "./budget-sourcing-draft.js";
 import {registerInternalNavigationGuard,navigateInternalPage} from "./internal-navigation.js";
 import type {BudgetSheet} from "@dx-rework/contracts/digital-budget";
@@ -43,7 +43,6 @@ import {
   SourcingStyleCatalogSchema,
   SourcingMerchandiserOptionsSchema,
   SourcingContractStateResponseSchema,
-  SourcingContractReturnResponseSchema,
   SourcingProductionOrderSchema,
   SourcingFactoryListResponseSchema,
   duplicateSourcingLineMessage,
@@ -132,7 +131,6 @@ const ACTIVE_NAVIGATION = {
 } as const;
 
 type WorkspaceView = keyof typeof ACTIVE_NAVIGATION;
-type ApiSchema<T> = Readonly<{ parse(value: unknown): T }>;
 type UploadedImage = Readonly<{
   attachmentId: string;
   filename: string;
@@ -162,40 +160,6 @@ type LocalSourcingDraft = Readonly<{
 }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
-
-class SourcingRequestError extends SubmissionRequestError {
-  constructor(message: string, code?: string, status = 400, readonly requestId?: string) {
-    super(message, code, status);
-  }
-}
-
-const request = async <T,>(
-  path: string,
-  schema: ApiSchema<T>,
-  init: RequestInit = {},
-): Promise<T> => {
-  const response = await feedbackFetch(apiUrl(path), {
-    credentials: "include",
-    cache: "no-store",
-    ...init,
-    headers: {
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  const failureBody = response.ok ? null : await response.clone().json().catch(() => null) as { error?: { requestId?: unknown } } | null;
-  const candidateRequestId = failureBody?.error?.requestId;
-  const requestId = typeof candidateRequestId === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(candidateRequestId) ? candidateRequestId : undefined;
-  return feedbackJson(response,init.method??'GET',value=>schema.parse(value),(message,code,status)=>new SourcingRequestError(message,code,status,requestId));
-};
-
-const requestSubmission = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit): Promise<T> => {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 30_000);
-  try { return await request(path, schema, { ...init, signal: controller.signal }); }
-  finally { window.clearTimeout(timeout); }
-};
 
 const requestWithStyleCheck = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit, lines: readonly SourcingStyleIdentity[], submission = false, onConfirmedBody?:(body:string)=>void): Promise<T> => {
   const send = submission ? requestSubmission : request;
@@ -1464,9 +1428,7 @@ function OrderDetailPage({
     && (user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id));
   const saveContractReturn = async (submission: {attachmentIds:string[];key:string;expectedContractDocumentId?:string|null},identity:SourcingDetailIdentity):Promise<void> => {
     if(!read.owns(identity))return;
-    const result=await requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{
-      method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds,expectedContractDocumentId:submission.expectedContractDocumentId}),
-    });
+    const result=await submitSourcingContractReturn(sourcingCaseId,submission);
     if(!read.owns(identity))return;
     read.apply(identity,{contractReturn:result});
     contractPendingUpload.current=null;

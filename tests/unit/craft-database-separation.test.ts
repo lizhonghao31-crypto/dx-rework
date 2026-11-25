@@ -12,6 +12,7 @@ describe("sourcing craft database separation", () => {
       sourcingRead,
       routes,
       sourcingPage,
+      sourcingTransport,
       masterDataPage,
       requirement,
     ] = await Promise.all([
@@ -22,6 +23,7 @@ describe("sourcing craft database separation", () => {
       readFile("apps/api/src/sourcing/sourcing-case-read.ts", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
+      readFile("apps/web/src/sourcing-api-client.ts", "utf8"),
       readFile("apps/web/src/master-data-page.tsx", "utf8"),
       readFile("docs/requirements/startup-requirements-v1.2.md", "utf8"),
     ]);
@@ -58,7 +60,9 @@ describe("sourcing craft database separation", () => {
     expect(routes).toContain('"sourcing:inquiry:create"');
 
     expect(sourcingPage).toContain('requestSubmission("master-data/crafts/ensure"');
-    expect(sourcingPage).toContain('return await request(path, schema, { ...init, signal: controller.signal });');
+    expect(sourcingPage).toMatch(/import\s*\{[^}]*\brequestSubmission\b[^}]*\}\s*from\s*"\.\/sourcing-api-client\.js"/);
+    expect(sourcingTransport).toContain('return await request(path, schema, { ...init, signal: controller.signal });');
+    expect(sourcingTransport).toContain('controller.abort()');
     expect(sourcingPage).toContain("craftNames: names");
     expect(sourcingPage).toContain("craftIds: crafts.map");
     expect(sourcingPage).not.toContain("processes: normalizedProcesses");

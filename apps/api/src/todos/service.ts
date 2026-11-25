@@ -1,7 +1,8 @@
-import {todoSelectionKey,type TodoSelection} from './selection.js';
+import {todoSelectionKey,type TodoSelection,type TodoSelectionKey,type MerchandiserTodoSelection} from './selection.js';
 import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {sourcingTodoPresentation} from "./sla-presentation.js";
-import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow,businessScopeKey} from '../acceptance-clock/business-time.js';
+import {readJourneySelectionAccess} from '../production-platform/journey-selection-access.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
 import {sourcingTodoSla,type SourcingOrderTimeWindow} from "../production-platform/sourcing-todo-sla.js";
 import {isDeepStrictEqual} from 'node:util';
@@ -11,6 +12,12 @@ import { globalTodoSearch } from "./global-search.js";
 import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
+import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
+import { isRootActor } from "../access/business-authority.js";
+import {merchandiserWorkCandidate,merchandiserWorkPage,originalMerchandiserTaskKinds,originalMerchandiserTodoCategories,type AuthorizedMerchandiserWorkItem} from '../production-platform/merchandiser-work-candidates.js';
+import {readMerchandiserTaskProgress} from '../production-platform/merchandiser-task-progress.js';
+import {readMerchandiserFactoryNames,readMerchandiserOriginalOrders} from '../production-platform/merchandiser-original-orders.js';
+import type {MerchandiserCraftCommunication} from '@dx-rework/contracts';
 import { randomUUID } from "node:crypto";
 import {developmentRushKey,readDevelopmentOrderRush,type RushIdentity} from '../production-platform/development-order-rush.js';
 
@@ -290,13 +297,14 @@ const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
 export class TodoService {
   private slaAvailability?:Promise<boolean>;
   private async appliedSlaAvailable(db:Pick<Pool,"query">){return this.slaAvailability??=db.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation").then(r=>!!r.rows[0]?.relation);}
-  private async contextSql(){const sql=await this.appliedSlaAvailable(this.database)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
+  private async contextSql(db:Pick<Pool,'query'>=this.database){const sql=await this.appliedSlaAvailable(db)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(db)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
   constructor(
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
     private readonly production?: Pick<ProductionClosureService,"todos"> & Partial<Pick<ProductionClosureService,'markRead'|'todo'|'todoSelections'|'todoCounts'>>,
-    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean;todoId?:string}):Promise<TodoSelection[]>;todoCounts?(actor:TrustedActorContext):Promise<{totalCount:number;pendingCount:number;unreadCount:number}>},
+    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean;todoId?:string}):Promise<TodoSelection[]>;todoCounts?(actor:TrustedActorContext):Promise<{totalCount:number;pendingCount:number;unreadCount:number}>;
+      merchandiserTodoSelections?(db:PoolClient,actor:TrustedActorContext):Promise<MerchandiserTodoSelection[]>},
   ) {}
 
   private async providerSelections(provider:{todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean}):Promise<TodoSelection[]>}|undefined,actor:TrustedActorContext,metadata:boolean):Promise<TodoSelection[]> {
@@ -316,6 +324,129 @@ export class TodoService {
       const identity=identities[index],key=identity&&developmentRushKey(identity);
       return key&&rush.has(key)?{...todo,orderRush:true as const}:todo;
     });
+  }
+
+  /** Original actionable sources only. Other workbench states come from the
+   * original business domain, never from guessing what a missing todo means. */
+  private async workbenchMerchandiserRoles(actor:TrustedActorContext,policy:DigitalProductionAccessPolicy){
+    const root=isRootActor(actor);
+    const order=root||actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser');
+    const craft=root||actor.actorRoles.includes('embroidery_washing_merchandiser')&&await policy.activeRole(actor.actorId,'embroidery_washing_merchandiser');
+    if(!order&&!craft)throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+    return {order,craft};
+  }
+  async merchandiserActionSources(actor:TrustedActorContext) {
+    this.requireCapability(actor,'todo:view');
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(db));
+      const sources=await this.readMerchandiserActionSources(db,actor,roles);
+      await db.query('COMMIT');return sources;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  private async readMerchandiserActionSources(db:PoolClient,actor:TrustedActorContext,roles:{order:boolean;craft:boolean}) {
+    const context=roles.order?await this.contextSql(db):null;
+    // A workbench card uses the original choice key, not a hydrated todo.
+    // Complete authorization and search happen in the caller's one snapshot.
+    const native=await this.digital?.merchandiserTodoSelections?.(db,actor)??[];
+    const stored=context?(await db.query<TodoPageRow>(`WITH todo_view AS (${context})
+        SELECT todo_view.* FROM todo_view WHERE recipient_user_id=$1 AND required_role='order_merchandiser'
+         AND entity_type='sourcing_case' AND todo_type='business_action' AND status='pending' AND category=ANY($2::text[])
+         AND route_descriptor->>'routeName'='sourcing_detail' AND route_descriptor->>'entityId'=entity_id
+         AND member_module_can_write($1,'sourcing')
+         AND required_capability IS NOT NULL AND todo_user_has_direct_role($1,'order_merchandiser',required_capability)
+         AND (category<>'sourcing_merchandiser_correction' OR sourcing_status='pending_merchandiser_correction')`,
+      [actor.actorId,originalMerchandiserTodoCategories])).rows:[];
+    const peopleTasks=native.filter(item=>item.key.category==='digital_task'&&item.key.route.routeName==='digital_production_task');
+    const identities=peopleTasks.length?await db.query<{task_id:string;task_kind:string;order_id:string|null;preparation_id:string|null;
+      route_version:number|null;steps:string[]}>(`SELECT t.task_id,a.task_kind,a.production_order_id AS order_id,
+        route.preparation_id,route.route_schema_version AS route_version,
+        ARRAY(SELECT DISTINCT p.step_id FROM digital_timeline_task_positions p WHERE p.task_id=t.task_id
+          AND p.route_ref=route.preparation_id AND p.step_id IS NOT NULL) AS steps
+      FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      LEFT JOIN digital_factory_routes route ON a.task_kind='process_logistics' AND route.production_order_id=a.production_order_id
+        AND (t.route_instance_id IS NULL OR t.route_instance_id=route.preparation_id)
+      WHERE t.task_id=ANY($1::uuid[]) AND a.assignee_id=$3 AND (($4 AND a.task_kind=ANY($2::text[]) AND a.required_role='order_merchandiser')
+        OR ($5 AND a.task_kind='process_logistics' AND a.required_role='embroidery_washing_merchandiser'))`,
+    [peopleTasks.map(item=>item.key.todoId),originalMerchandiserTaskKinds,actor.actorId,roles.order,roles.craft]):{rows:[]};
+    const taskById=new Map(identities.rows.map(row=>{
+      const craftCommunication:MerchandiserCraftCommunication|undefined=row.task_kind==='process_logistics'&&row.order_id&&row.preparation_id&&
+       (row.route_version===2?row.steps.length===1:row.steps.length===0)?{taskId:row.task_id,orderId:row.order_id,preparationId:row.preparation_id,stepRef:row.steps[0]??null}:undefined;
+      return [row.task_id,{taskId:row.task_id,taskKind:row.task_kind,...(craftCommunication?{craftCommunication}:{})}] as const;
+    }));
+    const selected=native.filter(item=>taskById.has(item.key.todoId)||roles.order&&originalMerchandiserTodoCategories.includes(item.key.category));
+    const originals=[...stored.map(row=>{const todo=todoResponse(row);return {key:todoSelectionKey(todo),sourcingCaseId:todo.entityId,rushIdentity:undefined};}),
+      ...selected.map(item=>({...item,sourcingCaseId:undefined}))];
+    const actions=new Map<string,{candidate:NonNullable<ReturnType<typeof merchandiserWorkCandidate>>;key:TodoSelectionKey;identity:RushIdentity|null;sourcingCaseId:string|undefined}>();
+    for(const {key,rushIdentity,sourcingCaseId} of originals){
+      const candidate=merchandiserWorkCandidate(actor,key,taskById.get(key.todoId));
+      if(!candidate)continue;
+      const previous=actions.get(key.todoId);
+      if(previous&&!isDeepStrictEqual(previous.candidate,candidate))throw new ApplicationError('CONFLICT','原跟单工作身份已变化，请重新读取',409);
+      const identity=rushIdentity??null;
+      if(previous?.identity&&identity&&!isDeepStrictEqual(previous.identity,identity))throw new ApplicationError('CONFLICT','原跟单工作范围已变化，请重新读取',409);
+      actions.set(key.todoId,{candidate,key,identity:identity??previous?.identity??null,sourcingCaseId:sourcingCaseId??previous?.sourcingCaseId});
+    }
+    return [...actions.values()];
+  }
+
+  /** Request-local directory of current original actions. Order details are
+   * supplemental and may never widen a task or contract recipient's scope. */
+  async merchandiserActionPage(actor:TrustedActorContext,filter:{kind?:AuthorizedMerchandiserWorkItem['kind']|undefined;state?:AuthorizedMerchandiserWorkItem['state'];search:string;page:number}){
+    this.requireCapability(actor,'todo:view');
+    const state=filter.state??'mine',progress=state==='waiting'||state==='completed';
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const roles=await this.workbenchMerchandiserRoles(actor,new DigitalProductionAccessPolicy(db));
+      const audience=roles.order?{}:{craftOnly:true as const};
+      if(progress){
+        const rows=roles.order?await readMerchandiserTaskProgress(db,actor,state):[];
+        await db.query('COMMIT');
+        return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};
+      }
+      const actions=await this.readMerchandiserActionSources(db,actor,roles);
+      const cases=actions.flatMap(row=>row.sourcingCaseId?[row.sourcingCaseId]:[]);
+      const linked=cases.length?(await db.query<{child_id:string;production_order_id:string}>(`SELECT child_id,production_order_id
+        FROM digital_production_child_links WHERE module='sourcing' AND child_id=ANY($1::uuid[])`,[cases])).rows:[];
+      const originalCaseOrder=new Map(linked.map(row=>[row.child_id,row.production_order_id]));
+      const parent=(row:typeof actions[number])=>row.identity?.orderId??(row.sourcingCaseId?originalCaseOrder.get(row.sourcingCaseId):undefined);
+      const scopes=[...new Set(actions.flatMap(row=>{const id=parent(row);return id?[id]:[];}))].map(id=>({kind:'order' as const,id}));
+      const {resources}=await readJourneySelectionAccess(db,actor,scopes);
+      const allowed=scopes.flatMap(scope=>resources.get(businessScopeKey(scope))?.fullOrder?[scope.id]:[]);
+      const deep=allowed.length?(await db.query<{id:string;source_id:string|null;issued_number:string|null;style_no:string;customer_code:string;po_numbers:string[]}>(`SELECT o.production_order_id AS id,
+        o.source_id,o.design_style_no AS style_no,o.customer_code,CASE WHEN s.workbench_generated_number AND s.design_style_no=o.design_style_no THEN s.design_style_no END AS issued_number,
+        ARRAY(SELECT p.po_number FROM digital_production_po_lines p WHERE p.production_order_id=o.production_order_id AND p.po_number IS NOT NULL ORDER BY p.position,p.line_id) AS po_numbers
+        FROM digital_production_orders o LEFT JOIN digital_production_sources s ON s.source_id=o.source_id WHERE o.production_order_id=ANY($1::uuid[])`,[allowed])).rows:[];
+      const byId=new Map(deep.map(row=>[row.id,row]));
+      const authorized=[...deep.map(row=>({orderId:row.id,sourceId:row.source_id})),...actions.flatMap(row=>row.identity&&!row.identity.orderId?[row.identity]:[])];
+      const rush=await readDevelopmentOrderRush(db,authorized);
+      const factories=await readMerchandiserFactoryNames(db,actor,deep.map(row=>row.id));
+      const responsibleName=actions.length?(await db.query<{display_name:string|null}>('SELECT display_name FROM app_users WHERE id=$1',[actor.actorId])).rows[0]?.display_name??null:null;
+      const rows=actions.filter(row=>row.candidate.craftCommunication?roles.craft:roles.order).map((row):AuthorizedMerchandiserWorkItem=>{
+        const {candidate,key:choice,identity}=row,order=byId.get(parent(row)??'');
+        const context=choice.orderContext,key=order?'order:'+order.id:identity&&developmentRushKey(identity);
+        return {...candidate,state:choice.category==='sourcing_merchandiser_correction'?'returned':'mine',orderNumber:order?.issued_number??context?.orderNo??null,
+          styleNo:order?.style_no??context?.styleNo??null,...(order?{originalOrderId:order.id}:{}),
+          customer:order?.customer_code??choice.preorderSearch?.customer??null,poNumbers:order?.po_numbers??choice.preorderSearch?.poNumbers??context?.poNumbers??[],
+          factory:context?.supplierName??(order&&factories.get(order.id)?.join('、')||null),urgent:Boolean(key&&rush.has(key)),responsibleName};
+      });
+      await db.query('COMMIT');
+      return {...merchandiserWorkPage(rows,{search:filter.search,page:filter.page,...(filter.kind?{kind:filter.kind}:{}),state}),...audience};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+
+  async merchandiserOrderPage(actor:TrustedActorContext,filter:{search:string;page:number}){
+    this.requireCapability(actor,'todo:view');
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      if(!isRootActor(actor)&&(!actor.actorRoles.includes('order_merchandiser')||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser')))
+        throw new ApplicationError('FORBIDDEN','当前身份没有跟单工作查看资格',403);
+      const result=await readMerchandiserOriginalOrders(db,actor,filter);
+      await db.query('COMMIT');return result;
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
 
   async listForActor(

@@ -83,6 +83,13 @@ export class OrderTimePlanRepository{
    AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2 ORDER BY revision DESC LIMIT 1`,[resource.kind,resource.id])).rows[0];
   return row?saved(row):null;
  }
+ /** Batch the same latest adopted snapshots for already-authorized orders. */
+ async currentOrders(ids:readonly string[]):Promise<ReadonlyMap<string,StoredOrderTimePlan>>{
+  if(!ids.length||!await this.available())return new Map();
+  const {rows}=await this.db.query<Row>(`SELECT DISTINCT ON (production_order_id) * FROM digital_order_time_plan_versions
+   WHERE resource_kind='order' AND production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision DESC`,[[...new Set(ids)]]);
+  return new Map(rows.map(row=>[row.production_order_id!,saved(row)]));
+ }
  async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string},refreshLinked?:(resource:BusinessTimeScope,changes:Record<string,OrderTimeRule>)=>Promise<LinkedOrderTimeQualification>):Promise<StoredOrderTimePlan>{
   const previous=await this.current(input.resource),result=await this.append(input,'arrangement');
   if(!previous||result.revision<=previous.revision)return result;

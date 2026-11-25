@@ -3,6 +3,7 @@ import { z } from "zod";
 import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
+import {MerchandiserOrderQuerySchema,MerchandiserOrderResponseSchema,MerchandiserWorkQuerySchema,MerchandiserWorkResponseSchema} from '@dx-rework/contracts';
 import {
   TodoListResponseSchema,
   TodoMineParamsSchema,
@@ -45,7 +46,8 @@ export type TodoHttpDependencies = Readonly<{
   transferContractReconciliation?: SourcingTransferContractReconciliation;
   service: Pick<TodoService,
     "getForActor" | "listForActor" | "countIndicatorForActor"
-      | "listRoutingExceptionsForActor" | "transferRoutingException"> & Partial<Pick<TodoService,'markReadForActor'>>;
+      | "listRoutingExceptionsForActor" | "transferRoutingException"> & Partial<Pick<TodoService,'markReadForActor'|'merchandiserActionPage'|'merchandiserOrderPage'>>;
+  merchandiserWorkbench?:boolean;
 }>;
 
 export function registerTodoRoutes(
@@ -93,6 +95,16 @@ export function registerTodoRoutes(
       requestId: request.id,
     };
   };
+  if(dependencies.merchandiserWorkbench&&dependencies.service.merchandiserActionPage)app.get('/todos/merchandiser/current',async(request,reply)=>{
+    const current=await actor(request,'todo:view'),input=parse(MerchandiserWorkQuerySchema,request.query);
+    reply.header('cache-control','private, no-store');
+    return MerchandiserWorkResponseSchema.parse(await dependencies.service.merchandiserActionPage!(current,input));
+  });
+  if(dependencies.merchandiserWorkbench&&dependencies.service.merchandiserOrderPage)app.get('/todos/merchandiser/orders',async(request,reply)=>{
+    const current=await actor(request,'todo:view'),input=parse(MerchandiserOrderQuerySchema,request.query);
+    reply.header('cache-control','private, no-store');
+    return MerchandiserOrderResponseSchema.parse(await dependencies.service.merchandiserOrderPage!(current,input));
+  });
 
   app.get<{
     Querystring: { module?: string; page?: string; q?: string };

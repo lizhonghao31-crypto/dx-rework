@@ -16,11 +16,23 @@ export function contractReturnFileError(files: readonly Pick<File, "type" | "siz
 export async function finishContractReturnUpload(
   pending: ContractReturnUpload,
   upload: (file: File) => Promise<string>,
-): Promise<{ attachmentIds: string[]; key: string; expectedContractDocumentId?: string | null }> {
+): Promise<SourcingContractReturnSubmission> {
   while (pending.attachmentIds.length < pending.files.length) {
     const file = pending.files[pending.attachmentIds.length]!;
     pending.attachmentIds.push(await upload(file));
   }
   return { attachmentIds: [...pending.attachmentIds], key: pending.key,
     ...(pending.expectedContractDocumentId !== undefined ? {expectedContractDocumentId:pending.expectedContractDocumentId} : {}) };
+}
+import {SourcingContractReturnResponseSchema} from '@dx-rework/contracts';
+import {requestSubmission} from './sourcing-api-client.js';
+
+export type SourcingContractReturnSubmission={attachmentIds:string[];key:string;expectedContractDocumentId?:string|null};
+
+
+export function submitSourcingContractReturn(sourcingCaseId:string,submission:SourcingContractReturnSubmission){
+  return requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{
+    method:'POST',headers:{'idempotency-key':submission.key},
+    body:JSON.stringify({attachmentIds:submission.attachmentIds,expectedContractDocumentId:submission.expectedContractDocumentId}),
+  });
 }

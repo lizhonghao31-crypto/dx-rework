@@ -16,6 +16,8 @@ import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
 import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {readWorkbenchFactoryCommunication} from '../../apps/api/src/production-platform/workbench-factory-communication.js';
 import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
@@ -29,6 +31,7 @@ import {SlaOrderApplicationService} from '../../apps/api/src/production-platform
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
+import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sample-service.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('native factory shipment date ranges in authorized cockpit reads',()=>{
@@ -56,6 +59,44 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  let sundayScene:string,sundayReady:Awaited<ReturnType<typeof prepare>>;
  beforeAll(async()=>{sundayScene=await f.scene('2026-12-06T05:00:00.000Z');sundayReady=await prepare(work=>f.runtime.run(sundayScene,f.root,work));},120000);
+ it('reads the exact assigned process communication in the workbench without moving any cut pieces',async()=>{
+  const scene=await f.scene('2026-11-20T05:00:00Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const original=await f.bulkReady('印花'),cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[original.caseId])).rows[0]!;
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await original.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),existing=await flow.read(f.root,original.id),task=existing.tasks.find(row=>row.taskKind==='process_logistics')!;
+   const operator=Object.values(f.people).find(person=>person.actorId!==f.root.actorId&&person.actorRoles.includes(task.requiredRole))!;
+   await new DigitalProductionTaskService(f.db).reassign(f.root,task.taskId,operator.actorId,randomUUID());
+   const scope={orderId:original.id,preparationId:existing.preparationId!,taskId:task.taskId,stepRef:task.stepRef??null};
+   const before=await readWorkbenchFactoryCommunication(flow,operator,scope);expect(before).toMatchObject({canRecord:true,facts:[]});
+   const note='TEST 实际工艺沟通，不产生实物出入库',at=businessNow().toISOString();
+   await flow.logistics(operator,original.id,{expectedRevision:before.expectedRevision,kind:'工艺沟通',note,occurredAt:at,supplier:'TEST 工艺厂',
+    ...(scope.stepRef?{stepRef:scope.stepRef}:{})},randomUUID());
+   const result=await readWorkbenchFactoryCommunication(flow,operator,scope);
+   expect(result).toMatchObject({scope,facts:[{note,occurredAt:at,supplier:'TEST 工艺厂'}]});
+   await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,taskId:randomUUID()})).rejects.toMatchObject({statusCode:404});
+   await expect(readWorkbenchFactoryCommunication(flow,operator,{...scope,preparationId:randomUUID()})).rejects.toMatchObject({statusCode:404});
+   expect((await flow.read(operator,original.id)).facts.map(row=>row.kind)).toEqual(['工艺沟通']);
+   const merch={...f.people.merchandiser!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+   const todos=new TodoService(f.db),search=(await f.db.query('SELECT design_style_no FROM digital_production_orders WHERE production_order_id=$1',[original.id])).rows[0].design_style_no;
+   const waiting=await todos.merchandiserActionPage(merch,{state:'waiting',search,page:1});
+   expect(waiting.items).toContainEqual(expect.objectContaining({state:'waiting',itemId:task.taskId,route:{routeName:'digital_production_task',entityId:task.taskId,todoId:task.taskId},responsibleName:expect.any(String)}));
+   const byOrder=await todos.merchandiserActionPage(merch,{state:'waiting',search:original.id,page:1});
+   expect(byOrder.items).toContainEqual(expect.objectContaining({itemId:task.taskId,originalOrderId:original.id,orderNumber:null,styleNo:search}));
+   const wrong={...f.people.warehouse!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+   await expect(todos.merchandiserActionPage(wrong,{state:'waiting',search,page:1})).rejects.toMatchObject({statusCode:403});
+   const previous=await todos.merchandiserActionPage(merch,{state:'completed',kind:'delivery',search,page:1});
+   expect(previous).toEqual({page:1,items:[],total:0});
+   const shipSample=new ShipSampleService(f.db);
+   await shipSample.record(merch,original.id,{occurredAt:at,trackingNumber:'TEST-SAMPLE-FOLLOWUP',note:'TEST original parcel for all POs'},randomUUID());
+   const shipped=(await f.db.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[original.id])).rows[0].task_id;
+   const completed={page:1,total:1,items:[{itemId:shipped,state:'completed',route:{entityId:shipped},originalOrderId:original.id,orderNumber:null,styleNo:search}]};
+   expect(await todos.merchandiserActionPage(merch,{state:'completed',kind:'delivery',search,page:1})).toMatchObject(completed);
+   expect(await todos.merchandiserActionPage(merch,{state:'completed',kind:'delivery',search:original.id,page:1})).toMatchObject(completed);
+   expect((await todos.merchandiserActionPage(merch,{state:'waiting',search,page:1})).items.map(row=>row.itemId)).not.toContain(shipped);
+  });
+ });
  it('does not treat earlier native factory QC as production completion',async()=>f.runtime.run(sundayScene,f.root,async()=>{
   const factory=new FactoryFlowService(f.db),dispatched=await factory.read(f.root,sundayReady.id),lineId=dispatched.batchTotals![0]!.lineId;
   await factory.productionQc(f.root,sundayReady.id,{expectedRevision:dispatched.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),checks:[{lineId,result:'合格',problem:''}],note:'TEST QC before native production completion'},randomUUID());
@@ -63,6 +104,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(before.context.graph.anchors[`${lineId}/factory_production_finished`]).toBeUndefined();expect(before.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
   const timeline=await nativeFactoryTimeline(f.db,sundayReady.id);
   expect(timeline).toHaveLength(1);expect(timeline[0]).toMatchObject({lineId,completedDate:null,completionTransitionRef:null});
+  const factoryName=(await f.db.query('SELECT supplier_name_snapshot FROM sourcing_production_factory_orders WHERE production_order_id=$1',[sundayReady.productionId])).rows[0]?.supplier_name_snapshot;
+  expect(factoryName).toEqual(expect.any(String));
+  const merch={...f.people.merchandiser!,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view','sourcing:view']};
+  const orders=new TodoService(f.db);
+  expect(await orders.merchandiserOrderPage(merch,{search:factoryName,page:1})).toMatchObject({total:1,items:[{id:sundayReady.id,factories:[factoryName]}]});
+  expect(await orders.merchandiserOrderPage({...merch,authorizationCapabilities:['todo:view']},{search:factoryName,page:1})).toEqual({items:[],page:1,total:0});
  }));
  const ship=async(r:{productionId:string;day:string},factoryDecisionId:string|null=null,quantities=[10])=>{
   const reports=new ProductionReportingService(f.db);

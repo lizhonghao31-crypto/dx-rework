@@ -5832,6 +5832,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const todoRows=async()=>(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[caseId])).rows;
     const beforeCorrection=await todoRows(),correction=beforeCorrection.find(row=>row.category==="sourcing_merchandiser_correction"&&row.todo_type==="business_action"&&row.status==="pending")!;
     expect(correction.recipient_user_id).toBe(merchandiserId);
+    const returnedStyle=created.lineItems[0]!.styleNo!;
+    const returnedWork=new TodoService(database);
+    const todoReader=(actor:TrustedActorContext):TrustedActorContext=>({...actor,authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']});
+    const returnedFilter={state:'returned' as const,search:returnedStyle,page:1};
+    await expect(returnedWork.merchandiserActionPage(todoReader(merchandiserActor()),returnedFilter)).resolves.toMatchObject({total:1,
+      items:[{itemId:correction.todo_id,state:'returned',route:{routeName:'sourcing_detail',entityId:caseId}}]});
+    expect((await returnedWork.merchandiserActionPage(todoReader(secondActor),returnedFilter)).items).toEqual([]);
+    expect((await returnedWork.merchandiserActionPage(todoReader(merchandiserActor()),{...returnedFilter,state:'mine'})).items.some(item=>item.itemId===correction.todo_id)).toBe(false);
     const notices=new DigitalProductionNotificationService(database);await notices.runOnce();
     const receipts=async(recipient:string)=>(await database.query("SELECT r.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id) WHERE e.todo_id=$1 AND r.recipient_id=$2 ORDER BY r.event_id",[correction.todo_id,recipient])).rows;
     const originalReceipts=await receipts(merchandiserId);expect(originalReceipts.length).toBeGreaterThan(0);
@@ -5874,6 +5882,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await access.assignMerchandiser(ownerActor(),id,next,beforeVersion);
     const moved=(await todoRows()).find(row=>row.todo_id===correction.todo_id)!;
     expect(moved).toMatchObject({recipient_user_id:next,status:"pending",version:correction.version+1});expect(unchangedTodo(moved)).toEqual(unchangedTodo(correction));
+    expect((await returnedWork.merchandiserActionPage(todoReader(merchandiserActor()),returnedFilter)).items).toEqual([]);
+    expect((await returnedWork.merchandiserActionPage(todoReader(nextActor),returnedFilter)).items.map(item=>item.itemId)).toEqual([correction.todo_id]);
     expect(await receipts(merchandiserId)).toEqual(originalReceipts);
     expect((await receipts(next)).map(row=>({event_id:row.event_id,source_event_id:row.source_event_id}))).toEqual(originalReceipts.map(row=>({event_id:row.event_id,source_event_id:row.source_event_id})));
     const originalTodoService=new TodoService(database);
@@ -5913,6 +5923,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }finally{await staleFact.query("ROLLBACK");staleFact.release();}
     expect(await cycleSnapshot(caseId)).toEqual(correctionSnapshot);
     await currentService.correctCase(nextActor,caseId,correctionInput,randomUUID());
+    expect((await returnedWork.merchandiserActionPage(todoReader(nextActor),returnedFilter)).items).toEqual([]);
     const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());

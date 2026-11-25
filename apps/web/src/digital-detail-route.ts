@@ -1,5 +1,6 @@
 import {readWarehouseWorkbenchRoute,warehouseCraftTarget,warehouseWorkbenchPath} from './warehouse-workbench-route.js';
 import {qualityRecordTarget,qualityWorkbenchPath,readQualityWorkbenchRoute} from './quality-workbench-route.js';
+import {merchandiserWorkbenchPath,readMerchandiserWorkbenchRoute} from './merchandiser-workbench-route.js';
 import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
 import {patternHistoryPath} from './pattern-history-query.js';
 import { DigitalIdSchema, type DigitalOrder, type DigitalSource } from "@dx-rework/contracts/digital-production";
@@ -82,6 +83,10 @@ function workbenchReturn(value: string | null, base: string): string | null {
   if(['/ui/digital-production',urls.pageUrl('ui/digital-production')].includes(url.pathname)&&url.searchParams.get('workspace')==='quality'){
     const route=readQualityWorkbenchRoute(url.searchParams);
     return route?qualityWorkbenchPath(route,base):null;
+  }
+  if(['/ui/digital-production',urls.pageUrl('ui/digital-production')].includes(url.pathname)&&url.searchParams.get('workspace')==='merchandiser'){
+    const route=readMerchandiserWorkbenchRoute(url.searchParams);
+    return route?merchandiserWorkbenchPath(route,base):null;
   }
   const localWorkspace=url.pathname.startsWith('/ui/')?urls.pageUrl(url.pathname)+url.search:value;
   const workspace = developmentWorkspaceReturnUrl(localWorkspace, base);
