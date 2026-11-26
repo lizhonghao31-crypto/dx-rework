@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "02ae70756e6902117d95b0e17109a50436a61e5a",
+  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
   "risk": "quick",
-  "sourceFingerprint": "dd99e2c1536029ade8fb7c1d736cafefbd3c6fe573b4621c3951acfe36a60841",
+  "sourceFingerprint": "918e02959746fa3f7e75b8864f7709fda9be56e2fdc10ec5989047922f980020",
   "rules": [
     {
       "rule": "删除无运行引用的 FinancePage 包装，原工资列表和历史书签使用现行同一权限门。",
@@ -102,7 +102,31 @@
           "format": "vitest-json",
           "sha256": "8ff81f90bebc9567dcd22f9ad7edf18d00aa2b5491ca2a2ccb125441ccc81ffa"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "scripts",
+        "vitest.config.ts",
+        "tests/unit/finance-navigation-hierarchy.test.ts",
+        "tests/unit/platform-modules.test.ts",
+        "apps/api/src/wages",
+        "apps/api/src/access",
+        "apps/api/src/reporting",
+        "apps/api/src/platform",
+        "apps/api/src/tools",
+        "tests/unit/wage-web-and-export.test.ts",
+        "tests/unit/ui-prototype.test.ts",
+        "tests/unit/digital-detail-route.test.ts",
+        "tests/unit/digital-po-identity-dates.test.ts",
+        "tests/unit/development-confirmation-resume.test.ts",
+        "tests/unit/m01-series-plan-reading.test.ts"
+      ],
+      "inputFingerprint": "f0a19e4cbc11867e2dd44f7220f85e6e0a05060efd3ad058d7f2178aef3b5144"
     },
     {
       "id": "g5-web-build",
@@ -116,7 +140,16 @@
       "startedAt": "2026-11-26T16:21:24Z",
       "endedAt": "2026-11-26T16:21:26Z",
       "log": "/tmp/dx-g5-evidence.GzLGdB/build.log",
-      "logSha256": "d54b692acb636d24bf9cc85ff1bb37a814f5e9b8636db5bb65164b80fc31710a"
+      "logSha256": "d54b692acb636d24bf9cc85ff1bb37a814f5e9b8636db5bb65164b80fc31710a",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "46fb3fa7bc79f03d9c0f70c7069dbfaa43ab4d2b26cae973bc1e344b0e096247"
     },
     {
       "id": "g5-browser-assets",
@@ -130,7 +163,16 @@
       "startedAt": "2026-11-26T16:23:49Z",
       "endedAt": "2026-11-26T16:23:53Z",
       "log": "/tmp/dx-g5-evidence.GzLGdB/browser.log",
-      "logSha256": "5f28b1f7863156328ad702dd90b0646c7ad3d43ae205e3332677bdb1a45ea7aa"
+      "logSha256": "5f28b1f7863156328ad702dd90b0646c7ad3d43ae205e3332677bdb1a45ea7aa",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "46fb3fa7bc79f03d9c0f70c7069dbfaa43ab4d2b26cae973bc1e344b0e096247"
     }
   ]
 }
