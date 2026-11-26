@@ -4,7 +4,9 @@ import type {BulkMaterialsDispatch,BulkPreparationSheet} from '@dx-rework/contra
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {designerAstryxCss} from './designer-astryx.js';
-export function BulkMaterialsPanel({sheet,busy,readonly,save}:{sheet:BulkPreparationSheet;busy:boolean;readonly:boolean;save:(path:string,input:unknown)=>Promise<boolean>}){
+export function BulkMaterialsPanel({sheet,busy,readonly,save,initiallyOpen=false}:{
+ sheet:BulkPreparationSheet;busy:boolean;readonly:boolean;save:(path:string,input:unknown)=>Promise<boolean>;initiallyOpen?:boolean;
+}){
  const [selected,setSelected]=useState<Record<string,string>>({});
  const [inputs,setInputs]=useState<Record<string,string>>({}),[error,setError]=useState<string|null>(null);
  const m=sheet.materials;if(!m||!m.items.length&&!m.history.length)return null;
@@ -13,7 +15,7 @@ export function BulkMaterialsPanel({sheet,busy,readonly,save}:{sheet:BulkPrepara
  const selectedScope=(item:typeof m.items[number])=>item.issueOptions?.find(option=>optionKey(option)===selected[item.id])??(item.issueOptions?.length===1?item.issueOptions[0]:undefined);
  const hasBoundLots=m.items.some(item=>item.issueOptions!==undefined);
  const materialLabel=m.items.some(item=>item.kind==='fabric')?'面辅料':'辅料';
- return <details className={`bulk-fabric-panel${hasBoundLots?' dx-designer-astryx':''}`}><summary>{materialLabel}发出记录 · {m.history.length} 次</summary>
+ return <details open={initiallyOpen||undefined} className={`bulk-fabric-panel${hasBoundLots?' dx-designer-astryx':''}`}><summary>{materialLabel}发出记录 · {m.history.length} 次</summary>
  {hasBoundLots&&<style>{designerAstryxCss}</style>}<p>当前加工厂：{m.supplierName??'待批准'}。发出不代表工厂已收到。</p>
  {error&&<p role="alert">{error}</p>}
  {m.canDispatch&&!readonly&&<form onSubmit={e=>{

@@ -11,10 +11,12 @@ import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHa
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
+import {issuedOrderNumbers} from './order-number-repository.js';
 
 type Source={kind:'source'|'order';id:string;order_id:string|null;source_id:string|null;order_number:string|null;customer_code:string|null;
+ source_style_no:string|null;workbench_generated_number:boolean|null;workbench_number_root_id:string|null;
  assignee_name:string|null;development_version:number|null;development:DevelopmentDocument|null;instruction_version:number|null;instruction:InstructionDocument|null;
- lines:{lineId:string;color:string;orderQuantity:number;poNumber:string|null}[]};
+ lines:{lineId:string;color:string;orderQuantity:number;poNumber:string|null;formalStyleNo:string|null;temporaryStyleNo:string|null}[]};
 type Raw={record_id:string;version:number;resource_kind:PreparationResource['kind'];resource_id:string;kind:PreparationMaterialFact['kind'];
  scope_ref:string;state:PreparationMaterialFact['state'];occurred_at:Date|null;recorded_at:Date;actor_id:string;evidence_valid:boolean;
  body:Partial<PreparationMaterialFact>&{materialBasis?:string}};
@@ -56,10 +58,13 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    const views=await developmentReadTables(db);
    const context=(await db.query<Source>(`WITH requested AS(SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(kind text,id uuid))
     SELECT k.kind,k.id,o.production_order_id AS order_id,s.source_id,COALESCE(o.design_style_no,s.design_style_no) AS order_number,
+     s.design_style_no AS source_style_no,(to_jsonb(s)->>'workbench_generated_number')::boolean AS workbench_generated_number,
+     to_jsonb(s)->>'workbench_number_root_id' AS workbench_number_root_id,
      COALESCE(o.customer_code,s.customer_code) AS customer_code,worker.display_name AS assignee_name,
      COALESCE(round.document_version,d.version) AS development_version,COALESCE(round.document,d.document) AS development,
      instruction.version AS instruction_version,instruction.document AS instruction,
      COALESCE((SELECT jsonb_agg(jsonb_build_object('lineId',p.line_id,'color',p.color,'poNumber',COALESCE(p.po_number,p.formal_style_no),
+      'formalStyleNo',p.formal_style_no,'temporaryStyleNo',p.temporary_style_no,
       'orderQuantity',COALESCE((SELECT sum(q.quantity)::int FROM digital_production_po_sizes q WHERE q.line_id=p.line_id),0)) ORDER BY p.position)
       FROM digital_production_po_lines p WHERE p.production_order_id=o.production_order_id),'[]'::jsonb) AS lines
     FROM requested k
@@ -88,8 +93,15 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    for(const row of history){
     const key=`${row.resource_kind}:${row.resource_id}`,values=indexed.get(key)??[];values.push(row);indexed.set(key,values);
    }
+   const resolvedNumbers=await issuedOrderNumbers(db,context.map(scope=>({
+    source:scope.source_id&&scope.source_style_no?{
+     source_id:scope.source_id,design_style_no:scope.source_style_no,workbench_generated_number:scope.workbench_generated_number===true,
+     workbench_number_root_id:scope.workbench_number_root_id,
+    }:null,
+    order:scope.order_id&&scope.order_number?{source_id:scope.source_id,design_style_no:scope.order_number}:null,
+   })));
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
-   for(const scope of context){
+   for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
     const materialHistory=nativeRows.map(row=>({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
      resource:{kind:row.resource_kind,id:row.resource_id},recordId:row.record_id,version:row.version,occurredAt:iso(row.occurred_at),
@@ -98,13 +110,20 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
      note:row.body.note??'',expectedVersion:row.body.expectedVersion??0,recipientId:row.body.recipientId??null,
      sourceDocumentVersion:row.body.sourceDocumentVersion??null})) as PreparationMaterialFact[];
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
-    for(const item of deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined)){
+    const work=deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined);
+    if(!work.length)continue;
+    const orderNumber=resolvedNumbers[scopeIndex]??null;
+    const matches=(value:string|null|undefined)=>value?.toLowerCase().includes(search);
+    const matchesLine=(line:Source['lines'][number])=>[line.poNumber,line.formalStyleNo,line.temporaryStyleNo].some(matches);
+    const matchesOrder=[orderNumber,scope.order_number,scope.source_style_no].some(matches);
+    const matchesSharedPo=Boolean(search)&&scope.lines.some(matchesLine);
+    for(const item of work){
      const line=scope.lines.find(row=>row.lineId===item.lineId);
      const procurementComplete=item.balance.procurementRemaining==='0'&&item.balance.excessReceived==='0';
      if((input.status==='completed')!==procurementComplete)continue;
-     if(search&&![scope.order_number,line?.poNumber,item.name,item.supplier].some(value=>value?.toLowerCase().includes(search)))continue;
+     if(search&&!matchesOrder&&!(line?matchesLine(line):matchesSharedPo)&&![item.name,item.supplier].some(matches))continue;
      out.push({id:JSON.stringify([scope.kind,scope.id,item.materialId,item.lineId,item.scopeRef,item.kind]),
-      resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
+      resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,issuedOrderNumber:orderNumber,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
       assigneeName:scope.assignee_name,kind:item.kind,materialId:item.materialId,name:item.name,lineId:item.lineId,scopeRef:item.scopeRef,supplier:item.supplier,
       received:item.received,productionRequired:item.productionRequired,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt});
     }

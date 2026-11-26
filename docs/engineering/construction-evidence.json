@@ -1,207 +1,220 @@
 {
   "version": 1,
-  "base": "244ea83c391dbc7248fef491b9afbf3476f3d1b7",
+  "base": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
   "risk": "full",
-  "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
+  "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "vitest run --config vitest.business-chain.config.ts --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-native.json tests/integration/factory-supervision-instances-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/sourcing-detail-native-browser-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts",
+      "command": "bash /workspace/scratch/r1-evidence/maintenance-fix/pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "passed": 62,
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Actual R1 candidate with corrected historical maintenance preflight on original unmodified migrations; original business PG and browser regressions.",
+      "startedAt": "2026-11-26T05:59:09.646593+00:00",
+      "endedAt": "2026-11-26T06:00:56.900256+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/native.log",
+      "logSha256": "ec658395f6fab5aac515a0840b1454da5b8bf1f1258c9b06d458272b582c14af",
+      "passed": 5,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "4abb7f9a67f6656cb72f134c8c7adfc018b218fd",
-      "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
-      "context": "Exact merged release base, matching dual database routing, two workers, authenticated original Chromium, synthetic data. No on-site acceptance.",
-      "startedAt": "2026-11-25T20:37:18.076Z",
-      "endedAt": "2026-11-25T20:40:24.563Z",
-      "log": "/workspace/dx-v115-x6-evidence/x6-release-final-native.log",
-      "logSha256": "8f7e985f4261826985a150c5424fdd0d704a8d255ef35c90d18b28e39db6185c",
+      "skipped": 86,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3b8f3b3a5461f6a5b255dbcd6d0e437deb29a31bd67fc02232fbbab263bdba5f"
+          "sha256": "e8d8f7c1a6f9a17955e9b35c4810bcd1baabd3aac6f1182d96ed8321cba55338"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run --maxWorkers 2 --reporter=verbose --reporter=json --outputFile.json=/workspace/dx-v115-x6-evidence/x6-release-final-unit.json tests/unit/merchandiser-work-candidates.test.ts tests/unit/workbench-factory-communication.test.ts tests/unit/todo-read-split.test.ts tests/unit/craft-database-separation.test.ts",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/.bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/maintenance-fix/unit.json tests/unit/config.test.ts tests/unit/digital-detail-route.test.ts tests/unit/warehouse-craft-movement.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/warehouse-craft-factory-basis.test.ts tests/unit/warehouse-issued-order-number.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 14,
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Actual R1 candidate with startup, role scope, rework, and 1/15/50 one-query regression evidence.",
+      "startedAt": "2026-11-26T05:59:09.659108+00:00",
+      "endedAt": "2026-11-26T05:59:12.745177+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/unit.log",
+      "logSha256": "7632a9e0111312aaab133a9cdcc812e65882be131b50b68106f7e71a5b8229d9",
+      "passed": 82,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4abb7f9a67f6656cb72f134c8c7adfc018b218fd",
-      "sourceFingerprint": "46c9c8ab66c518b575ab0271825f9447e77c3c081eff27ded0838bf2144ef9c8",
-      "context": "Exact release-bound workbench role, work identity, pagination and original fabric/craft facts consumers.",
-      "startedAt": "2026-11-25T20:37:18.134Z",
-      "endedAt": "2026-11-25T20:37:22.416Z",
-      "log": "/workspace/dx-v115-x6-evidence/x6-release-final-unit.log",
-      "logSha256": "5108e38e926dd57eeeab8153501a9d8328a313861d9b042f0d44a8a87bbead3d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3fcd554beeaee7692b359080173aa7455656deb2435259be6dc672f1ea0a96c0"
+          "sha256": "44f386e8c8ae57056a8219f522b461914800688e75d98392620ad1cd8d824464"
+        }
+      ]
+    },
+    {
+      "id": "static",
+      "kind": "command",
+      "command": "bash -c '. /workspace/.dx-cloud/activate.sh\nset -e\nnpm run lint\nnpm run typecheck\nnpm run build --workspaces --if-present\nnpm run db:migrate:lint\nnpm run secret:scan\nbash -n scripts/deploy/lib.sh\ngit diff --check'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Current R1 on PG16 isolated CI, checking unchanged migration checksums and safe official command syntax in addition to lint and TS/build.",
+      "startedAt": "2026-11-26T05:59:09.636572+00:00",
+      "endedAt": "2026-11-26T06:01:00.374203+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/static.log",
+      "logSha256": "9550c9beb823d8ee920bbd8a99036100c63d11f6791f0724c5299cd6ccfbc896"
+    },
+    {
+      "id": "maintenance",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/maintenance-fix/maintenance.json tests/integration/acceptance-maintenance-postgres.test.ts tests/unit/acceptance-maintenance-generator.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Release baseline reproduced the genuine old-history read-only gate error on PostgreSQL 16. Candidate keeps relation/owner checks and exercises wrong owner and absence after 0296.",
+      "startedAt": "2026-11-26T05:58:44.613270+00:00",
+      "endedAt": "2026-11-26T05:58:50.070819+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/maintenance.log",
+      "logSha256": "fd168cbf7187bb258fa3d2a55ce8ecae3b978d2cab5f7101a989e61543a91ce2",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3891c97957972b200f2d4c585d11bad98a9930b3c8a4b198db4a6f19cc049c4c"
         }
       ]
     }
   ],
   "rules": [
     {
-      "rule": "Only original live authorized follow-up roles and owned actions are included, with no scope from unrelated roles.",
-      "source": "v11.5 §12.1/§12.4, ENT14/20/58",
+      "rule": "正常 API 启动时显式启用编号工作台，编号建单能力和新版路由同时注册。",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》 §2.2(1–3)、A01/A02",
       "writes": [
-        "apps/api/src/production-platform/merchandiser-original-orders.ts",
-        "apps/api/src/production-platform/merchandiser-task-progress.ts",
-        "apps/api/src/production-platform/merchandiser-work-candidates.ts",
-        "apps/api/src/server.ts",
-        "apps/api/src/todos/routes.ts",
-        "apps/api/src/todos/selection.ts",
-        "apps/api/src/todos/service.ts",
-        "packages/contracts/src/todos.ts"
+        ".env.example",
+        "infra/acceptance/app.env.example",
+        "scripts/deploy/lib.sh#DX_REWORK_APP_ENV_KEYS",
+        "packages/config/src/index.ts#DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED",
+        "apps/api/src/server.ts#workbenchNumberedCreation",
+        "apps/web/src/digital-designer-workspace.tsx#自动发号尚未启用",
+        "tests/integration/production-readiness-postgres.test.ts#R1 exposes numbered options",
+        "tests/unit/config.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/todos/service.ts"
+        "apps/api/src/production-platform/identity-routes.ts#numbered-drafts",
+        "apps/api/src/production-platform/development-routes.ts#workbenchNumberedCreation",
+        "apps/api/src/production-platform/production-readiness-routes.ts#warehouse-receipt-work",
+        "apps/api/src/production-platform/task-routes.ts#warehouse/native-tasks",
+        "apps/web/src/digital-development-create-form.tsx#safeToWriteNumbered"
       ],
       "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/digital-my-todo-context-postgres.test.ts",
-        "tests/unit/merchandiser-work-candidates.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/config.test.ts"
       ],
-      "initialization": "Current original stored and virtual task facts initialize independent of new fields.",
-      "dateAndPermission": "Same server permissions and route/acquisition scope; a page search alone does not give visibility.",
-      "expectation": "Authorized before pagination, recipient and status exact; original order ID and live visible factory are searchable without exposing another identity. An unrelated merchandiser sees empty results and the original record returns 404.",
+      "initialization": "生产和 Acceptance 模板均默认关闭，环境加载支持显式传递。配置启用依赖原数字生产和建单开关，沿原已应用迁移及现有编号登记。",
+      "dateAndPermission": "编号使用原发号锁、原操作时钟、样衣设计师授权和同一来源。关闭时保原建单及已发号档案的读取。",
+      "expectation": "启动真实 API 进程、正常测试角色登录，验证启用前后 options、编号回执及列表路由一致。原生浏览器预约、恢复、发布预下单并用同源转正。",
       "checks": [
         "native",
-        "unit"
+        "unit",
+        "static"
       ]
     },
     {
-      "rule": "Existing original handover, exact step communication and job conditions remain the writers.",
-      "source": "v11.5 §12.2, ENT14/20/23",
+      "rule": "仓库按真实母单、原款号及适用 PO 查找，保持共享物料行身份，复用原批次和余量发料。",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》 §2.2(4)、A13-a",
       "writes": [
-        "apps/api/src/production-platform/factory-flow-routes.ts",
-        "apps/api/src/production-platform/workbench-factory-communication.ts",
-        "apps/web/src/production-readiness-panel.tsx",
-        "apps/web/src/workbench-factory-communication-panel.tsx"
+        "apps/api/src/production-platform/warehouse-receipt-page.ts#warehouseReceiptPage",
+        "apps/api/src/production-platform/journey-selection-access.ts#readTechnicalTaskListPage",
+        "packages/contracts/src/production-readiness.ts#WarehouseReceiptListItem",
+        "apps/web/src/warehouse-center.tsx#receiptLink",
+        "apps/web/src/warehouse-native-task-table.tsx#taskHref",
+        "apps/web/src/digital-detail-route.ts#warehouseMaterials",
+        "apps/web/src/digital-production-page.tsx#warehouseMaterials",
+        "apps/web/src/bulk-preparation-panel.tsx#warehouseMaterials",
+        "apps/web/src/bulk-materials-panel.tsx#BulkMaterialsPanel",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "apps/api/src/production-platform/order-number-repository.ts#issuedOrderNumbers",
+        "tests/unit/warehouse-issued-order-number.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts"
+        "apps/api/src/production-platform/warehouse-assigned-resources.ts#assignedWarehousePreparationResources",
+        "apps/api/src/production-platform/order-number-repository.ts#issuedOrderNumber",
+        "apps/api/src/production-platform/warehouse-receipt-work.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts#dispatchMaterials",
+        "apps/web/src/warehouse-receipt-batch-panel.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/unit/digital-detail-route.test.ts"
+      ],
+      "initialization": "沿原当前仓库指派、活跃订单、有效投料和实收批次。老款号仍可查，显示明示为款号，缺失的编号保持待核。",
+      "dateAndPermission": "有权候选先过滤再分页，同快照总数，实际发料仍核制单、批准厂、原实收批次和余额。无权不扩大候选。",
+      "expectation": "两个 PO 均命中同一原批次一行，保留分页 total；普通仓管从原列表带母单 UUID 进入，按真实批次发出并返回同一搜索；原详情读取匹配的新余额。 独立复版编号在同批对已授权来源查询，1／15／50个对象只读取一次并绑定准确原根；仍从同一全集筛选及分页。",
+      "checks": [
+        "native",
+        "unit",
+        "static"
+      ]
+    },
+    {
+      "rule": "正式启动的工艺和发厂共用原 QC 放行及返工占用读取，工艺回仓按原发出和实际工厂。",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》 §2.2(5–6)、A01/A13-b/c",
+      "writes": [
+        "apps/api/src/server.ts#readQualityWarehouseCraftOccupation",
+        "tests/integration/production-readiness-postgres.test.ts#R1 exposes numbered options"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/factory-flow-routes.ts#warehouse-craft",
+        "apps/api/src/production-platform/factory-flow-service.ts#batchLogistics",
+        "apps/api/src/production-platform/factory-flow-service.ts#batchDispatch",
+        "apps/api/src/production-platform/quality-warehouse-craft-occupation.ts#readQualityWarehouseCraftOccupation",
+        "apps/web/src/warehouse-craft-work.tsx#WarehouseCraftWork"
       ],
       "oldTests": [
         "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/unit/workbench-factory-communication.test.ts"
+        "tests/unit/warehouse-craft-movement.test.ts",
+        "tests/unit/warehouse-craft-rework-return.test.ts"
       ],
-      "initialization": "Use current task, original adopted preparation, registered order and original pending/report records.",
-      "dateAndPermission": "Original live assignment and clock; no cut-piece movement, unrelated permission, or new SLA.",
-      "expectation": "Real signed craft actor records one original note across lost receipt and replay; ordinary merchandiser cannot write. Preorder uses the same original materials and stays untimed.",
+      "initialization": "采用现有质检、返工和工艺原事实，正常路由共享同一个 FactoryFlowService 实例。",
+      "dateAndPermission": "继续原批次、准备实例、工艺、PO 和厂的权限及业务时点，在原母单锁内重新读取占用。",
+      "expectation": "正常启动原仓库工艺路由进入领域授权。原生浏览器和本地数据库回归保放行、占用拒绝、原批次回仓；现有 Acceptance 真写 A01/A13-b/c 需要独立证据。",
       "checks": [
         "native",
-        "unit"
+        "unit",
+        "static"
       ]
     },
     {
-      "rule": "Keep both original signed return entrypoints and the exact current document or version.",
-      "source": "v11.5 §12.3, ENT34",
+      "rule": "现有 Acceptance 安装新版启动接线工具时，旧迁移前缀的维护预检正确区分尚未创建及不合法缺失的生命周期视图。",
+      "source": "最终 Full 45763578990 的实际低权限故障，同一原始用例在发布分支 9cae2f68 复现；沿方案 §2.2 的正式配置与启用路径，保持原运维边界。",
       "writes": [
-        "apps/web/src/merchandiser-contract-return.tsx",
-        "apps/web/src/sourcing-api-client.ts",
-        "apps/web/src/sourcing-contract-return-upload.ts",
-        "apps/web/src/sourcing-workspace-page.tsx",
-        "tests/unit/craft-database-separation.test.ts"
+        "scripts/deploy/prepare-acceptance-migration.py#permission_query",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/unit/acceptance-maintenance-generator.test.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/web/src/sourcing-workspace-page.tsx"
+        "apps/api/migrations/0296_development_first_publication.sql",
+        "apps/api/migrations/0303_workbench_preorder_publication.sql",
+        "scripts/dx-acceptance.sh",
+        "scripts/deploy/update-acceptance-local.sh",
+        "docs/operations/acceptance-lab-runbook-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/craft-database-separation.test.ts"
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/unit/acceptance-maintenance-generator.test.ts"
       ],
-      "initialization": "Reads existing case/contract version and the original attach authorization.",
-      "dateAndPermission": "Old role and special narrow permissions remain on the original service. Retrying the same response uses the same actual body and key.",
-      "expectation": "Signed ordinary actor recovers a lost response with the same exact key and document. Two stale signed tabs get the real quota rejection before a smaller replacement saves. Original first signed time and slot count are unchanged. Craft and process catalogs remain independent on the same original transport.",
+      "initialization": "按未改动 SQL 字节及 manifest 登记 0296 的原视图创建。只有实际前序迁移未应用且随后应用该原 SQL 时，准许预检阶段缺此视图。原发布按钮开关仍默认关闭。",
+      "dateAndPermission": "已记账但缺视图、不是视图或真实所有者错误仍拒绝。执行后核原所有者及既有 SELECT，不加权限，不降表、函数、序列或数据库隔离保护。",
+      "expectation": "真低权限 PostgreSQL 升级从旧库通过，插入错误 owner 的原表及现有视图、已记账但缺视图仍被拒绝。初次 Full 失败原样保留。",
       "checks": [
-        "native",
-        "unit"
-      ]
-    },
-    {
-      "rule": "Use the real role navigation and existing original order and document paths, with consistent retry and return context.",
-      "source": "v11.5 §12.1/§12.4, ENT57/58",
-      "writes": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/merchandiser-workbench-route.ts",
-        "apps/web/src/merchandiser-workbench.tsx",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/digital-my-todo-context-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/craft-database-separation.test.ts",
-        "tests/unit/merchandiser-work-candidates.test.ts",
-        "tests/unit/workbench-factory-communication.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/original-document-directory.tsx",
-        "apps/web/src/digital-detail-route.ts"
-      ],
-      "oldTests": [
-        "tests/integration/module-bundles-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/integration/sourcing-detail-native-browser-postgres.test.ts"
-      ],
-      "initialization": "Existing original menus and warm/cold route behaviors remain. No third shell or startup feature gate.",
-      "dateAndPermission": "Existing original domain reads revalidate access and exact version; closing a current action does not silently discard unacknowledged changes.",
-      "expectation": "Real signed role menu, existing order document directory GET, exact budget/instruction GET and return to the same order, exact original row/focus and retained IE archive route. Confirm cold browser resources where selected.",
-      "checks": [
-        "native",
-        "unit"
-      ]
-    },
-    {
-      "rule": "Choose the complete original authorized candidate set using lightweight facts without hydrating native todos; original detail and notification clocks remain in their existing domain.",
-      "source": "v11.5 §12.1–12.2 and AGENTS.md line 98",
-      "writes": [
-        "apps/api/src/production-platform/material-investment-reminder.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/preparation-todos.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-selection-access.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/todos/selection.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-my-todo-context-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/unit/todo-read-split.test.ts"
-      ],
-      "initialization": "Original pending task and handover readiness, actual adopted original plan and saved preorder document are authoritative on one read-only snapshot.",
-      "dateAndPermission": "Remember selected Acceptance scene and exact current handover role. No original plan writes or clock reset. A preorder remains untimed and unowned drafts do not become searchable.",
-      "expectation": "One, fifteen and fifty native tasks require zero per-task hydrated clock reads and bounded physical SQL. Original ready preorder returns its saved customer and PO only to the active recipient. Formal conversion preserves exact adopted due times for old and new paths.",
-      "checks": [
-        "native",
-        "unit"
+        "maintenance",
+        "static"
       ]
     }
   ]

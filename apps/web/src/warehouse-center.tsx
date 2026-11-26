@@ -6,7 +6,7 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {useEffect,useState} from 'react';
 import type {WarehouseReceiptListItem,WarehouseReceiptPage} from '@dx-rework/contracts/production-readiness';
 import {createWebUrls} from '../url-contract.js';
-import {digitalRequest} from './digital-production-api.js';
+import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {designerAstryxCss} from './designer-astryx.js';
 import {digitalChildDetailHref} from './digital-detail-route.js';
 import {useForegroundWait} from './foreground-loading.js';
@@ -36,7 +36,8 @@ function Receipts({route,change,back}:{route:WarehouseWorkbenchRoute;change:(nex
   const controller=new AbortController();
   void digitalRequest<WarehouseReceiptPage>(path,'GET',undefined,undefined,{signal:controller.signal})
    .then(value=>{if(!controller.signal.aborted)setData({key,value});})
-   .catch(reason=>{if(!controller.signal.aborted)setError({key,message:reason instanceof Error?reason.message:'待收料读取失败'});});
+   .catch(reason=>{if(!controller.signal.aborted)setError({key,message:reason instanceof DigitalRequestError&&reason.status===404
+    ?'当前服务未开放仓库收料列表。':reason instanceof Error?reason.message:'待收料读取失败'});});
   return()=>controller.abort();
  },[key,path]);
  return <section aria-label="待收料">
@@ -49,14 +50,18 @@ function Receipts({route,change,back}:{route:WarehouseWorkbenchRoute;change:(nex
   {warning&&<p role="alert">{warning} <Button type="button" label="重试读取" variant="secondary" onClick={()=>setRetry(value=>value+1)}/></p>}
   {exact&&(!exact.items.length?<p>{exact.total?'本页暂无收料事项，可返回前一页。':'没有符合授权及筛选的收料事项。'}</p>:
    <div className="development-table-scroll"><Table data={exact.items} idKey="id" density="balanced" columns={[
-    {key:'orderNumber',header:'订单ID / 客户',renderCell:row=><>{row.orderNumber??'订单ID待核'} <OrderRushBadge value={row.orderRush}/><small>{row.customerCode??'客户待核'}</small></>},
+    {key:'orderNumber',header:'订单ID / 款号 / 客户',renderCell:row=><>{row.issuedOrderNumber??(row.orderNumber?`款号 ${row.orderNumber}`:'订单ID待核')} <OrderRushBadge value={row.orderRush}/><small>{row.customerCode??'客户待核'}</small></>},
     {key:'poNumber',header:'PO',renderCell:row=>row.poNumber??(row.lineId?'PO待核':'共享物料')},
     {key:'name',header:'原收料任务',renderCell:row=><>{row.name}<small>{row.supplier??'供应方待核'}</small></>},
     {key:'invested',header:'投料 / 实收 / 待收',renderCell:row=><>{digit(row.invested.quantity,row.invested.unit)} / {digit(row.received?.quantity??null,row.invested.unit)} / {digit(row.balance.procurementRemaining,row.invested.unit)}</>},
     {key:'assigneeName',header:'负责人',renderCell:row=>row.assigneeName??'待安排'},
     {key:'balance',header:'状态',renderCell:row=>row.balance.excessReceived&&row.balance.excessReceived!=='0'?'实收有差异':
       route.status==='completed'?'采购已收足':row.received?'部分收料':'实收待核'},
-    {key:'id',header:'办理',renderCell:row=><Link type="inherit" href={receiptLink(row,back)}>{route.status==='completed'?'查看原收料与订正':'实际收料'}</Link>},
+    {key:'id',header:'办理',renderCell:row=><div className="pattern-actions">
+     <Link type="inherit" href={receiptLink(row,back)}>{route.status==='completed'?'查看原收料与订正':'实际收料'}</Link>
+     {row.resource.kind==='order'&&row.received&&Number(row.received.quantity)>0&&
+      <Link type="inherit" href={digitalChildDetailHref(`/ui/digital-production?bulk=${row.resource.id}&warehouseMaterials=1`,back,urls.base)}>本单发料</Link>}
+    </div>},
    ]}/></div>)}
   <ListPagination page={route.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null}
    ariaLabel="仓库待收料分页" busy={Boolean(pending)} onPageChange={page=>change({...route,page})}/>

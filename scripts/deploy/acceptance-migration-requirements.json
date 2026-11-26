@@ -2256,6 +2256,9 @@
     "creates": [
       "digital_development_first_publications"
     ],
+    "createsViews": [
+      "digital_development_source_lifecycle"
+    ],
     "execute": [
       "guard_production_order_root_immutable"
     ],

@@ -1041,13 +1041,18 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    expect((await f.db.query("SELECT count(*)::int AS total FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[original.preparationId])).rows[0].total).toBe(1);
   }finally{await tab.close();}
  });
- it('sends one exact available accessory lot from the original assigned warehouse form and refreshes remaining quantity',async()=>{
+ it('opens the assigned warehouse list by PO and sends one exact original accessory lot',async()=>{
   const f=h.f,prepared=await warehouseOriginalIssueFixture(f),{id,warehouse,resource,batch,preparation,scope,bulk,now}=prepared;
   const original=await f.runtime.run(prepared.scene,f.root,()=>preparation.recordWarehouseReceiptBatch(warehouse,resource,batch,randomUUID()));
   const receipt=original.history.find(row=>row.warehouseReceipt)!;
-  const tab=await h.open(warehouse.actorId,1165,{},`/ui/digital-production?bulk=${id}`);
+  const po=(await bulk.read(warehouse,id)).cutting.lines[1]!.poNumber!;
+  const list=`/ui/digital-production?workspace=warehouse&tab=receive&search=${encodeURIComponent(po)}`;
+  const tab=await h.open(warehouse.actorId,1165,{},list);
   try{
-   const page=tab.page;await page.getByText('辅料发出记录 · 0 次',{exact:true}).click();
+   const page=tab.page,issue=page.getByRole('link',{name:'本单发料',exact:true});
+   await issue.click();
+   await page.getByRole('heading',{name:'仓库实际发料',exact:true}).waitFor();
+   expect(new URL(page.url()).searchParams.get('bulk')).toBe(id);
    await page.getByText('共享物料 · 采用需用 500 米 · 本范围可发 500 米',{exact:true}).waitFor();
    await page.getByRole('textbox',{name:'第 1 批实际发出（米，本批可用 500）',exact:true}).fill('300');
    await page.getByLabel('实际时间（北京时间）',{exact:true}).fill(new Date(Date.parse(now)+8*3600000).toISOString().slice(0,16));
@@ -1059,6 +1064,12 @@ async function routeIsolatedQualityPhotos(context:BrowserContext,storage:FakeObj
    await page.getByText('共享物料 · 采用需用 500 米 · 本范围可发 200 米',{exact:true}).waitFor();
    expect(await page.getByRole('textbox',{name:'第 1 批实际发出（米，本批可用 200）',exact:true}).inputValue()).toBe('');
    expect((await bulk.read(warehouse,id)).materials?.history).toMatchObject([{items:[{materialId:scope.id,quantity:300,unit:'米'}]}]);
+   await page.getByRole('button',{name:'返回仓库',exact:true}).click();
+   await issue.waitFor();
+   expect(new URL(page.url()).searchParams.get('search')).toBe(po);
+   await page.goto(`${h.base}/ui/digital-production?bulk=${id}`);
+   await page.getByText('辅料发出记录 · 1 次',{exact:true}).click();
+   await page.getByText('共享物料 · 采用需用 500 米 · 本范围可发 200 米',{exact:true}).waitFor();
   }finally{await tab.close();}
  });
  it('lets the assigned warehouse record a failed report for a named actual fabric lot without authorizing its release',async()=>{

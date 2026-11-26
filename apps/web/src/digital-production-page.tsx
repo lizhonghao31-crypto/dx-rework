@@ -210,7 +210,8 @@ function DigitalProductionPageContent() {
     }
     case "bulk": detail = new URLSearchParams(location.search).has('originalEvent')?
       <OrderHistoryOriginal orderId={route.id} domain="bulk-preparation" onClose={()=>void closeDetail()}/>:
-      <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
+      <BulkPreparationPanel orderId={route.id} warehouseMaterials={new URLSearchParams(location.search).get('warehouseMaterials')==='1'}
+       onClose={() => void closeDetail()} />; break;
     case "instruction":
     case "budget": detail = route.original?<ProductionOriginalReader key={`${route.kind}:${route.id}`} reference={{kind:route.kind,orderId:route.id,version:route.version!}} onClose={()=>void closeDetail()}/>:<OrderDocumentContainer key={`${route.kind}:${route.id}:${route.version}`} initial={{kind:route.kind,id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case 'quotationSource':

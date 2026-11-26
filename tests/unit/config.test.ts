@@ -27,10 +27,19 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "86401" })).toThrow(ConfigurationError);
   });
   it("keeps digital production disabled by default and separates new creation from existing work", () => {
-    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
+    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false, workbenchNumberedCreation: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
     expect(loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true" }).digitalProduction)
-      .toEqual({ enabled: true, creationEnabled: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
+      .toEqual({ enabled: true, creationEnabled: false, workbenchNumberedCreation: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
     expect(() => loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "yes" })).toThrow(ConfigurationError);
+  });
+
+  it("opens numbered workbench only with both existing digital production flags", () => {
+    const digital = { ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true", DIGITAL_PRODUCTION_CREATION_ENABLED: "true" };
+    const numbered = { ...digital, DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED: "true" };
+    expect(loadConfig(digital).digitalProduction?.workbenchNumberedCreation).toBe(false);
+    expect(loadConfig(numbered).digitalProduction?.workbenchNumberedCreation).toBe(true);
+    expect(() => loadConfig({ ...numbered, DIGITAL_PRODUCTION_ENABLED: "false" })).toThrow(/numbered workbench requires/);
+    expect(() => loadConfig({ ...numbered, DIGITAL_PRODUCTION_CREATION_ENABLED: "false" })).toThrow(/numbered workbench requires/);
   });
 
   it('requires an explicit supported mode for new fixed timeline adoption',()=>{

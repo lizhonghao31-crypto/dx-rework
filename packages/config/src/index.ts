@@ -49,6 +49,7 @@ const EnvironmentSchema = z
     ACCEPTANCE_LAB_SECRET: z.string().min(32).max(1024).optional(),
     DIGITAL_PRODUCTION_ENABLED: BooleanTextSchema,
     DIGITAL_PRODUCTION_CREATION_ENABLED: BooleanTextSchema,
+    DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED: BooleanTextSchema,
     DIGITAL_NOTIFICATION_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).optional(),
     DIGITAL_JOURNEY_LIST_READ_MODE: z.enum(['indexed','legacy']).default('indexed'),
     DIGITAL_TIMELINE_ADOPTION_MODE: z.enum(['legacy','fixed_v2']).default('legacy'),
@@ -112,6 +113,15 @@ const EnvironmentSchema = z
         code: "custom",
         path: ["ROOT_DINGTALK_USER_ID"],
         message: "acceptance lab requires ROOT_DINGTALK_USER_ID=uat-root",
+      });
+    }
+
+    if (environment.DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED === "true"
+      && (environment.DIGITAL_PRODUCTION_ENABLED !== "true" || environment.DIGITAL_PRODUCTION_CREATION_ENABLED !== "true")) {
+      context.addIssue({
+        code: "custom",
+        path: ["DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED"],
+        message: "numbered workbench requires digital production and creation to be enabled",
       });
     }
 
@@ -200,7 +210,7 @@ export type AppConfig = Readonly<{
     deliveryIntervalMs: number;
     timingIntervalMs: number;
   }>;
-  digitalProduction?: Readonly<{ enabled: boolean; creationEnabled: boolean; notificationIntervalMs?: number;listReadMode?:'indexed'|'legacy';timelineAdoptionMode?:'legacy'|'fixed_v2' }>;
+  digitalProduction?: Readonly<{ enabled: boolean; creationEnabled: boolean; workbenchNumberedCreation: boolean; notificationIntervalMs?: number;listReadMode?:'indexed'|'legacy';timelineAdoptionMode?:'legacy'|'fixed_v2' }>;
   objectStorage: Readonly<{ enabled: boolean; region: string | undefined; endpoint: string | undefined; bucket: string | undefined; accessKeyId: string | undefined; accessKeySecret: string | undefined; privatePrefix: string; signedUrlTtlSeconds: number; maxUploadBytes: number }>;
   openai: Readonly<{ apiKey: string | undefined; visionModel: string }>;
 }>;
@@ -238,7 +248,14 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       enabled: result.data.ACCEPTANCE_LAB_ENABLED === "true",
       secret: result.data.ACCEPTANCE_LAB_SECRET,
     },
-    digitalProduction: { timelineAdoptionMode:result.data.DIGITAL_TIMELINE_ADOPTION_MODE, listReadMode:result.data.DIGITAL_JOURNEY_LIST_READ_MODE, enabled: result.data.DIGITAL_PRODUCTION_ENABLED === "true", creationEnabled: result.data.DIGITAL_PRODUCTION_CREATION_ENABLED === "true", ...(result.data.DIGITAL_NOTIFICATION_INTERVAL_MS === undefined ? {} : { notificationIntervalMs: result.data.DIGITAL_NOTIFICATION_INTERVAL_MS }) },
+    digitalProduction: {
+      enabled: result.data.DIGITAL_PRODUCTION_ENABLED === "true",
+      creationEnabled: result.data.DIGITAL_PRODUCTION_CREATION_ENABLED === "true",
+      workbenchNumberedCreation: result.data.DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED === "true",
+      timelineAdoptionMode: result.data.DIGITAL_TIMELINE_ADOPTION_MODE,
+      listReadMode: result.data.DIGITAL_JOURNEY_LIST_READ_MODE,
+      ...(result.data.DIGITAL_NOTIFICATION_INTERVAL_MS === undefined ? {} : { notificationIntervalMs: result.data.DIGITAL_NOTIFICATION_INTERVAL_MS }),
+    },
     todoRuntime: {
       enabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true"
         || (result.data.TODO_TIMING_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",

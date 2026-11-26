@@ -33,6 +33,11 @@ assert 'ALTER DEFAULT PRIVILEGES' not in sql
 assert 'GRANT SELECT ON SEQUENCE public.digital_factory_qc_sequence_seq' in sql
 assert 'GRANT USAGE' not in sql
 assert 'Created relations differ from checksum-bound grant inventory' in sql
+assert "'kind','new_view','object','digital_development_source_lifecycle','required','ABSENT_BEFORE_MIGRATION'" in sql
+assert "'digital_development_source_lifecycle','required','OWNER'" in sql
+assert "Expected owner view and original SELECT grant were not created: digital_development_source_lifecycle" in sql
+assert "GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.digital_development_source_lifecycle" not in sql
+
 assert sql.count('BEGIN;') == len(json.load(open('apps/api/src/platform/migration-manifest.json'))['migrations'])
 for change in ({'database':'production'},{'address':'192.0.2.1'},{'port':True},{'oid':True},{'oid':4294967296},{'port':0}):
     try: m.generate(pathlib.Path.cwd(),dict(identity,**change),'/usr/bin/node','/tmp/history.json')
