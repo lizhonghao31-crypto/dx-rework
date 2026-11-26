@@ -4808,6 +4808,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     if(process.env.SLA_FACTORY_QC_UI_INPUT)await writeFile(process.env.SLA_FACTORY_QC_UI_INPUT,JSON.stringify({productionQc:state}));
   });
 
+  const prepareActualFactoryReturn=async(productionId:string,root:TrustedActorContext,quantities:readonly number[])=>{
+    const reporting=new ProductionReportingService(database),businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date());
+    for(const [index,quantity] of quantities.entries())await reporting.report(root,productionId,{position:index+1,businessDate,quantity},randomUUID());
+    await reporting.execute(root,productionId,'complete',{businessDate,confirmed:true},randomUUID());
+    await reporting.execute(root,productionId,'ship',{businessDate,confirmed:true},randomUUID());
+    return businessDate;
+  };
+
   it('SLA08 keeps collected, original packing and receipt corrections independent without a sample gate',async()=>{
     const primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
     const configClient=await database.connect(),config=new SlaConfigurationService(),repo=new SlaConfigurationRepository(configClient);
@@ -4822,16 +4830,24 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(state.shipSamples).toHaveLength(0);
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) SELECT $1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP WHERE NOT EXISTS(SELECT 1 FROM identity_mappings WHERE user_id=$2)",[randomUUID(),root.actorId]);
     await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) SELECT true,$1,i.provider_user_id,i.corp_id FROM identity_mappings i WHERE i.user_id=$1 AND i.active LIMIT 1 ON CONFLICT DO NOTHING",[root.actorId]);
-    const identity=new DigitalProductionIdentityService(database,true,service),receiving=new ReceivingService(database),closure=new OrderClosureService(database);
+    const identity=new DigitalProductionIdentityService(database,true,service),receiving=new ReceivingService(database,undefined,undefined,new ProductionClosureService(database)),closure=new OrderClosureService(database);
     let order=await identity.read(primary,ready.id);
     for(const line of order.lines)order=await identity.correctNumbers(primary,ready.id,line.lineId,{expectedVersion:order.version,formalStyleNo:`TEST-SLA08-${randomUUID().slice(0,8)}`},randomUUID());
-    const receivedDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date(Date.now()-86_400_000));
+    const originalScopes=(await closure.read(root,ready.id)).lines;
+    const receivedDate=await prepareActualFactoryReturn(state.productionId!,root,originalScopes.map(line=>line.orderedQuantity));
+    // Advance only the test observation to the next Beijing day. The original
+    // backfill remains day-only with a real preceding dispatch and return.
+    const nextDay=Date.now()+86_400_000;
+    const backfill=async<T>(run:()=>Promise<T>)=>{
+      const observed=vi.spyOn(Date,'now').mockReturnValue(nextDay);
+      try{return await run();}finally{observed.mockRestore();}
+    };
     const receipts=[];
-    for(const line of (await closure.read(root,ready.id)).lines){
+    for(const line of originalScopes){
       const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-receipt.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/receipt/${image}`,'a'.repeat(64),root.actorId]);
       const input={cuttingOrderId:line.cuttingId!,documentQuantity:line.orderedQuantity,actualQuantity:line.orderedQuantity,defectiveQuantity:0,attachmentIds:[image],receivedDate},key=randomUUID();
-      const receipt=await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);
-      await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);receipts.push(receipt.value);
+      const receipt=await backfill(()=>receiving.create({...root,authorizationCapability:'receiving:create'},input,key));
+      await backfill(()=>receiving.create({...root,authorizationCapability:'receiving:create'},input,key));receipts.push(receipt.value);
     }
     const notices=new DigitalProductionNotificationService(database);
     const qcTodos=async()=> (await notices.todos(root)).filter(t=>t.entityId===ready.id&&t.category==='digital_garment_quality');
@@ -4898,15 +4914,18 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
     }
     const state=await flow.read(ready.people.warehouse_receiver!,ready.id);
-    await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST原生数量缺口读取夹具'},randomUUID());
+    const dispatched=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST原生数量缺口读取夹具'},randomUUID());
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) SELECT $1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP WHERE NOT EXISTS(SELECT 1 FROM identity_mappings WHERE user_id=$2)",[randomUUID(),root.actorId]);
     await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) SELECT true,$1,i.provider_user_id,i.corp_id FROM identity_mappings i WHERE i.user_id=$1 AND i.active LIMIT 1 ON CONFLICT DO NOTHING",[root.actorId]);
     const closure=new OrderClosureService(database),identity=new DigitalProductionIdentityService(database,true,service);
     let order=await identity.read(primary,ready.id);
     const white=order.lines.find(line=>line.color==='白')!;
     order=await identity.correctNumbers(primary,ready.id,white.lineId,{expectedVersion:order.version,formalStyleNo:`TEST-P01-WHITE-${randomUUID().slice(0,8)}`},randomUUID());
-    const line=(await closure.read(root,ready.id)).lines.find(value=>value.lineId===white.lineId)!;
+    const originalScopes=(await closure.read(root,ready.id)).lines;
+    await prepareActualFactoryReturn(dispatched.productionId!,root,originalScopes.map(line=>line.orderedQuantity));
+    const line=originalScopes.find(value=>value.lineId===white.lineId)!;
     const receiver={...root,authorizationCapability:'receiving:create'};
+    const receiving=new ReceivingService(database,undefined,undefined,new ProductionClosureService(database));
     const receipt=await receiving.create(receiver,{cuttingOrderId:line.cuttingId!,documentQuantity:2,actualQuantity:1,defectiveQuantity:0,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
     const style=order.lines.find(value=>value.lineId===white.lineId)!.formalStyleNo!;
     const before=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
@@ -4925,7 +4944,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const query=new DigitalJourneyQuery(database),projected=await query.read(root,ready.id);
     // Both garments were checked, one failed. qualityGap counts uninspected
     // garments; qualified and effectivePacked retain the actual quality gap.
-    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:2,qualified:1,packed:2,effectivePacked:null,remainingShipment:null,qualityGap:0,factoryAttribution:'unknown'});
+    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:2,qualified:1,packed:2,effectivePacked:null,remainingShipment:null,qualityGap:0,factoryAttribution:'known'});
+    expect((await database.query('SELECT production_order_id FROM sourcing_production_receipt_links WHERE receipt_id=$1',[receipt.value.receiptId])).rows)
+      .toEqual([{production_order_id:dispatched.productionId}]);
     expect(projected.businessProgress!.requirements.find(value=>value.key==='receiving_inspection')).toMatchObject({completed:false,applicability:'applicable'});
     expect(projected.stages.flatMap(stage=>stage.nodes).find(value=>value.key==='special_closure')).toMatchObject({state:'completed'});
   });
@@ -5312,7 +5333,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .toEqual(journeyDates.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate,line.sampleTargetDate]));
     expect(nativeOrder.lines.map(line=>[line.quantity,line.completedQuantity])).toEqual([[137,0],[63,0]]);
     expect(JSON.stringify(productionDates)).not.toMatch(/unitPrice|salePrice|completedQuantity|productionQuantity/);
-    await reporting.report(root,dispatched.productionId!,{position:1,businessDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),quantity:1},randomUUID());
+    const productionDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    await reporting.report(root,dispatched.productionId!,{position:1,businessDate:productionDay,quantity:1},randomUUID());
     const reminders=new ProductionClosureService(database,undefined,()=>new Date(Date.now()+4*86400000));await reminders.setPilot(root,{supplierId:factoryId,enabled:true});
     const todoActor=(actor:typeof primary)=>({...actor,authorizationCapabilities:[...(actor.authorizationCapabilities??[]),'todo:view']});
     expect((await reminders.todos(todoActor(replacement))).some(t=>t.entityId===dispatched.productionId)).toBe(true);expect((await reminders.todos(todoActor(primary))).some(t=>t.entityId===dispatched.productionId)).toBe(false);
@@ -5324,7 +5346,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         return async(text:string,values?:unknown[])=>text==="SELECT CURRENT_TIMESTAMP AS as_of"?{rows:[{as_of:new Date("2027-01-15T00:00:00Z")}]}:c.query(text,values);}});};}});
     const futureJourneys=new DigitalJourneyQuery(futureDb);
     for(const viewer of [root,fixture.designer,warehouse])expect((await futureJourneys.read(viewer,id)).deliveryRisks!.some(risk=>risk.kind==='factory')).toBe(true);
-    await reporting.execute(root,dispatched.productionId!,"complete",{businessDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),confirmed:true},randomUUID());
+    for(const [index,line] of nativeOrder.lines.entries())await reporting.report(root,dispatched.productionId!,{position:index+1,businessDate:productionDay,quantity:line.quantity-(index===0?1:0)},randomUUID());
+    await reporting.execute(root,dispatched.productionId!,"complete",{businessDate:productionDay,confirmed:true},randomUUID());
     expect((await database.query("SELECT sourcing_factory_order_status($1) AS status",[dispatched.productionId])).rows[0].status).toBe("production_completed");
     expect((await futureJourneys.read(root,id)).deliveryRisks!.some(risk=>risk.kind==='factory')).toBe(true);
     const qcSheet=await flow.read(root,id);
@@ -5337,6 +5360,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         expect(completed.links.some(link=>link.domain==='production')).toBe(false);
       }
     }
+    await reporting.execute(root,dispatched.productionId!,"ship",{businessDate:productionDay,confirmed:true},randomUUID());
     await exerciseOrderClosure(database,service,id,ids,{root,primary,manager:managerActor(),warehouse,qc},secondaryCraft==='无');
     });
   });

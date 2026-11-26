@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
-import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {beijingCalendarDate,DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {supplychainSettingsBrowser,type SettingsBrowserFault} from '../acceptance/supplychain-settings-browser.js';
@@ -14,6 +14,10 @@ import {OrderTimeRequestService} from '../../apps/api/src/production-platform/or
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {admittedFrameworkProductionFixture} from '../helpers/order-time-rewash-fixture.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -320,8 +324,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
    const qc={...f.people.qc!,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
+   await fixture.ready.cutting.record(cutter,first!.child_id,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());
    await fixture.ready.cutting.record(cutter,second!.child_id,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());
-   const receipt=await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:second!.child_id,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),read=await flow.read(f.root,fixture.orderId),sent=await flow.dispatch(f.root,fixture.orderId,
+    {expectedRevision:read.revision,supplierId:f.supplierId,lines:[{lineId:second!.line_id,quantity:2}],note:'TEST original second PO only dispatch'},randomUUID());
+   const native=sent.currentProduction!.productionId,reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(businessNow());
+   await reporting.report(f.root,native,{position:2,businessDate,quantity:2},randomUUID());
+   await reporting.execute(f.root,native,'complete',{businessDate,confirmed:true},randomUUID());
+   await reporting.execute(f.root,native,'ship',{businessDate,confirmed:true},randomUUID());
+   const receipt=await new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db)).create(warehouse,
+    {cuttingOrderId:second!.child_id,productionOrderId:native,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
    const draft=await new ReworkInitiationService(f.db,'anchor-test').createDraft(qc,{receivingBatchId:receipt.value.receivingBatchId,
     problemPart:'TEST二号PO',problemDescription:'TEST仅第二张PO待返工',reworkQuantity:1},randomUUID());
    return {id:draft.value.reworkOrderId,lineId:second!.line_id,firstLineId:first!.line_id,po:second!.po_number};
