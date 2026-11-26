@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
   "risk": "full",
-  "sourceFingerprint": "04e74a05479967ad0aebbec36d7af73c77973b3f04bf12bd02d095ae95236c34",
+  "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
   "rules": [
     {
       "rule": "正常 API 启动接通原工艺、成衣 QC 同批返工已有入口；不改变来源定位、数量、原权限、重放或普通返工。",
@@ -29,48 +29,77 @@
       ],
       "expectation": "普通启动中两条原路由注册，按原来源只建一张。隔离真实单批与双批不更改原实收/合格/装箱，另测工艺；原仓库大套件两项已在未改基线重现，未计入成功或本次修改；真实 Acceptance 联验待合后。",
       "checks": [
-        "native-startup",
-        "static"
+        "native"
+      ]
+    },
+    {
+      "rule": "把新增原鉴权浏览器回归登记进既有长正确性预算，仍精确选入 PostgreSQL，不加 worker 或改变测试分类政策。",
+      "source": "Full 45883912914 非数据库实际断言与现行 canonical 选择规范；原 M02-02 施工授权。",
+      "initialization": "只把本新用例列入既有 test-suite-plan 注册表；无迁移、fixture 事实、权限、CI 工具或全局预算变更。",
+      "dateAndPermission": "原授权浏览器已经使用隔离 PostgreSQL；范围是同一规范下的长期测试配置，工作日期和权限不变。",
+      "writes": [
+        "scripts/test-suite-plan.mjs#LONG_CORRECTNESS_TESTS"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs#correctnessTimeoutMs",
+        "vitest.business-chain.config.ts#correctnessTimeoutMs"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts#runs every consumer of the original shared authenticated App browser"
+      ],
+      "expectation": "最新本地现有风险选择回归全通过，原浏览器回归实际走已登记长预算通过。首次 Full 的非数据库失败单独记录。",
+      "checks": [
+        "native",
+        "canonical"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native-startup",
+      "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --testTimeout=110000 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/m02-02-evidence/directed.json tests/integration/original-quality-rework-startup-browser-postgres.test.ts",
+      "command": "bash /workspace/scratch/m02-02-evidence/budget-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
-      "sourceFingerprint": "04e74a05479967ad0aebbec36d7af73c77973b3f04bf12bd02d095ae95236c34",
-      "context": "Node 22 / local Chromium / actual server.ts in the owned PostgreSQL test schema. Executed before source commit with the same four files subsequently staged without edits, compared to native-entry baseline red.",
-      "startedAt": "2026-11-26T19:05:25.617000+00:00",
-      "endedAt": "2026-11-26T19:06:02.636446+00:00",
-      "logSha256": "2aba62eb966729e28436ae940e22466398324058ac88c83bcf66151ef850d3fb",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "a748dcdfc3deffc54fca6f9aae43194f56cec387cf1568216cfc3c6d3f286bea"
-        }
-      ],
+      "testedHead": "135ab696466e27dae8a46780624629f89c708577",
+      "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
+      "context": "Node 22 / Chromium / normal server.ts / isolated PostgreSQL, using the exact existing long correctness config now selected by canonical plan.",
+      "startedAt": "2026-11-26T19:43:54.020938+00:00",
+      "endedAt": "2026-11-26T19:44:30.046197+00:00",
+      "log": "/workspace/scratch/m02-02-evidence/budget-fix/native.log",
+      "logSha256": "aacf0aa37dc48ab082a7590adf9f6659576afcbcb28adcfdcaeee2971620afdf",
       "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "log": "/workspace/scratch/m02-02-evidence/directed.log"
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "74aece08b140d9916292f496d0182cb5c23ab63a4d65097c8fc0987f885fbf4a"
+        }
+      ]
     },
     {
-      "id": "static",
-      "kind": "command",
-      "command": "bash /workspace/scratch/m02-02-evidence/static.sh",
+      "id": "canonical",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-02-evidence/budget-fix/canonical.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e8220a1416e3ac61d4e95ad50db84bb93983dbba",
-      "sourceFingerprint": "04e74a05479967ad0aebbec36d7af73c77973b3f04bf12bd02d095ae95236c34",
-      "context": "本地受管工作区 Node22 及 npm10，对改动文件 ESLint，工作区 TypeScript、迁移和 secret 静态校验。",
-      "startedAt": "2026-11-26T19:08:44.936087+00:00",
-      "endedAt": "2026-11-26T19:09:30.117025+00:00",
-      "log": "/workspace/scratch/m02-02-evidence/static.log",
-      "logSha256": "310151ca46e5dc3cbe92c83638314ae3d5518aaf809308612203b8f60ee744cc"
+      "testedHead": "135ab696466e27dae8a46780624629f89c708577",
+      "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
+      "context": "Local Node 22 at corrected source, the complete canonical Full-risk mapping unit suite, including the original browser shared harness rule.",
+      "startedAt": "2026-11-26T19:45:23.659269+00:00",
+      "endedAt": "2026-11-26T19:45:24.231351+00:00",
+      "log": "/workspace/scratch/m02-02-evidence/budget-fix/canonical.log",
+      "logSha256": "338c0ebdc17b26fd524afb236bae33fafafe7dc2f6e7dfef65800fb9ad2d3b59",
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "95cc5bea6fa5984cb2b1ae9745a251eafc492135b32a08778ef2463ef391f769"
+        }
+      ]
     }
   ]
 }
