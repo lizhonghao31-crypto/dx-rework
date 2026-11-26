@@ -1,3 +1,4 @@
+import {developmentCommentRevisionLinks,readRepeatedDevelopmentCommentIntent} from './development-revision-comment-basis.js';
 import {commentTimeColumns,commentTimeDto,customerCommentTime,appendCommentTime} from './development-comment-time.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
@@ -442,6 +443,11 @@ export class DevelopmentTechnicalService {
   empty.effective=await effectiveTechnicalEvidence(db,sourceId,selected,scope);
   empty.cycle=await developmentCycleEvidence(db,sourceId,selected,businessNow().toISOString());
   empty.canRecordComment=sheet.canEdit&&await this.technicalRole(db,actor,['sample_designer']);empty.canMaintainTemplates=await this.technicalRole(db,actor);
+  if(empty.canRecordComment){
+   if(empty.comments.length){const links=await developmentCommentRevisionLinks(db,sourceId,selected,scope);if(links.length)empty.revisionCommentLinks=links;}
+   const inheritedIntent=await readRepeatedDevelopmentCommentIntent(db,sourceId,selected);
+   if(inheritedIntent)empty.inheritedRevisionComment=inheritedIntent;
+  }
   empty.canApproveUrgent=Boolean(empty.cycle)&&await this.technicalRole(db,actor,['production_management','owner_group']);
   empty.canRequestUrgent=Boolean(empty.cycle)&&await this.canRequestUrgent(db,actor,sourceId);
   empty.canTriagePatch=await this.technicalRole(db,actor,['pattern_room_supervisor']);

@@ -2715,5 +2715,24 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0315_development_comment_revision_lineage": {
+    "checksum": "d4cda855dcf22b3068205f94b0f079dfed07a910ae38be18fc643eaa2c6fe082",
+    "tables": [
+      "digital_development_revision_comment_adoptions",
+      "digital_development_documents",
+      "digital_development_revision_sources"
+    ],
+    "functions": [],
+    "references": [
+      "digital_development_revision_comment_adoptions"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_development_revision_comment_lineage"
+    ],
+    "sequences": []
   }
 }

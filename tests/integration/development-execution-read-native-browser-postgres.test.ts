@@ -170,6 +170,127 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  afterAll(async()=>{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));}await app?.close();await f?.dispose();if(output)await rm(output,{recursive:true,force:true});});
 
+ it('Acceptance R3 opens the original comment, publishes the actual independently revised form, and recovers the same result',async()=>{
+  const own=await prepareDevelopment(),designer=f.people['sample-designer']!,forms=new DigitalDevelopmentService(f.db,true);
+  const original=await forms.read(designer,own.id),image=await f.image(designer);
+  await execution.recordUploadPurpose(designer,own.id,image,'客户评语依据');
+  const authorToken=await loginRole('sample-designer');
+  const post=(url:string,payload:object,key=randomUUID())=>app.inject({method:'POST',url,payload,
+   headers:{cookie:`dx_rework_session=${authorToken}`,'idempotency-key':key}});
+  const a=await post(`/digital-production/sources/${own.id}/execution/technical/comments`,{
+   roundNumber:1,scopeRef:'整款',expectedVersion:0,isFinal:false,decision:'changes_required',
+   text:'TEST R3 真实回版依据',evidenceRefs:[image],evidenceNote:'TEST 客户已经提出具体调整',occurredAt:null});
+  expect(a.statusCode,a.body).toBe(200);
+  const originalComments=await execution.technicalEvidenceService().read(designer,own.id,1,'整款');
+  const comment=originalComments.comments.find(item=>item.commentId===a.json().commentId)!;
+  const recordedOn=beijingCalendarDate(new Date(comment.recordedAt));
+  expect(original.document?.files.find(row=>row.attachmentId===image)).toBeUndefined();
+  const author=await browser.newContext({viewport:{width:1165,height:747}});
+  await author.addCookies([{name:'dx_rework_session',value:authorToken,url:base}]);
+  const editor=await author.newPage(),outcome:string[]=[];
+  try{
+   editor.setDefaultTimeout(7000);
+   editor.on('response',response=>{const url=new URL(response.url());if(url.pathname.startsWith('/api/'))outcome.push(`${response.status()} ${url.pathname}`);});
+   editor.on('pageerror',error=>outcome.push(error.message));
+   await editor.goto(base+`/ui/digital-production?workspace=designer&section=workspace&area=development&development=${own.id}`);
+   await editor.getByText('TEST R3 真实回版依据',{exact:false}).first().waitFor();
+   await editor.getByRole('button',{name:'发起复版',exact:true}).click();
+   await editor.getByLabel('制作说明（选填）',{exact:true}).fill('TEST R3 尚未保存的最终版本 B');
+   const reply=editor.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/development/round-publish'));
+   await editor.getByRole('button',{name:/正式发布本轮修改|发布复版|建立独立复版单/}).click();
+   const result=await reply;
+   expect(result.status(),await result.text()).toBe(200);
+   const submission=await result.json();
+   expect(submission.sourceId).not.toBe(own.id);
+   expect(await forms.read(designer,submission.sourceId,undefined,submission.roundNumber)).toMatchObject({
+    status:'published',document:{instructions:'TEST R3 尚未保存的最终版本 B'}});
+   expect((await forms.read(designer,own.id)).version).toBe(original.version);
+   const request=result.request();
+   const repeat=await post(`/digital-production/sources/${own.id}/development/round-publish`,request.postDataJSON());
+   expect(repeat.statusCode,repeat.body).toBe(200);
+   expect(repeat.json()).toMatchObject({sourceId:submission.sourceId,roundNumber:submission.roundNumber});
+   const actual=await execution.technicalEvidenceService().read(designer,own.id,1,'整款');
+   expect(actual.comments.find(row=>row.commentId===a.json().commentId)).toMatchObject({commentId:a.json().commentId});
+   const adoptions=async()=>(await f.db.query(`SELECT source_id,round_number,adoption_number,previous_source_id,previous_round_number
+    FROM digital_development_revision_comment_adoptions WHERE comment_id=$1 ORDER BY adoption_number`,[a.json().commentId])).rows;
+   expect(await adoptions()).toEqual([{source_id:submission.sourceId,round_number:submission.roundNumber,
+    adoption_number:1,previous_source_id:null,previous_round_number:null}]);
+   await editor.goto(base+`/ui/digital-production?workspace=designer&section=workspace&area=development&development=${submission.sourceId}&round=${submission.roundNumber}`);
+   await editor.getByRole('button',{name:'再次发起',exact:true}).click({timeout:6000});
+   const attachment=editor.getByRole('link',{name:'原意见附件 1',exact:true});
+   const originalAttachment=`/api/digital-production/sources/${own.id}/development/attachments/${image}`;
+   const childAttachment=originalAttachment.replace(own.id,submission.sourceId);
+   const linkedAttachment=await attachment.getAttribute('href');
+   expect(linkedAttachment).toBe(originalAttachment);
+   const imageResponse=await author.request.get(new URL(linkedAttachment!,base).href);
+   expect(imageResponse.status()).toBe(200);
+   expect(imageResponse.headers()['content-type']).toContain('image/');
+   expect((await author.request.get(base+childAttachment,{maxRedirects:0})).status()).toBe(403);
+   await editor.getByLabel('制作说明（选填）',{exact:true}).fill('TEST R3 原评语第二次真实调整 C');
+   const saving=editor.waitForResponse(response=>response.request().method()==='PUT'&&response.url().endsWith('/development/round-draft'));
+   await editor.getByRole('button',{name:'保存草稿',exact:true}).click();
+   const saved=await saving;
+   expect(saved.status(),await saved.text()).toBe(200);
+   await editor.reload();
+   await editor.getByRole('button',{name:'编辑版单',exact:true}).click();
+   expect(await editor.getByLabel('制作说明（选填）',{exact:true}).inputValue()).toBe('TEST R3 原评语第二次真实调整 C');
+   expect(await attachment.getAttribute('href')).toBe(originalAttachment);
+   const again=editor.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/development/round-publish'),{timeout:7000});
+   await editor.getByRole('button',{name:/正式发布本轮修改|发布复版|建立独立复版单/}).click();
+   const againResult=await again;
+   expect(againResult.status(),await againResult.text()).toBe(200);
+   expect(againResult.request().postDataJSON()).toMatchObject({publishCurrent:true,expectedDraftVersion:(await saved.json()).draftVersion,
+    revision:{repeatOriginalComment:{sourceId:submission.sourceId,roundNumber:submission.roundNumber}}});
+   const second=await againResult.json();
+   expect(second.sourceId).not.toBe(submission.sourceId);
+   expect(second.sourceId).not.toBe(own.id);
+   const secondSheet=await forms.read(designer,second.sourceId,undefined,second.roundNumber);
+   expect(secondSheet).toMatchObject({
+    status:'published',document:{instructions:'TEST R3 原评语第二次真实调整 C'}});
+   const versionPath=`/api/digital-production/sources/${second.sourceId}/development/versions/${secondSheet.version}`;
+   const roundQuery=`?round=${second.roundNumber}`;
+   const printContext=await browser.newContext();
+   try{
+    await printContext.addCookies([{name:'dx_rework_session',value:await loginRole('pattern-room-supervisor'),url:base}]);
+    const printed=await printContext.newPage();
+    await printed.addInitScript(()=>{
+     const watch=new MutationObserver(entries=>{for(const entry of entries)for(const node of entry.addedNodes){
+      if(!(node instanceof HTMLIFrameElement)||node.title!=='版单 A4 打印预览'||!node.contentWindow)continue;
+      node.contentWindow.print=()=>{
+       const feedback=node.contentDocument!.querySelector('[data-print-document="客户评语单"]')!;
+       document.body.dataset.testRepeatedFeedback=JSON.stringify({text:feedback.textContent,
+        images:[...feedback.querySelectorAll('img')].map(item=>({url:item.src,decoded:item.naturalWidth>0}))});
+       node.contentWindow?.dispatchEvent(new Event('afterprint'));
+      };
+     }});
+     watch.observe(document,{childList:true,subtree:true});
+    });
+    const exact=await printed.request.get(base+versionPath+roundQuery);
+    expect(exact.status(),await exact.text()).toBe(200);
+    expect((await exact.json()).printFeedback).toEqual({text:'TEST R3 真实回版依据',sourceRound:1,version:comment.version,recordedOn,images:[{attachmentId:image}]});
+    await printed.goto(base+`/ui/digital-production?development=${second.sourceId}&round=${second.roundNumber}&developmentDocumentVersion=${secondSheet.version}`);
+    await printed.getByRole('button',{name:'打印 / 保存 PDF',exact:true}).click();
+    await expect.poll(()=>printed.locator('body').getAttribute('data-test-repeated-feedback')).toBeTruthy();
+    const feedback=JSON.parse((await printed.locator('body').getAttribute('data-test-repeated-feedback'))!);
+    expect(feedback.text).toContain('TEST R3 真实回版依据');
+    expect(feedback.text).toContain(`评语版本v${comment.version}`);
+    expect(feedback.text).toContain(`评语登记日${recordedOn}`);
+    expect(feedback.images).toEqual([{url:base+versionPath+`/attachments/${image}`+roundQuery,decoded:true}]);
+   }finally{await printContext.close();}
+   const replay=await post(`/digital-production/sources/${submission.sourceId}/development/round-publish`,againResult.request().postDataJSON());
+   expect(replay.statusCode,replay.body).toBe(200);
+   expect(replay.json()).toMatchObject({sourceId:second.sourceId,roundNumber:second.roundNumber});
+   expect(await adoptions()).toEqual([{source_id:submission.sourceId,round_number:submission.roundNumber,
+    adoption_number:1,previous_source_id:null,previous_round_number:null},{source_id:second.sourceId,round_number:second.roundNumber,
+    adoption_number:2,previous_source_id:submission.sourceId,previous_round_number:submission.roundNumber}]);
+   expect((await forms.read(designer,own.id)).version).toBe(original.version);
+   expect((await forms.read(designer,submission.sourceId)).document?.instructions).toBe('TEST R3 尚未保存的最终版本 B');
+  }catch(error){
+   await writeFile(join(evidence,'r3-current-revision-failure.txt'),[...outcome,await editor.locator('body').innerText()].join('\n'));
+   throw error;
+  }finally{await author.close();}
+ },30_000);
+
  it('submits current revision inputs without a prior draft save and prints only the adopted original opinion as the signed pattern role',async()=>{
   const own=await prepareDevelopment(),designer=f.people['sample-designer']!,forms=new DigitalDevelopmentService(f.db,true);
   const original=await forms.read(designer,own.id),technical=execution.technicalEvidenceService();
@@ -194,7 +315,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await author.addCookies([{name:'dx_rework_session',value:authorToken,url:base}]);
   const editor=await author.newPage(),writes:string[]=[];
   editor.on('request',request=>{if(request.method()==='PUT'||request.method()==='POST')writes.push(new URL(request.url()).pathname);});
-  let submitted:{sourceId:string;roundNumber:number};
+  let submitted:{sourceId:string;roundNumber:number;status?:string};
   try{
    await editor.goto(base+`/ui/digital-production?workspace=designer&section=workspace&area=development&development=${own.id}`);
    await editor.getByRole('button',{name:'编辑版单',exact:true}).click();
@@ -222,22 +343,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    submitted=await result.json();
    expect(writes).not.toContain('/api'+submitPath.replace('round-publish','round-draft'));
    const payload=result.request().postDataJSON(),idem=result.request().headers()['idempotency-key']!;
-   expect(payload).toMatchObject({expectedDraftVersion:0,revision:{customerCommentRef:ref,document:{instructions:current.revision.document.instructions}}});
+   expect(payload).toMatchObject({expectedDraftVersion:0,publishCurrent:true,expectedBasisVersion:original.version,
+    revision:{customerCommentRef:ref,document:{instructions:current.revision.document.instructions}}});
+   expect(submitted.status).toBe('published');
    expect(idem).toBeTruthy();
    expect((await post(submitPath,payload,idem)).json()).toEqual(submitted);
-   expect((await post(submitPath,payload)).statusCode).toBe(409);
+   expect((await post(submitPath,payload)).json()).toEqual(submitted);
   }finally{await author.close();}
   const {sourceId:revisionId,roundNumber}=submitted,b=await post(commentPath,comment('TEST 后录不能混入的评语 B',imageB,ref.version));
   expect(b.statusCode,b.body).toBe(200);
   expect((await technical.read(designer,own.id,1,'整款')).comments.map(row=>row.commentId)).toEqual(expect.arrayContaining([ref.commentId,b.json().commentId]));
-  let saved=await forms.read(designer,revisionId,undefined,roundNumber);
-  if(saved.status==='draft'){
-   const category=saved.document!.patternCategoryId!;
-   const price=await new PatternRoomPriceService(f.db).quote(f.root,'category',category);
-   const published=await post(`/digital-production/sources/${revisionId}/development/publish`,{expectedVersion:saved.version,patternOrder:{categoryId:category,priceVersion:price.version}});
-   expect(published.statusCode,published.body).toBe(200);
-   saved=await forms.read(designer,revisionId,undefined,roundNumber);
-  }
+  const saved=await forms.read(designer,revisionId,undefined,roundNumber);
   expect(saved).toMatchObject({document:{instructions:'TEST 本次未保存的制作说明'},status:'published'});
   const version=`/api/digital-production/sources/${revisionId}/development/versions/${saved.version}`;
   const context=await browser.newContext({viewport:{width:1165,height:840}});
