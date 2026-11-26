@@ -36,7 +36,7 @@ export async function pendingReceivingForAuthorizedOrders(db:Pick<PoolClient,'qu
   const balance=projectPendingReceivingScope({identity,expectedQuantity,effectiveReceipts:(receipts.get(identity.orderId)??[]).filter(row=>!excluded.has(row.receiptId)),
    dispatches:facts.map(fact=>({identity,factId:fact.factId,kind:'仓库实际发厂',actualDispatchedAt:fact.dispatchedAt,dispatchedQuantity:fact.quantity}))});
   if(!balance)return [];
-  const needsQualification=pendingQualification.some(row=>row.orderId===identity.orderId&&row.lineId===identity.lineId&&
+  const needsQualification=pendingQualification.some(row=>row.quantity>0&&row.orderId===identity.orderId&&row.lineId===identity.lineId&&
    (row.cuttingId===null||row.cuttingId===identity.cuttingOrderId)&&(!row.productionId||
     row.productionId===identity.productionId&&row.factoryDecisionId===factoryDecisionId));
   return [{identity,factoryDecisionId,expectedQuantity,balance:needsQualification?{...balance,status:'unresolved' as const,received:null,remaining:null,difference:null}:balance,

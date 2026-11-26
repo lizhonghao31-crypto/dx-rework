@@ -15,6 +15,7 @@ import {FactoryFlowService} from '../../apps/api/src/production-platform/factory
 import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from '../../apps/api/src/receiving/pending-receiving-native-receipts.js';
 import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
+import {readNativeReceivingTotals} from '../../apps/api/src/receiving/native-receiving-totals.js';
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {readWorkbenchFactoryCommunication} from '../../apps/api/src/production-platform/workbench-factory-communication.js';
@@ -35,6 +36,8 @@ import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sam
 import {OperationEventRepository} from '../../apps/api/src/tools/repositories.js';
 import {linkDigitalReceipt} from '../../apps/api/src/production-platform/receiving-link-adapter.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {DeliveryCalendarQuery} from '../../apps/api/src/production-platform/delivery-calendar-query.js';
+import {DeliveryCalendarFiltersSchema} from '@dx-rework/contracts/delivery-calendar';
 
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -294,6 +297,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  },testExecutionConfig.correctnessTimeoutMs);
  it('Acceptance R5 shows a historical premature receipt as pending proof on both original views without adopting it',async()=>{
   const ctx=await context('2026-11-25T09:00:00.000Z'),r=await prepare(ctx.run,1,false,500,[]);
+  const clean=await prepare(ctx.run,1,false,500);
   await f.db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[r.id]);
   await ctx.run(async()=>{
    const production=new ProductionClosureService(f.db),service=new ReceivingService(f.db,undefined,undefined,production,{allowLegacyStyleInput:true});
@@ -303,16 +307,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // In this disposable historical fixture, reproduce the original ledger
    // transaction as it was before admission, with all original DB guards on.
    // There is no shipment, dispatch or inferred production relation.
+   const historicalNote=await f.image(warehouse);
    const db=await f.db.connect();
    try{
     await db.query('BEGIN');
-    await db.query('INSERT INTO receiving_batches(receiving_batch_id,style_no,cutting_order_id,created_by,delivery_note_quantity) VALUES($1,$2,$3,$4,280)',[batchId,style,cut,warehouse.actorId]);
+    await db.query('INSERT INTO receiving_batches(receiving_batch_id,style_no,cutting_order_id,created_by,delivery_note_quantity) VALUES($1,$2,$3,$4,300)',[batchId,style,cut,warehouse.actorId]);
     const event=await new OperationEventRepository().append(db,warehouse,{action:'receiving.receipt.create',entityType:'receiving_receipt',
-     entityId:receiptId,after:{receivingBatchId:batchId,cuttingOrderId:cut,styleNo:style,documentQuantity:280,actualQuantity:280,defectiveQuantity:0}});
+     entityId:receiptId,after:{receivingBatchId:batchId,cuttingOrderId:cut,styleNo:style,documentQuantity:300,actualQuantity:100,defectiveQuantity:4,attachmentIds:[historicalNote]}});
     await db.query("SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",[event,warehouse.requestId]);
+    await db.query("UPDATE attachments SET entity_type='receiving_batch',entity_id=$2 WHERE attachment_id=$1",[historicalNote,batchId]);
     await db.query(`INSERT INTO receiving_receipts(receipt_id,receiving_batch_id,cutting_order_id,style_no,document_quantity,actual_quantity,
-      defective_quantity,receiving_source,received_by,operation_event_id,request_id,received_at) VALUES($1,$2,$3,$4,280,280,0,'initial',$5,$6,$7,$8)`,
-     [receiptId,batchId,cut,style,warehouse.actorId,event,warehouse.requestId,businessNow().toISOString()]);
+      defective_quantity,receiving_source,received_by,operation_event_id,request_id,received_at) VALUES($1,$2,$3,$4,300,100,4,'initial',$5,$6,$7,$8)`,
+     [receiptId,batchId,cut,style,warehouse.actorId,event,warehouse.requestId,'2026-11-25T07:00:00.000Z']);
     expect(await linkDigitalReceipt(db,receiptId,batchId)).toMatchObject({id:r.id});
     await db.query('COMMIT');
    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
@@ -320,23 +326,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const untouched=await original(),closure=new OrderClosureService(f.db);
    const legacy=await service.board(r.day,r.day,style);
    const originalRow=legacy.rows.find(row=>row.receivingBatchId===batchId)!;
-   expect(originalRow).toMatchObject({currentActualQuantity:280,
+   expect(originalRow).toMatchObject({currentActualQuantity:100,
     nativeQualification:{effectiveQuantity:null,pendingReceiptCount:1},
-    receivingHistory:[{receiptId,actualQuantity:280,pendingQualification:'原裁单、PO或工厂执行关联待核'}]});
+    receivingHistory:[{receiptId,actualQuantity:100,pendingQualification:'原裁单、PO或工厂执行关联待核'}]});
    const formal=await closure.read(f.root,r.id);
    expect(formal.lines).toMatchObject([{actualQuantity:0,receivingBatchId:batchId,
-    receivingExceptions:[{receiptId,quantityVersion:receiptId,quantity:280,reason:'原裁单、PO或工厂执行关联待核'}]}]);
+    receivingExceptions:[{receiptId,quantityVersion:receiptId,quantity:100,reason:'原裁单、PO或工厂执行关联待核'}]}]);
    expect(await garmentQuality(f.db,r.id)).toEqual([]);
    expect((await new DigitalProductionTaskService(f.db).qualityDirectory(f.root,'garment',{kind:'garment',status:'open',page:1,search:style})).items)
     .not.toContainEqual(expect.objectContaining({id:receiptId}));
    expect(await closure.cockpitReceipts.read(f.root,r.id)).toMatchObject({status:'数量待核',totals:{received:null},
-    lines:[{status:'实收待核',pendingQualification:[{receiptId,quantity:280}]}]});
+    lines:[{status:'实收待核',pendingQualification:[{receiptId,quantity:100}]}]});
    await expect(service.recordPacking({...f.root,authorizationCapability:'receiving:packing_manage'},{
-    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,packingQuantity:280,
+    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,packingQuantity:100,
    },randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('待核')});
    await expect(service.resolveDifference({...f.root,authorizationCapability:'receiving:resolve_difference'},{
-    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,expectedActualQuantity:280,
-    expectedDocumentQuantity:280,differenceType:'receiving',result:'TEST 原签收仍不能作为正式回货',
+    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,expectedActualQuantity:100,
+    expectedDocumentQuantity:300,differenceType:'receiving',result:'TEST 原签收仍不能作为正式回货',
    },randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('待核')});
    const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
    await flow.dispatch(warehouse,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST later real dispatch'},randomUUID());
@@ -346,6 +352,63 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     receipts:[]}}]);
    expect(await original()).toEqual(untouched);
    expect((await f.db.query('SELECT receipt_id FROM sourcing_production_receipt_links WHERE receipt_id=$1',[receiptId])).rowCount).toBe(0);
+   const corrector={...f.root,authorizationCapability:'receiving:correct',authorizationCapabilities:['receiving:correct']};
+   const correct=async(id:string,actualQuantity:number,defectiveQuantity:number)=>{
+    const current=(await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[batchId])).rows[0]!.version;
+    return service.correctReceipt(corrector,id,{expectedVersion:current,source:'jiashun',documentQuantity:300,actualQuantity,defectiveQuantity});
+   };
+   await correct(receiptId,0,0);
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{received:0,remaining:500}}]);
+   expect((await closure.read(f.root,r.id)).lines[0]!.receivingExceptions).toEqual([expect.objectContaining({receiptId,quantity:0})]);
+   const legitimate=await service.createRepeated(warehouse,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,
+    receivingBatchId:batchId,source:'jiashun',actualQuantity:300,defectiveQuantity:0},randomUUID());
+   expect(legitimate.value.receivingBatchId).toBe(batchId);
+   const oldAdjustment=(await f.db.query('SELECT actual_quantity_adjustment FROM receiving_batches WHERE receiving_batch_id=$1',[batchId])).rows[0]!.actual_quantity_adjustment;
+   expect(Number(oldAdjustment)).toBe(-100); // Adding the original aggregate adjustment to the retained 300 would incorrectly produce 200.
+   const scopedTotals=async()=>{
+    const row=(await readNativeReceivingTotals(f.db,[cut]))[0]!;
+    return {actual:Number(row.current_actual_quantity),defective:Number(row.current_defective_quantity),revision:row.actual_quantity_revision};
+   };
+   expect(await scopedTotals()).toMatchObject({actual:300,defective:0});
+   expect((await service.board(r.day,r.day,style)).rows.find(row=>row.receivingBatchId===batchId)?.nativeQualification)
+    .toEqual({effectiveQuantity:300,pendingReceiptCount:1});
+   await ship(clean,null,[500]);
+   const control=(await service.create(warehouse,{cuttingOrderId:clean.cuts[0]!.cutting_order_id,productionOrderId:clean.productionId,
+    factoryDecisionId:null,documentQuantity:300,actualQuantity:300,attachmentIds:[await f.image(warehouse)]},randomUUID())).value;
+   const receiveAndPack=async(orderId:string,receipt:typeof control)=>{
+    const qc=(await garmentQuality(f.db,orderId)).find(row=>row.receiptId===receipt.receiptId)!;
+    expect(qc.quantity).toBe(300);
+    await closure.recordQuality(f.root,orderId,{receiptId:receipt.receiptId,quantityVersion:qc.quantityVersion,
+     qualifiedQuantity:300,problem:'',occurredAt:businessNow().toISOString()},randomUUID());
+    const current=(await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[receipt.receivingBatchId])).rows[0]!.version;
+    await service.recordPacking({...f.root,authorizationCapability:'receiving:packing_manage'},
+     {receivingBatchId:receipt.receivingBatchId,expectedVersion:current,expectedPackingRevisionId:null,packingQuantity:300,
+      packingTime:{mode:'now'},packingAllocations:[{receiptId:receipt.receiptId,quantityVersion:qc.quantityVersion,quantity:300,packingTime:{mode:'now'}}]},randomUUID());
+    const po=(await f.db.query(`SELECT o.design_style_no AS style,p.customer_warehouse_arrival_date::text AS due FROM digital_production_orders o
+     JOIN digital_production_po_lines p USING(production_order_id) WHERE o.production_order_id=$1`,[orderId])).rows[0]!;
+    const result=await new DeliveryCalendarQuery(f.db).day(f.root,DeliveryCalendarFiltersSchema.parse({search:po.style}),po.due);
+    expect(result.items).toHaveLength(1);
+    const sheet=(await closure.read(f.root,orderId)).lines[0]!,cockpit=(await closure.cockpitReceipts.read(f.root,orderId)).lines[0]!;
+    return {closedActual:sheet.actualQuantity,cockpitReceived:cockpit.received,calendarPacked:result.items[0]!.packedQty,
+     calendarPending:result.items[0]!.pendingQty};
+   };
+   const clean300=await receiveAndPack(clean.id,control);
+   expect(clean300).toEqual({closedActual:300,cockpitReceived:300,calendarPacked:300,calendarPending:200});
+   expect(await receiveAndPack(r.id,legitimate.value)).toEqual(clean300);
+   await correct(legitimate.value.receiptId,275,2);
+   const corrected=await scopedTotals();
+   expect(corrected).toMatchObject({actual:275,defective:2});
+   await correct(receiptId,40,4);
+   expect(await scopedTotals()).toEqual(corrected);
+   expect((await closure.read(f.root,r.id)).lines[0]).toMatchObject({actualQuantity:275,defectiveQuantity:2,
+    receivingExceptions:[{receiptId,quantity:40}]});
+   expect((await closure.cockpitReceipts.read(f.root,r.id)).lines[0]).toMatchObject({received:275,defectiveQuantity:2,
+    pendingQualification:[{receiptId,quantity:40}]});
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{status:'unresolved',received:null,provenReceived:275}}]);
+   await expect(service.createRepeated(warehouse,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,
+    receivingBatchId:batchId,source:'jiashun',actualQuantity:1},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await scopedTotals()).toEqual(corrected);
+   expect(await original()).toEqual(untouched);
   });
  },testExecutionConfig.correctnessTimeoutMs);
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{
