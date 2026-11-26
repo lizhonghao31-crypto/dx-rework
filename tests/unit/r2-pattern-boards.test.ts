@@ -2,7 +2,9 @@ import {describe,it,expect} from 'vitest';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import type {BulkPatternCardSummary,BulkPreparationSheet} from '@dx-rework/contracts/bulk-preparation';
+import {PATTERN_GROUPS,type PatternWorkspaceResult,type PatternWorkspaceTask} from '@dx-rework/contracts/digital-development-workspace';
 import {developmentWorkspaceReturnUrl} from '../../apps/web/src/development-workspace-return.js';
+import {isConfirmedEmptyDevelopmentBoard} from '../../apps/web/src/digital-pattern-workspace.js';
 import {bulkPatternLane} from '../../apps/web/src/bulk-pattern-model.js';
 import {PatternBoardLane,PatternBoardCard} from '../../apps/web/src/pattern-board-parts.js';
 import {BulkPatternCard} from '../../apps/web/src/bulk-pattern-card.js';
@@ -10,6 +12,44 @@ import {patternReturnPath,patternListPath,readPatternListQuery} from '../../apps
 const sheet=(patch:Partial<BulkPreparationSheet>={})=>({preparationId:'real-preparation',reasons:[],facts:[],tasks:[],...patch}) as BulkPreparationSheet;
 const card=(patch:Partial<BulkPatternCardSummary>):BulkPatternCardSummary=>({preparationId:null,reasons:[],facts:[],task:null,lines:[],...patch});
 const fact=(kind:string)=>({kind,recordedAt:'2026-10-16T00:00:00Z'});
+const asOf='2026-10-16T00:00:00Z';
+const task:PatternWorkspaceTask={
+ journeyId:'TEST-archive',sourceId:'TEST-source',orderId:null,designStyleNo:'TEST真实开发任务',customer:null,designer:null,group:'pattern',
+ node:{key:'development_pattern',instanceId:'TEST-pattern-task',label:'纸样',stage:'development',state:'active',round:2,occurrence:1,current:true,
+  owner:{id:'TEST-worker',name:'TEST主办'},operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',
+  actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_started',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],
+  inheritedFrom:null,countsInProgress:true,unavailableReason:null},
+};
+const emptyBoard:PatternWorkspaceResult={asOf,page:1,pageSize:15,total:0,archiveTotal:0,owners:[],items:[],
+ counts:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,0])) as PatternWorkspaceResult['counts'],
+ riskCounts:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,{dueSoon:0,overdue:0}])) as PatternWorkspaceResult['riskCounts']};
+
+describe('G7 confirms only a complete current development board with zero visible tasks',()=>{
+ it('accepts the explicit zero result and ignores the authorized owner directory',()=>{
+  expect(isConfirmedEmptyDevelopmentBoard({...emptyBoard,owners:[{id:'TEST-worker',name:'TEST主办'}]},[],true)).toBe(true);
+ });
+
+ it.each<[string,Partial<PatternWorkspaceResult>]>([
+  ['unknown task total',{total:null}],
+  ['tasks on another page',{total:16,page:3}],
+  ['tasks in the returned page',{items:[task]}],
+  ['tasks in the preview despite the zero total',{boardPreview:[task]}],
+  ['tasks in the returned risk records',{risks:[task]}],
+  ['a nonzero archive count',{archiveTotal:1}],
+  ['tasks in another lane',{counts:{...emptyBoard.counts!,sewing:1}}],
+  ['a nonzero risk count',{riskCounts:{...emptyBoard.riskCounts!,shipping:{dueSoon:1,overdue:0}}}],
+  ['partial freshness',{freshness:{pending:1,failed:0}}],
+  ['a failed task detail',{detailFailures:[{journeyId:task.journeyId,designStyleNo:task.designStyleNo}]}],
+ ])('withholds the board-wide empty claim for %s',(_reason,patch)=>{
+  expect(isConfirmedEmptyDevelopmentBoard({...emptyBoard,...patch},[],true)).toBe(false);
+ });
+
+ it('does not hide rendered cards or reuse empty evidence across a filter or read change',()=>{
+  expect(isConfirmedEmptyDevelopmentBoard(emptyBoard,[task],true)).toBe(false);
+  expect(isConfirmedEmptyDevelopmentBoard(emptyBoard,[],false)).toBe(false);
+  expect(isConfirmedEmptyDevelopmentBoard(null,[],true)).toBe(false);
+ });
+});
 describe('R2 PR08 board display boundaries',()=>{
  it('shows the real special-closure response as terminal without changing its existing lane',()=>{
   const value=card({reasons:['母单已特殊结案，原实绩及历史继续保留','当前开发轮次尚未确认客户样板']});

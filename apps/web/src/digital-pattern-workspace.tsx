@@ -39,13 +39,32 @@ function initialFilter(): PatternWorkspaceFilter {
   const parsed = PatternWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "group", "lane", "owner", "state", "risk", "scope", "business"].includes(key))));
   return parsed.success ? parsed.data : PatternWorkspaceFilterSchema.parse({});
 }
+type PatternWorkspaceRead = {
+  result: PatternWorkspaceResult;
+  filter: PatternWorkspaceFilter;
+  access: DigitalAccessOptions;
+  refresh: number;
+};
+
+export function isConfirmedEmptyDevelopmentBoard(
+  result: PatternWorkspaceResult | null, boardItems: readonly PatternWorkspaceTask[], current: boolean,
+): boolean {
+  if (!current || result?.total !== 0 || result.freshness || result.detailFailures?.length
+    || result.items.length || boardItems.length || result.boardPreview?.length || result.risks?.length
+    || (result.archiveTotal != null && result.archiveTotal !== 0)) return false;
+  // Group counts cover the authorized filter before the lane/group selection.
+  return Object.values(result.counts ?? {}).every(count => count === 0)
+    && Object.values(result.riskCounts ?? {}).every(({dueSoon,overdue}) => dueSoon === 0 && overdue === 0);
+}
+
 export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialAccess}:{selectedOnly?:boolean;initialTask?:DigitalTask;initialAccess?:DigitalAccessOptions}={}) {
   const approvedLayout=!window.location.pathname.endsWith('/ui/digital-cockpit');
   const workspaceClass=`pattern-workspace pattern-golden dx-production-refined${approvedLayout?' pattern-layout-approved':''}`;
   const [section,setSection]=useState(new URLSearchParams(window.location.search).get('workspace')==='preparation'?'bulk':['bulk','legacy'].includes(new URLSearchParams(window.location.search).get('section')??'')?new URLSearchParams(window.location.search).get('section')!:'development');
   const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder')??(new URLSearchParams(window.location.search).get('workspace')==='preparation'?new URLSearchParams(window.location.search).get('selected'):null));
   const [search, setSearch] = useState(initialFilter().search);
-  const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<PatternWorkspaceResult | null>(null);
+  const [filter, setFilter] = useState(initialFilter), [read, setRead] = useState<PatternWorkspaceRead | null>(null);
+  const result = read?.result ?? null;
   const liveSearch=useLiveSearch(search,filter.search,value=>update({search:value,owner:undefined}));
   const [options, setOptions] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState<Error|null>(null), [refresh, setRefresh] = useState(0), [notice,setNotice]=useState("");
   const [accessError,setAccessError]=useState<Error|null>(null),[accessRevision,setAccessRevision]=useState(0);
@@ -59,6 +78,9 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   const canViewAll=canReadAllDigitalPatternTasks(options?.roles);
   const showBoard=filter.scope!=="dispatch";
   const boardItems=(filter.lane||filter.group?result?.items:result?.boardPreview??result?.items)??[];
+  const currentBoardRead=read?.filter===filter && read.access===options && read.refresh===refresh
+    && read.result.page===filter.page && !liveSearch.pending && !error;
+  const confirmedBoardEmpty=showBoard && isConfirmedEmptyDevelopmentBoard(result,boardItems,currentBoardRead);
   const urls = createWebUrls(import.meta.env.BASE_URL);
   const persist = (next: PatternWorkspaceFilter, task: string | null) => {
     const query = new URLSearchParams(Object.entries({...next,scope:section==="bulk"?(next.scope==="all"?"all":"mine"):next.scope}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
@@ -78,9 +100,9 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   useEffect(() => {
     let live = true; const controller=new AbortController();setError(null);
     if(selectedOnly||section!=="development"||historical||!options||liveSearch.pending)return()=>{live=false;};
-    setResult(null);
+    setRead(null);
     const query = new URLSearchParams(Object.entries({...filter,business:"development"}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
-    void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`,"GET",undefined,undefined,{signal:controller.signal}).then(data=>{if(live)setResult(data);}).catch(reason=>{if(live){setResult(null);setError(reason);}});
+    void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`,"GET",undefined,undefined,{signal:controller.signal}).then(data=>{if(live)setRead({result:data,filter,access:options,refresh});}).catch(reason=>{if(live){setRead(null);setError(reason);}});
     return () => {live = false;controller.abort();};
   }, [filter, refresh,section,options,selectedOnly,historical,liveSearch.pending]);
   useEffect(() => {
@@ -95,7 +117,7 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
     }).catch(reason => {if (live) {setSelected(null); setSheet(null); setDetailError(reason);}});
     return () => {live = false;};
   }, [selectedId, refresh,initialTask]);
-  const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch,business:"development"}); setFilter(next); setResult(null); setSelectedId(null); persist(next, null);};
+  const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch,business:"development"}); setFilter(next); setRead(null); setSelectedId(null); persist(next, null);};
   const changed = (confirmation?:string) => {if(confirmation)setNotice(confirmation);setRefresh(value => value + 1);};
   const refreshReads=()=>{if(!options)setAccessRevision(value=>value+1);else changed();};
   const readOnlyTask = (item: PatternWorkspaceTask) => pmcPatternTaskReadOnly(options,item.node,selected?.taskId===item.node.instanceId?selected:undefined);
@@ -110,10 +132,10 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
     paths.current[section]=window.location.search;
     const target=paths.current[key!]??`?section=${key}&scope=${canViewAll?'all':'mine'}`;
     window.history.replaceState(window.history.state,'',`${urls.pageUrl("ui/digital-pattern-room")}${target}`);
-    setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError(null);setResult(null);
+    setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError(null);setRead(null);
     const next=initialFilter();setFilter(next);setSearch(next.search);setHistorical(new URLSearchParams(target).get('source')==='standalone');
   }}>{label}</button>)}</nav>;
-  const sourceFilter=<label className="pattern-source-filter">任务来源<select aria-label="任务来源" value={historical?'standalone':'development'} onChange={event=>{const legacy=event.target.value==='standalone';setHistorical(legacy);setResult(null);setSelectedId(null);window.history.replaceState(window.history.state,'',urls.pageUrl('ui/digital-pattern-room')+(legacy?'?section=development&source=standalone&kind=pattern&origin=standalone':`?section=development&scope=${canViewAll?'all':'mine'}`));if(!legacy){const next=initialFilter();setFilter(next);setSearch(next.search);}}}><option value="development">开发单工序</option><option value="standalone">历史独立打板</option></select></label>;
+  const sourceFilter=<label className="pattern-source-filter">任务来源<select aria-label="任务来源" value={historical?'standalone':'development'} onChange={event=>{const legacy=event.target.value==='standalone';setHistorical(legacy);setRead(null);setSelectedId(null);window.history.replaceState(window.history.state,'',urls.pageUrl('ui/digital-pattern-room')+(legacy?'?section=development&source=standalone&kind=pattern&origin=standalone':`?section=development&scope=${canViewAll?'all':'mine'}`));if(!legacy){const next=initialFilter();setFilter(next);setSearch(next.search);}}}><option value="development">开发单工序</option><option value="standalone">历史独立打板</option></select></label>;
   if(section==='development'&&historical&&!selectedOnly)return <div className={workspaceClass}>{sections}<PageHeader title="板房管理台"/>{sourceFilter}<PatternRoomOrdersPage embedded standaloneOnly/></div>;
   if(selected?.sourceId&&selected.taskKind.startsWith('development_')&&view!=='correct')return <TaskWorkbenchSample key={selected.taskId} task={selected} onClose={()=>{setSelectedId(null);setSelected(null);persist(filter,null);}} onChanged={()=>changed()}/>;
   if(section==='legacy')return <div className={workspaceClass}>{sections}<LegacyPatternWorkspace/></div>;
@@ -147,10 +169,10 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
         <small title={task.node.expectedAt ?? undefined}>截止 {deadline(task)}</small><span className="pattern-task-action">{taskAction(task)}</span></>}
 
       </PatternBoardCard>)}
-      {result && !result.freshness && !result.detailFailures?.length && !boardItems.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.some(group => (result.counts?.[group]??0) > 0) ? "本页无此环节任务" : "暂无任务"}</p>}
+      {currentBoardRead && !confirmedBoardEmpty && result && !result.freshness && !result.detailFailures?.length && !boardItems.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.every(group => result.counts?.[group] === 0) ? "暂无任务" : "本页无此环节任务"}</p>}
       </PatternBoardLane>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">每栏显示 3 项任务，同类可办事项中急单优先，查看全部可继续浏览</p>}
 </>:      <div className="development-table-scroll pattern-role-task-table"><table><thead><tr><th>款号</th><th>客户 / 轮次</th><th>当前任务</th><th>主办人</th><th>状态</th><th>要求完成</th><th>停留</th><th>操作</th></tr></thead><tbody>{result?.items.map(task=><tr key={task.node.instanceId} className={selectedId===task.node.instanceId?"is-selected":""}><td><strong>{task.designStyleNo}</strong><OrderRushBadge value={task.orderRush}/></td><td>{task.customer??"通用开发"} · 第{task.node.round??1}轮</td><td>{task.node.label}</td><td>{task.node.owner?.name??"待派工"}</td><td><StatusBadge tone={task.node.state==="blocked"||task.node.risks.includes("overdue")?"danger":task.node.state==="completed"?"success":"info"}>{states[task.node.state]}</StatusBadge></td><td>{deadline(task)}</td><td>{result?stay(task):"—"}</td><td><Button type="button" variant="primary" onClick={()=>choose(task.node.instanceId)}>{taskAction(task)}</Button></td></tr>)}</tbody></table></div>}
-      {!result && !error && <p role="status">正在读取授权任务…</p>}{result && !result.freshness && !result.detailFailures?.length && !result.items.length && <p>当前筛选暂无真实任务</p>}
+      {!result && !error && <p role="status">正在读取授权任务…</p>}{(showBoard ? confirmedBoardEmpty : result && !result.freshness && !result.detailFailures?.length && !result.items.length) && <p>当前筛选暂无真实任务</p>}
       {!error&&!result?.freshness&&(!showBoard||Boolean(filter.lane||filter.group))&&<Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>}
     </section></div>
     </>}
