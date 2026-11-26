@@ -216,7 +216,6 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   };
   const readonly=embedded||pendingRevision|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
   const imageUrl=(id:string)=>previews.url(id,urls.apiUrl(`digital-production/${base}/attachments/${id}`));
-  const originalCommentImageUrl=(id:string)=>revisionComment?urls.apiUrl(`digital-production/sources/${revisionComment.ref.sourceId}/development/attachments/${id}`):imageUrl(id);
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)):[];
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
