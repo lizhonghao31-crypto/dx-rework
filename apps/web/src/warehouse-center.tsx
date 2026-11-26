@@ -18,6 +18,20 @@ import {WarehouseNativeTaskTable} from './warehouse-native-task-table.js';
 
 const urls=createWebUrls(import.meta.env.BASE_URL);
 const digit=(amount:string|null,unit:string)=>amount===null?'待核':`${amount} ${unit}`;
+function receiptQuantitySign(value:string|null|undefined){
+ if(typeof value!=='string'||!/^\d+(?:\.\d+)?$/.test(value))return null;
+ return /[1-9]/.test(value)?1:0;
+}
+export function warehouseReceiptStatus({invested,received,balance}:Pick<WarehouseReceiptListItem,'invested'|'received'|'balance'>){
+ const actual=received?.unit===invested.unit?receiptQuantitySign(received.quantity):null;
+ if(actual===null)return '实收待核';
+ if(actual===0)return '实收为零';
+
+ const remaining=receiptQuantitySign(balance.procurementRemaining),excess=receiptQuantitySign(balance.excessReceived);
+ if(balance.unit!==invested.unit||remaining===null||excess===null)return '实收待核';
+ if(excess>0)return '实收有差异';
+ return remaining===0?'采购已收足':'部分收料';
+}
 const receiptLink=(item:WarehouseReceiptListItem,back:string)=>{
  const name=item.resource.kind==='source'?'materialSource':'materialOrder';
  const query=new URLSearchParams({[name]:item.resource.id,warehouseReceipt:'1',warehouseMaterial:item.materialId,
@@ -55,8 +69,7 @@ function Receipts({route,change,back}:{route:WarehouseWorkbenchRoute;change:(nex
     {key:'name',header:'原收料任务',renderCell:row=><>{row.name}<small>{row.supplier??'供应方待核'}</small></>},
     {key:'invested',header:'投料 / 实收 / 待收',renderCell:row=><>{digit(row.invested.quantity,row.invested.unit)} / {digit(row.received?.quantity??null,row.invested.unit)} / {digit(row.balance.procurementRemaining,row.invested.unit)}</>},
     {key:'assigneeName',header:'负责人',renderCell:row=>row.assigneeName??'待安排'},
-    {key:'balance',header:'状态',renderCell:row=>row.balance.excessReceived&&row.balance.excessReceived!=='0'?'实收有差异':
-      route.status==='completed'?'采购已收足':row.received?'部分收料':'实收待核'},
+    {key:'balance',header:'状态',renderCell:warehouseReceiptStatus},
     {key:'id',header:'办理',renderCell:row=><div className="pattern-actions">
      <Link type="inherit" href={receiptLink(row,back)}>{route.status==='completed'?'查看原收料与订正':'实际收料'}</Link>
      {row.resource.kind==='order'&&row.received&&Number(row.received.quantity)>0&&

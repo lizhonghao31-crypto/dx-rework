@@ -1,108 +1,174 @@
 {
   "version": 1,
-  "base": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
-  "risk": "full",
-  "sourceFingerprint": "f12d86a9a2d48ecd0359fb1eff2652a600ac7ee2a4f13e09802d5a0c0cdae2a1",
+  "base": "9ae90510626ef70398529d647b16d69d89193cd4",
+  "risk": "quick",
+  "sourceFingerprint": "acc691d9def9d6f625dcf521b12b2d4744515b431ce5342f5650122f5dcbabdb",
   "rules": [
     {
-      "rule": "G9 仅由返工模块更新原收货批次的异值款号，收货与返工沿用同一事务。",
-      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G9；docs/requirements/startup-requirements-v1.2.md 第 3–4 项。",
+      "rule": "仓库中心 → 待收料的状态列按原投料、有效实收及采购余额区分五态；已知零显示实收为零，缺少可信数量或非零所需余额时显示实收待核。",
+      "source": "Eric 已审《达兴数字生产系统架构治理｜G1–G9 详细施工与验收方案》G3 及 3a / 3b，Library 文件 libfile_fde3_f-d013ea16c3e08191a01d9139c101dfa1_c8d3bf5d609c8191bce6411a30e94d44，版本 0。",
       "writes": [
-        "apps/api/src/receiving/receiving-service.ts#correctBatch",
-        "apps/api/src/rework/correct-source-batch-style.ts#correctSourceBatchStyle",
-        "tests/integration/receiving-postgres.test.ts#G9 receiving correction over PostgreSQL"
+        "apps/web/src/warehouse-center.tsx#warehouseReceiptStatus",
+        "tests/unit/warehouse-receipt-status.test.ts"
       ],
       "reads": [
-        "apps/api/src/receiving/receiving-routes.ts#registerReceivingRoutes",
-        "apps/api/src/receiving/receiving-document-history.ts#receivingDocumentHistory",
-        "apps/api/src/rework/service.ts#getReceivingEntry",
-        "apps/api/src/receiving/packing-alias-invalidation.ts#invalidatePackingAliasCandidates",
-        "apps/api/migrations/0022_wage_reconciliation_month_close.sql#rework_wage_items"
+        "apps/web/src/App.tsx#WarehouseCenter",
+        "apps/web/src/warehouse-center.tsx#Receipts",
+        "apps/web/src/warehouse-workbench-route.ts#readWarehouseWorkbenchRoute",
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts#warehouseReceiptPage",
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts#deriveWarehouseReceiptWork",
+        "packages/contracts/src/production-readiness.ts#WarehouseReceiptListItem"
       ],
       "oldTests": [
-        "tests/integration/receiving-postgres.test.ts#lets Root correct style and quantities after rework starts",
-        "tests/integration/receiving-postgres.test.ts#lets Root merge a typo style into the existing pre-rework batch"
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "沿用原数据库约束和迁移。受管本地 PostgreSQL 用原完整迁移、签名岗位测试会话及隔离样本，原历史行种入后恢复 guard。",
-      "dateAndPermission": "Root 沿原 PATCH 入口及 expectedVersion；仓管经原身份权限只能查询历史。原收货、图片、装箱和工资历史逐字段核对。",
-      "expectation": "同原 SQL 命中原批且仅异值行；等值／不同批／无来源不变；非法或过期提交零写；后段失败撤回事件、数量订正、返工、装箱候选，原版本可成功重试。",
+      "newTests": [
+        "tests/unit/warehouse-receipt-status.test.ts"
+      ],
+      "initialization": "读合同约定的同单位十进制事实。原登记无证、已订正零、部分、收足、超收及其他 PO／共享材料通过隔离前端夹具输入。原服务仍负责计算、权限、分组和分页。",
+      "dateAndPermission": "不读应用时间。沿原 AuthGate 和仓库路由；浏览器以隔离仓管响应回放（无真人账号和业务库）。原授权现场订正及回读留在 3b。",
+      "expectation": "相同响应仅修正状态文案。保留采购数量、原收料与订正链接、正实收发料链接、PO 和共享行身份、open/completed、搜索、分页与请求；页面零业务写。",
       "checks": [
-        "g9-receiving-pg"
-      ]
-    },
-    {
-      "rule": "G9 迁移现有 wall-clock updated_at 写入时，时点清单只迁移原字节标识并保留原 R5 注记。",
-      "source": "Eric 审核 G9 的同事务与数据保序要求，加上现行时点清单门禁。",
-      "writes": [
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "apps/api/src/rework/correct-source-batch-style.ts#clock_timestamp"
-      ],
-      "reads": [
-        "scripts/acceptance/time-site-inventory.mjs#checkTimeSiteInventory",
-        "apps/api/src/receiving/receiving-service.ts#correctBatch"
-      ],
-      "oldTests": [
-        "scripts/ci/pr-gate-controller.test.mjs#cheap CI preflight includes",
-        "scripts/ci/pr-gate-controller.test.mjs#keeps the reviewed responsibility sources"
-      ],
-      "initialization": "原时点标识按源路径索引。仅移动一条已存在的 wall-clock 语句，保留所有原站点标识及其他路径元数据。",
-      "dateAndPermission": "该 updated_at 原时间域和 Root 审计仍由 PostgreSQL 同事务写入；未增业务发生时间、控制时钟或角色。",
-      "expectation": "原 SQL 摘要逐字相同；旧清单来源删除一条、新返工模块新增一条；两条首次 Light 失败项均定向通过。",
-      "checks": [
-        "g9-clock-inventory"
+        "status-and-balance",
+        "warehouse-browser-replay",
+        "g3-web-static",
+        "g3-hosted-status-4035a45"
       ]
     }
   ],
   "checks": [
     {
-      "id": "g9-receiving-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/receiving-postgres.test.ts -t 'G9 receiving correction' --reporter=default --reporter=json",
+      "id": "status-and-balance",
+      "command": "npx vitest run tests/unit/warehouse-receipt-status.test.ts tests/unit/warehouse-material-balance.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/dx-g3-evidence/unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3,
+      "testedHead": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
+      "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+      "startedAt": "2026-11-26T14:50:30Z",
+      "endedAt": "2026-11-26T14:50:32Z",
+      "logSha256": "e9505cc7d7112ec4f38802393ae9ae252a81d844e985e4c4d8987a8d8020a325",
+      "kind": "tests",
+      "passed": 27,
       "failed": 0,
-      "skipped": 40,
-      "testedHead": "08af75a3fcf45cc0c6464f385c13203c89c29e56",
-      "sourceFingerprint": "f12d86a9a2d48ecd0359fb1eff2652a600ac7ee2a4f13e09802d5a0c0cdae2a1",
-      "context": "Node 22.22.2 / Vitest 4.1.10 / 隔离本地 PostgreSQL 16；受管 schema 注册及清理；覆盖已签名 TEST Root 和仓管的原 Fastify 路由。40 项未命中定向过滤。",
-      "startedAt": "2026-11-26T14:56:38Z",
-      "endedAt": "2026-11-26T14:56:45Z",
-      "log": "/tmp/dx-g9-evidence.j33DD1/final-pg.log",
-      "logSha256": "a1921c641e97870c85f97ef6f56a5c13534a1132e5cdf4ff4c00f5abd8ee25dc",
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "21b0e371ebbbc459b15babb7ba452873ef4eb6d04b3cb991a8f1f88aa7f4a10f"
+          "sha256": "47dd20cfd66229d2b4e1af4eeaadd77a90127a8401457ecb8d90e22d33fc5937"
         }
-      ]
+      ],
+      "context": "Node 22.22.2, npm 10.9.9, Vitest 4.1.10 非 DB worker 上限 1（scripts/test-execution-config.mjs），本次两个文件由同一个 worker 顺序执行；base 工作树带本记录 sourceFingerprint 的候选差量；无 DB 和生产连接。原 PG 用例只核消费者，未重复运行。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/unit.log",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/warehouse-receipt-status.test.ts",
+        "apps/api/src/acceptance-clock",
+        "apps/api/src/access",
+        "apps/api/src/auth",
+        "apps/api/src/platform",
+        "apps/api/src/production-platform",
+        "apps/api/src/tools",
+        "tests/unit/warehouse-material-balance.test.ts"
+      ],
+      "inputFingerprint": "e4b948319355933653e2c0aec639a97c6fed94accc8dfb6c74e488e53b7d7cee"
     },
     {
-      "id": "g9-clock-inventory",
-      "kind": "tests",
-      "command": "node --test --test-name-pattern 'cheap CI preflight includes|keeps the reviewed responsibility sources' scripts/ci/pr-gate-controller.test.mjs",
+      "id": "warehouse-browser-replay",
+      "command": "node --test --test-reporter=tap /tmp/dx-g3-evidence/browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "passed": 2,
+      "testedHead": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
+      "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+      "startedAt": "2026-11-26T14:52:50Z",
+      "endedAt": "2026-11-26T14:52:57Z",
+      "logSha256": "ea7ba91c4babebe07c7d1fc4073af4fbe5abc69b4a848a424cbcf84f184aacb0",
+      "kind": "tests",
+      "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "b4c1ea87795863f659700db6c0b49aa6cf218e23",
-      "sourceFingerprint": "f12d86a9a2d48ecd0359fb1eff2652a600ac7ee2a4f13e09802d5a0c0cdae2a1",
+      "context": "Node 22.22.2、Chromium 151.0.7922.173，1 个浏览器依序回放固定 base 与具备本记录 sourceFingerprint 的候选。实际仓库 URL、受控数据与仓管鉴权响应，两版各 7 次开发态收料 GET（含 StrictMode 启动重复），均 0 次 API 写。现场 3b 未验。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/browser.log",
       "inputPaths": [
-        "apps/api/src",
-        "apps/web/src",
-        "packages/domain/src",
-        "packages/contracts/src",
-        "apps/api/migrations",
-        "scripts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages"
       ],
-      "inputFingerprint": "ae34e958b317623ade5abe30bee8400dbad04a415dd1c1304899353618e69967",
-      "context": "Node 22.22.2；候选源码同首次 Light，测试时包含本次已修复的时点清单，输入指纹绑定清单及扫描源文件。",
-      "startedAt": "2026-11-26T15:00:17Z",
-      "endedAt": "2026-11-26T15:00:18Z",
-      "log": "/tmp/dx-g9-evidence.j33DD1/inventory.tap",
-      "logSha256": "c89927bf30a0b788b503cf270d4f201bd084b1bb3ef8b247ae8f27e63ad65e8e"
+      "inputFingerprint": "60691fdd29507ad36f95eab5ee91bd8c490a74c22cede8b5a2338203b312e9df"
+    },
+    {
+      "id": "g3-web-static",
+      "command": "npx eslint --max-warnings=0 apps/web/src/warehouse-center.tsx tests/unit/warehouse-receipt-status.test.ts && npm run typecheck --workspace @dx-rework/web",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
+      "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+      "startedAt": "2026-11-26T14:51:48Z",
+      "endedAt": "2026-11-26T14:52:09Z",
+      "logSha256": "4f3fc6531af4a2d56185851cc34d846e1ce8784dc5eb726ec437bc3533ee29fa",
+      "kind": "command",
+      "context": "Node 22.22.2、npm 10.9.9、锁定依赖和准确 base 工作树上的候选源指纹；两份直接受影响源文件和 Web 工作空间。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/static.log",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "eslint.config.js",
+        "tests/unit/warehouse-receipt-status.test.ts"
+      ],
+      "inputFingerprint": "d6cc899dd86e7757608415390110e5e48fb82c7712c0c216a89799cbb56e6d58"
+    },
+    {
+      "id": "g3-hosted-status-4035a45",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/warehouse-receipt-status.test.ts --reporter=verbose --reporter=json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "4035a45ab2dd07bb1b9ea95d4dc17cd4afe31cfb",
+      "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/warehouse-receipt-status.test.ts"
+      ],
+      "inputFingerprint": "4281b76c04352bacb115c741a7c530f15990a6a87e8155868f54e4358a8af4b5",
+      "startedAt": "2026-11-26T15:20:48Z",
+      "endedAt": "2026-11-26T15:20:50Z",
+      "log": "/tmp/dx-g3-evidence/hosted-45848055440/raw/vitest.log",
+      "logSha256": "4ff3b1128da5bc6a88ec1efb7497d0f622466be134385a48d6db9c4652ba5dfd",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a25211d98be01a73ba7faa8c5053c3cbd811e491026489e3a0efb30ebcfc7d73"
+        }
+      ],
+      "context": "范围：单文件，旧 G3 准确受测 Head。GitHub run 45848055440 / job 140006788325 / attempt 1；证据分支触发 f6c61cc9fbbfa7b99bf42882053ba5ec2a866f3a。GitHub 产物 15132880052 与报告、日志摘要一致；新候选沿用同一测试输入，不将原运行表述为新 Head 的结果。"
     }
   ]
 }
