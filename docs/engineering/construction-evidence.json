@@ -2,7 +2,7 @@
   "version": 1,
   "base": "ed2382a34537d6bd00cae4fcd1c46e8414b22686",
   "risk": "full",
-  "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+  "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
   "rules": [
     {
       "rule": "预下单转正仅在原料、供方、单位、实际范围和真实依据相符时继承原投料及收料；仅补齐与实质变更分开，需求不覆盖真实已投收",
@@ -24,6 +24,7 @@
         "apps/web/src/production-readiness-panel.tsx",
         "packages/contracts/src/production-readiness.ts",
         "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
         "tests/unit/preorder-investment-applicability.test.ts"
       ],
       "reads": [
@@ -34,12 +35,14 @@
       ],
       "oldTests": [
         "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
         "tests/unit/warehouse-material-balance.test.ts",
         "tests/unit/production-readiness-contract.test.ts"
       ],
-      "expectation": "真实 A/B 转正及补齐仍保原520米和实际日期。增加只补真实差额，减少不删除已投收。不同供方影响单项，老无证范围不误认。",
+      "expectation": "真实 A/B 转正及补齐仍保原520米、实际日期与原凭证。补齐凭证仅从同一有权原版读回，已开投料表单保留未保存输入并续用准确版本。增加只补真实差额，减少不删除已投收，换供方影响单项，老无证范围不误认。",
       "checks": [
         "native",
+        "browser",
         "mapped-other",
         "static",
         "protocol"
@@ -66,6 +69,7 @@
       "expectation": "原业务正常入口精确 PO 60/20/40，共享 60/10/50 且不重复。可能重叠仍待核，原批次订正后原余额按同一批次计算。",
       "checks": [
         "native",
+        "browser",
         "mapped-other",
         "static",
         "protocol"
@@ -76,61 +80,84 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r4-evidence/exact-r3/native.sh",
+      "command": "bash /workspace/scratch/r4-evidence/review-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
-      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
-      "context": "原实际 A/B 预下单投料、转正 T0、H1 和共享收料、正反权限与数量口径",
-      "startedAt": "2026-11-26T10:29:10.542765+00:00",
-      "endedAt": "2026-11-26T10:30:59.987959+00:00",
-      "log": "/workspace/scratch/r4-evidence/exact-r3/native.log",
-      "logSha256": "852205cb67dc35c21e46edb27c5da3301a7084f31af07d399ec1b2a4813258c6",
+      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
+      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
+      "context": "原实际 A/B、正式 T0、原凭证范围、H1 及共享、原材料与数量",
+      "startedAt": "2026-11-26T10:50:21.374855+00:00",
+      "endedAt": "2026-11-26T10:52:06.814054+00:00",
+      "log": "/workspace/scratch/r4-evidence/review-fix/native.log",
+      "logSha256": "968a9de5bbdfbf97895ba500a56251cfa63ae7492638c50d9f133b93ecdbd5b5",
       "passed": 88,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5b8784cc6ddea979a83b23ea42e8dabed3b14d354c4affbb0de5066ec6875846"
+          "sha256": "9dbd5c72be832bd311f688d6258a408552befde130a8422c4d9e01629e7831e9"
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/r4-evidence/review-fix/browser.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
+      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
+      "context": "实际原正式订单浏览器，确认凭证授权和未保存投料编辑器准确续版",
+      "startedAt": "2026-11-26T10:49:17.162402+00:00",
+      "endedAt": "2026-11-26T10:50:21.169776+00:00",
+      "log": "/workspace/scratch/r4-evidence/review-fix/browser.log",
+      "logSha256": "87b809ab0b15a2dc8701de39cbd73c519c6b9ae72136b3b87b60e15c2bc3a3e9",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ade6982c980532288a62cdbaf9477de7c973004e11222cf642038e8af077f7aa"
         }
       ]
     },
     {
       "id": "mapped-other",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r4-evidence/exact-r3/mapped-other.sh",
+      "command": "bash /workspace/scratch/r4-evidence/review-fix/mapped-other.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
-      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
+      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
       "context": "当前实际 R3 发布基点映射的余下十套 PostgreSQL",
-      "startedAt": "2026-11-26T10:31:00.257575+00:00",
-      "endedAt": "2026-11-26T10:36:13.524175+00:00",
-      "log": "/workspace/scratch/r4-evidence/exact-r3/mapped-other.log",
-      "logSha256": "3a0e7486bd23ba9335d6ecb4be4a9dada9519084afe876ff2e0d55215a522d74",
+      "startedAt": "2026-11-26T10:52:07.016884+00:00",
+      "endedAt": "2026-11-26T10:57:23.053247+00:00",
+      "log": "/workspace/scratch/r4-evidence/review-fix/mapped-other.log",
+      "logSha256": "bf5fc2f23c38bf1df09ac25d0120317890c16e21ddc7889838d7e47a0352f614",
       "passed": 144,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7a16f3e63b6d613f02e95bf925319463e8bc9f982ae999b8cb8fd41713aec409"
+          "sha256": "67fa67c99ee1646f676a374fac57b7bce4af15cda38817b430de42f3452a1125"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r4-evidence/exact-r3/static.sh ed2382a34537d6bd00cae4fcd1c46e8414b22686",
+      "command": "bash /workspace/scratch/r4-evidence/review-fix/static.sh ed2382a34537d6bd00cae4fcd1c46e8414b22686",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
-      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
+      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
       "context": "实际源码对应的类型、迁移、时间、凭证和已授权编辑范围静态检查",
-      "startedAt": "2026-11-26T10:29:10.541597+00:00",
-      "endedAt": "2026-11-26T10:29:56.054415+00:00",
-      "log": "/workspace/scratch/r4-evidence/exact-r3/static.log",
+      "startedAt": "2026-11-26T10:49:17.166930+00:00",
+      "endedAt": "2026-11-26T10:50:08.954789+00:00",
+      "log": "/workspace/scratch/r4-evidence/review-fix/static.log",
       "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
     },
     {
@@ -139,17 +166,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
-      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
+      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
       "context": "原治理门禁、时效与 release 机制协议测试",
-      "startedAt": "2026-11-26T10:29:10.541621+00:00",
-      "endedAt": "2026-11-26T10:29:16.725962+00:00",
-      "log": "/workspace/scratch/r4-evidence/exact-r3/protocol.log",
-      "logSha256": "e22cc534ad06eee1ffb9ee6dd8a28289844a31ac2b304065ad5550457652543a",
+      "startedAt": "2026-11-26T10:49:17.159185+00:00",
+      "endedAt": "2026-11-26T10:49:23.048456+00:00",
+      "log": "/workspace/scratch/r4-evidence/review-fix/protocol.log",
+      "logSha256": "d011895c76d898d39ffbffb1665a45da17efb82ce4da33ceb1e89926cbe1ebac",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "e22cc534ad06eee1ffb9ee6dd8a28289844a31ac2b304065ad5550457652543a"
+          "sha256": "d011895c76d898d39ffbffb1665a45da17efb82ce4da33ceb1e89926cbe1ebac"
         }
       ],
       "passed": 285,
