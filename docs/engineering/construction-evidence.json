@@ -1,152 +1,145 @@
 {
   "version": 1,
-  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
-  "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
+  "base": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+  "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
   "risk": "full",
   "rules": [
     {
-      "rule": "合同补缺只读原文档，首次补齐只生成原版，历史原请求不接管新合同。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
+      "rule": "外发改款仅移交数字 PO 身份字段和母单版本，同一业务事务，正向修改不影响其他 PO。",
+      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G8 8a–8d、外发 Golden Source 的款号身份段。",
       "writes": [
-        "apps/api/src/sourcing/sourcing-contract-service.ts#supplement",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#prepareForApproval",
-        "apps/api/src/tools/repositories.ts#IdempotencyRepository",
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
+        "apps/api/src/sourcing/sourcing-service.ts#reviseStyles",
+        "apps/api/src/production-platform/sourcing-po-style-revision.ts#writeSourcingPoStyleRevision",
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent",
-        "apps/api/src/sourcing/sourcing-contract-content.ts",
-        "apps/web/src/sourcing-workspace-page.tsx"
+        "apps/api/src/production-platform/child-link-repository.ts#resolveDigitalChild",
+        "apps/api/src/production-platform/po-factory-date-adapter.ts#factoryPoLines",
+        "apps/api/src/production-platform/identity-service.ts#correctNumbers"
       ],
       "oldTests": [
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/public-tools-postgres.test.ts"
+        "tests/integration/g2-number-style-replay-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts"
       ],
-      "initialization": "继续使用原幂等和合同文档表，不迁移或回填。已存版本按同 case 和原文档 ID 读取。既无可信 ID 又无唯一关联只给待核，不以当前版本代填；原通用调用仍可接管超时键。",
-      "dateAndPermission": "有效本单跟单/Root 的原数据权限，当前授权优先。超 24 小时的完成回执不可覆盖，未证实完成不自动重做；保存缺项未齐时无生成。",
-      "expectation": "同键并发仅一次生成原版。过期、异内容、无权和旧版本待核不生成 B；原 PDF 指针、SHA、合同回执和时钟保持一致。唯一冲突只回读原 information_revision 0。",
+      "initialization": "使用原外发已批准单的 case 与数字母单稳定映射，核原事务同一 client 同一锁下的旧 SQL 与候选 lineId。无新表或迁移，不修改原绑定逻辑。",
+      "dateAndPermission": "原跟单、生产管理、Root 判权、按历史快照读旧批准及旧合同。交期、数量、价格、首次时钟和其他原写入口不变。",
+      "expectation": "双 PO 改一，三号、旧值与候选命中、母单加一；同款异单、未改 PO、原批准价量、时钟不动。核新旧原附件实际 PDF SHA 与反向命令无递归。",
       "checks": [
-        "replay",
-        "compatibility"
+        "native",
+        "mapping",
+        "api-typecheck"
       ]
     },
     {
-      "rule": "三条转厂发起入口与两条决定入口沿原审批，重放不触发合同或大货同步。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
+      "rule": "已标数字外发缺关联、错母单、重复或漏款色一律拒写，合法独立外发不写数字表。",
+      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G8 8a–8d、外发 Golden Source 的款号身份段。",
       "writes": [
-        "apps/api/src/sourcing/sourcing-service.ts#requestFactoryChange",
-        "apps/api/src/sourcing/sourcing-service.ts#decideFactoryChange",
-        "apps/api/src/sourcing/sourcing-service.ts#applyFactoryChange",
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
+        "apps/api/src/production-platform/sourcing-po-style-revision.ts",
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts",
+        "tests/helpers/g8-sourcing-style-conflicts.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts#syncBulkSourcing",
-        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts",
+        "apps/api/src/production-platform/budget-sourcing-adapter.ts#validateBudgetSourcing",
+        "apps/api/migrations/0218_digital_production_identity.sql",
+        "apps/api/migrations/0226_digital_production_budgets.sql",
+        "apps/api/src/sourcing/current-merchandiser.ts"
+      ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/g2-number-style-replay-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts"
+      ],
+      "initialization": "显式 legacy 标记且无数字母单仍沿独立路径。缺生命周期列且无 0218 所有数字身份表才认原兼容；不明确的部分安装或已标数字却缺关联拒绝。",
+      "dateAndPermission": "既有审批就绪、合同及 identity revision、岗位归属、成员可写性、唯一款号和同键重试原样。错误映射不按款号或日期猜测来源。",
+      "expectation": "错母单/缺行/重复映射、越权等均零写，合法独立外发原回执成功。相同原键、不同键并发和旧版本冲突不越原边界。",
+      "checks": [
+        "mapping",
+        "native",
+        "lint"
+      ]
+    },
+    {
+      "rule": "回滚同一事务的 PO、母单、原外发事件和合同准备，成功回执与 G2 原确切生成保持一笔。",
+      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G8 8a–8d、外发 Golden Source 的款号身份段。",
+      "writes": [
+        "apps/api/src/sourcing/sourcing-service.ts#reviseStyles",
+        "apps/api/src/production-platform/sourcing-po-style-revision.ts",
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs"
+      ],
+      "reads": [
+        "apps/api/src/sourcing/sourcing-contract-service.ts#prepareForApproval",
+        "apps/api/src/tools/repositories.ts#IdempotencyService",
         "apps/api/src/production-platform/contract-business-ready.ts"
       ],
       "oldTests": [
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-factory-change-routes.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
-      ],
-      "initialization": "沿原事务、待办和审批顺序。已保存摘要原样返回，显式保留两类旧决定命名空间并拒绝异决议重用。新转厂真正建立新合同的首次请求才有目标。",
-      "dateAndPermission": "原跟单、管理、老板及拒绝/转交分支不变；原授权不足不得读敏感回执。原业务时间和大货同步只走原首次处理位置。",
-      "expectation": "七种原业务分支，生成/同步/待办调用、实际合同、附件、任务、事件、时钟及准备快照。过期管理直接办理重放不再次立申请或生成新合同。",
-      "checks": [
-        "replay",
-        "compatibility"
-      ]
-    },
-    {
-      "rule": "数字补号和外发改款只将本事务实际准备的确切目标交给提交者，原回执形状不改。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
-      "writes": [
-        "apps/api/src/production-platform/identity-service.ts#correctNumbers",
-        "apps/api/src/sourcing/sourcing-service.ts#reviseStyles",
-        "apps/api/src/sourcing/sourcing-service.ts#reviseDigitalNumbersWithClient",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#generateChangedNumberDocument",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#resumePendingContracts",
-        "apps/api/src/server.ts",
-        "tests/integration/g2-number-style-replay-postgres.test.ts",
-        "scripts/ci/full-gate-risk-map.mjs"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/current-merchandiser.ts",
-        "apps/api/src/sourcing/sourcing-contract-recovery.ts",
-        "apps/api/migrations/0240_digital_merchandiser_handover.sql"
-      ],
-      "oldTests": [
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "newTests": [
         "tests/integration/g2-number-style-replay-postgres.test.ts"
       ],
-      "initialization": "不改 PO 写者，留待 G8。数字单回执仍存原表；外层自持事务不抢先生成，G1 只接真实提交文档。生产原唯一索引限制每母单仅一个外发子单，双 PO + 另一母单是可实际办理的对照。",
-      "dateAndPermission": "签名原岗位按当前身份、母单归属和准备关联发布。设计师仅能内部完成本次原合同，公开 GET 权限不放开。按 G1 原归属和受控时钟，Root 权限由既有权威验证。",
-      "expectation": "真实 PATCH/POST 稳定回执，不生成 B；无变化、冲突、借用事务回退与提交边界。G1 续办准确设计师文档，公开合同请求仍 403；人工原入口仍可生成当前版；两个新真库文件映射至 Full，并用仓库原分离时钟夹具配置。非数字合同沿原四参数函数契约。",
+      "newTests": [
+        "tests/integration/g8-sourcing-po-style-revision-postgres.test.ts"
+      ],
+      "initialization": "不另开事务或连接，不回调数字公开改号，不重派任务或循环同步。锁内只有限的确切 PO 写，提交后按 G2 输入确切文档。",
+      "dateAndPermission": "故障注入仅隔离数据库同事务真实 SQL，另从独立连接核原未提交写入不可见。原阶段、角色和合同内容照旧。",
+      "expectation": "PO 与母单、审计、修订、合同准备后真实 SQL 失败，整个事务零差。原键重试一次，重放只读原回执，PDF 只对应已提交文档。现有 Full 风险映射实际包含新旧套件。",
       "checks": [
-        "replay",
-        "compatibility",
-        "api-typecheck",
-        "preflight"
+        "native",
+        "mapping",
+        "preflight",
+        "lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "replay",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.config.ts /tmp/dx-g2-evidence/hosted-repair/replay.json tests/integration/g2-contract-transfer-replay-postgres.test.ts tests/integration/g2-number-style-replay-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts -t G2 original|resumes pending work by document ID",
+      "id": "native",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g8-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g8-evidence/native.json tests/integration/g8-sourcing-po-style-revision-postgres.test.ts tests/integration/g2-number-style-replay-postgres.test.ts",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 G2 原 HTTP / SQL 事实和既有老板审批精准续办回归。原 G2 提交上的公共幂等八项及静态二十四项仍为原 Head 记录，不重复。",
-      "startedAt": "2026-11-26T16:57:35Z",
-      "endedAt": "2026-11-26T16:58:12Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/replay.log",
-      "logSha256": "851f2b0c4c4df17508be3ef86c56bed8653773699e7464cdb24f87b32bdf38fa",
-      "passed": 13,
+      "testedHead": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+      "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
+      "context": "Node 22.22.2/npm 10.9.9、Vitest 4.1.10、PostgreSQL 16.14；回环 55437、隔离低权限主库和时钟库、受管 schema 与真实清理。 G8 8a/8b/8c 原签名入口、G2 补号与款号回执回归。",
+      "startedAt": "2026-11-26T17:43:00Z",
+      "endedAt": "2026-11-26T17:43:38Z",
+      "log": "/tmp/dx-g8-evidence/native.log",
+      "logSha256": "c73d87d4f20738eead5469b68df5aa855691712164e2b211ed4e446160aa3c45",
+      "passed": 8,
       "failed": 0,
-      "skipped": 6,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "897bec330c0aa740c2283bf4fdc2afb07f7254df6ae0d0e897b0d4204be272e9"
+          "sha256": "3d115f9b72b5a8258a58266b5f791296ccdd268bfd92c96d554bf7d5b15ee934"
         }
       ]
     },
     {
-      "id": "compatibility",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g2-evidence/hosted-repair/compatibility.json tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts -t keeps approval successful|applies transfer delivery|freezes increased-price delivery|rolls back a late transfer|binds both authorized merchandisers|G1 |bounded pages",
+      "id": "mapping",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g8-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g8-evidence/mapping.json tests/integration/sourcing-pr03-postgres.test.ts -t revises delayed style identities|synchronizes both digital PO aliases|binds per-line pictures|serializes simultaneous cross-order style checks",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 原 G1 竞态、外发合同和转厂定向历史用例，其他测试故意 name-filter。",
-      "startedAt": "2026-11-26T16:58:12Z",
-      "endedAt": "2026-11-26T16:58:43Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/compatibility.log",
-      "logSha256": "8608f2c84589a300a0333f46f1d85d329f1899b81edcdcd141cedb34e54fa7d2",
-      "passed": 15,
+      "testedHead": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+      "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
+      "context": "Node 22.22.2/npm 10.9.9、Vitest 4.1.10、PostgreSQL 16.14；回环 55437、隔离低权限主库和时钟库、受管 schema 与真实清理。 现有外发图、款号审计、串并发锁和数字 PO 别名兼容。其余旧用例按名称过滤。",
+      "startedAt": "2026-11-26T17:43:38Z",
+      "endedAt": "2026-11-26T17:43:49Z",
+      "log": "/tmp/dx-g8-evidence/mapping.log",
+      "logSha256": "c13a8c59d83e1f7a94060c8dbdbb37070818bf376535ce11bae7a39e4e2bff8f",
+      "passed": 4,
       "failed": 0,
-      "skipped": 156,
+      "skipped": 138,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fda4f2f9930f069f27f29f554b0668261e660fc76cdf513b67343999305893ff"
+          "sha256": "fd5bba3d2b6f8d0e700f849880470ba1fac4ffa5c3ccd1d26134ba465daaca8e"
         }
       ]
     },
@@ -156,28 +149,42 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9，API TypeScript。",
-      "startedAt": "2026-11-26T16:57:52Z",
-      "endedAt": "2026-11-26T16:58:07Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/api-typecheck.log",
+      "testedHead": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+      "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
+      "context": "Node 22.22.2 / npm 10.9.9，API 类型检查。",
+      "startedAt": "2026-11-26T17:43:00Z",
+      "endedAt": "2026-11-26T17:43:18Z",
+      "log": "/tmp/dx-g8-evidence/api-typecheck.log",
       "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
     },
     {
+      "id": "lint",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/sourcing/sourcing-service.ts apps/api/src/production-platform/sourcing-po-style-revision.ts scripts/ci/full-gate-risk-map.mjs tests/helpers/g8-sourcing-style-conflicts.ts tests/integration/g8-sourcing-po-style-revision-postgres.test.ts --max-warnings=0",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+      "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
+      "context": "Node 22，定向 API、测试与风险映射 ESLint。",
+      "startedAt": "2026-11-26T17:43:00Z",
+      "endedAt": "2026-11-26T17:43:03Z",
+      "log": "/tmp/dx-g8-evidence/lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
       "id": "preflight",
-      "command": "node --test --test-name-pattern=cheap CI preflight|reviewed responsibility sources scripts/ci/pr-gate-controller.test.mjs",
+      "command": "node scripts/test-preflight.mjs",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2，原仓库预检，涵盖风险与 Gate 配置。",
-      "startedAt": "2026-11-26T16:57:52Z",
-      "endedAt": "2026-11-26T16:57:53Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/preflight.log",
-      "logSha256": "1d1afc861a355bf78a549db3c745d4c8eede29a7bb63a4a5e6b14839a4735938",
-      "passed": 2,
+      "testedHead": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
+      "sourceFingerprint": "741b74afa0931b373089f6d129cbb347de8d615d35751d1a203720c22fa1831e",
+      "context": "Node 22，仓库原试验资源与门禁规则预检。",
+      "startedAt": "2026-11-26T17:43:00Z",
+      "endedAt": "2026-11-26T17:43:09Z",
+      "log": "/tmp/dx-g8-evidence/preflight.log",
+      "logSha256": "ed64dec4ece2babe9e511cb1d1dc8a49813f060fa79a9ff5bd359f95f0cdbc10",
+      "passed": 285,
       "failed": 0,
       "skipped": 0
     }
