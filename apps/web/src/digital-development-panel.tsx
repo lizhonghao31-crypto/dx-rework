@@ -12,6 +12,7 @@ import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import {DevelopmentRevisionFields,type RevisionFields} from "./development-revision-fields.js";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
+import type {DevelopmentTechnicalState} from '@dx-rework/contracts/digital-development-technical';
 import {DevelopmentPatternLink,type DevelopmentPatternChoice} from "./development-pattern-link.js";
 import { DevelopmentExecutionPanel } from "./digital-development-execution-panel.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -37,6 +38,8 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const initial = initialDevelopmentDocument;
 type RoundHistory={roundNumber:number;origin:string;customerComment:string;internalProblem:string;explanation:string;affectedNodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>};
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
+const sameOriginalComment=(a:RevisionCommentIntent['ref'],b:RevisionCommentIntent['ref'])=>a.commentId===b.commentId
+  &&a.version===b.version&&a.sourceId===b.sourceId&&a.roundNumber===b.roundNumber&&a.scopeRef===b.scopeRef;
 export type DevelopmentSheetRead=(sheet:DevelopmentSheet,requestedRound:number|undefined)=>void;
 export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=false,contained=false,directEdit=false,onVersionChange,onRead}:{sourceId:string;onClose:()=>void;onVersionChange?:((version:number|undefined)=>void)|undefined;onRead?:DevelopmentSheetRead|undefined;initialRound?:number|undefined;contained?:boolean;embedded?:boolean;directEdit?:boolean}) {
   const print=useDevelopmentPrint();
@@ -62,6 +65,9 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const [revisionReceipt,setRevisionReceipt]=useState('');
   const commentIntent=useContext(RevisionCommentIntentContext);
   const [revisionComment,setRevisionComment]=useState<RevisionCommentIntent|null>(null);
+  const commentRef=revision?.customerCommentRef,repeatBase=revision?.repeatOriginalComment,revisionRound=revision?.basedOnRound;
+  const linkedComment=revisionComment&&commentRef&&sameOriginalComment(revisionComment.ref,commentRef)?revisionComment:null;
+  const publishCurrent=Boolean(commentRef&&(linkedComment||repeatBase?.sourceId===sourceId));
   const applyingComment=useRef<RevisionCommentIntent|null>(null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);
@@ -103,6 +109,17 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     setDraftVersion(draft?.version??0);setDirty(!draft);
   };
   useEffect(()=>{
+    if(linkedComment||!commentRef||repeatBase?.sourceId!==sourceId||!revisionRound)return;
+    const abort=new AbortController();
+    void digitalRequest<DevelopmentTechnicalState>(`sources/${sourceId}/execution/technical?roundNumber=${revisionRound}`,
+      'GET',undefined,undefined,{signal:abort.signal}).then(state=>{
+      const original=state.inheritedRevisionComment;
+      if(!abort.signal.aborted&&original?.previousRoundNumber===repeatBase.roundNumber&&sameOriginalComment(original.ref,commentRef))
+        setRevisionComment({ref:original.ref,text:original.text,evidenceRefs:original.evidenceRefs,repeatBase});
+    }).catch(()=>{/* The saved draft remains editable if the original attachment read is unavailable. */});
+    return()=>abort.abort();
+  },[sourceId,linkedComment,commentRef,repeatBase,revisionRound]);
+  useEffect(()=>{
     const intent=commentIntent?.target;
     if(!intent||!roundsRead||!sheet?.canRevise||sheet.status!=='published'||
        (intent.repeatBase?intent.repeatBase.sourceId!==sourceId:intent.ref.sourceId!==sourceId||intent.ref.roundNumber!==(sheet.roundNumber??1))||busy||pendingRevision||writing.current||applyingComment.current===intent)return;
@@ -114,7 +131,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       if(writing.current)return;
       beginRevision();
       setRevision(current=>current?{...current,origin:'客户新增要求',internalProblem:'',
-        customerComment:intent.text,customerCommentRef:intent.ref,...(intent.repeatBase?{repeatOriginalComment:intent.repeatBase}:{})}:null);
+        customerComment:intent.text,customerCommentRef:intent.ref,repeatOriginalComment:intent.repeatBase}:null);
       setRevisionComment(intent);setDirty(true);
       commentIntent.clear(intent);
       requestAnimationFrame(()=>{
@@ -164,7 +181,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const revisionAction=async(publish:boolean)=>{
     if(publish&&revision?.customerCommentRef){
       await submitAdoptedRevision({expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound,revision:{...revision,document},
-        ...(revisionComment&&sheet?{publishCurrent:true as const,expectedBasisVersion:sheet.version,...(patternChoice?{patternOrder:patternChoice}:{})}:{})});return;
+        ...(publishCurrent&&sheet?{publishCurrent:true as const,expectedBasisVersion:sheet.version,...(patternChoice?{patternOrder:patternChoice}:{})}:{})});return;
     }
     if(!revision||writing.current)return;writing.current=true;setBusy(true);setError("");
     try{
@@ -234,7 +251,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":pendingRevision?'复版提交结果待确认':error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {directRevision&&<Button variant="primary" disabled={busy} title={rounds.draft?'继续修订草稿':undefined} onClick={beginRevision}>编辑版单</Button>}
-      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)||Boolean(revisionComment&&sheet?.independentRevisions&&revision?.outputKind==="整件样板"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
+      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)||Boolean(publishCurrent&&sheet?.independentRevisions&&revision?.outputKind==="整件样板"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
       {pendingRevision&&!busy&&<Button onClick={()=>void submitAdoptedRevision()}>使用原内容核对复版提交</Button>}
       <Button disabled={!savedPrint||dirty||busy||print.busy} onClick={()=>void print.preview(printMime)}>{print.busy?"正在准备打印…":"打印 / 保存 PDF"}</Button>
     </DocumentToolbar>
@@ -248,12 +265,12 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
 
 
       <form onSubmit={event=>{event.preventDefault();save();}}>
-        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision">{revisionComment?.ref.commentId===revision.customerCommentRef?.commentId&&Boolean(revisionComment?.evidenceRefs.length)&&
-          <ul aria-label="已带出的原客户意见附件">{revisionComment?.evidenceRefs.map((id,index)=><li key={id}>
-            <a href={urls.apiUrl(`digital-production/${base}/attachments/${id}`)}>原意见附件 {index+1}</a>
+        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision">{linkedComment&&linkedComment.evidenceRefs.length>0&&
+          <ul aria-label="已带出的原客户意见附件">{linkedComment.evidenceRefs.map((id,index)=><li key={id}>
+            <a href={urls.apiUrl(`digital-production/sources/${linkedComment.ref.sourceId}/development/attachments/${id}`)}>原意见附件 {index+1}</a>
           </li>)}</ul>}
           <DevelopmentRevisionFields value={revision} disabled={busy||pendingRevision} {...(directEdit?{sourceId}:{})} onChange={value=>{setRevision(value);setDirty(true);}}/>
-          {revisionComment&&sheet.independentRevisions&&revision.origin!=='内部发现'&&revision.outputKind==='整件样板'&&
+          {publishCurrent&&sheet.independentRevisions&&revision.origin!=='内部发现'&&revision.outputKind==='整件样板'&&
             <DevelopmentPatternLink busy={busy||pendingRevision} preparing selectedCategoryId={document.patternCategoryId??''}
               onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/>}
          </section>}

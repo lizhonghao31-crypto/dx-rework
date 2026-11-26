@@ -78,8 +78,11 @@ export class DigitalDevelopmentService {
     const details=await developmentPrintDetails(db,selection,revision);
     if(details.printFeedback){
       const original=await readAdoptedDevelopmentRevisionComment(db,selection.sourceId,selection.round);
-      if(original&&original.ref.sourceId===(selection.round===1?revision?.parentSourceId:selection.sourceId)
-        &&original.ref.roundNumber===details.printFeedback.sourceRound&&original.text===details.printFeedback.text){
+      const parentSourceId=selection.round===1?revision?.parentSourceId:selection.sourceId;
+      const sourceRound=details.printFeedback.sourceRound;
+      const exactBasis=original?.sequence===1?original.ref.sourceId===parentSourceId&&original.ref.roundNumber===sourceRound:
+        original&&original.previousSourceId===parentSourceId&&original.previousRoundNumber!==null&&original.previousRoundNumber<=sourceRound;
+      if(original&&exactBasis&&original.text===details.printFeedback.text){
         details.printFeedback={text:original.text,sourceRound:original.ref.roundNumber,version:original.ref.version,
           recordedOn:beijingCalendarDate(new Date(original.recordedAt)),images:await revisionCommentImages(db,original)};
       }

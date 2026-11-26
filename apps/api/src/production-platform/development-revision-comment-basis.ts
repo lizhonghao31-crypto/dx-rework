@@ -19,10 +19,21 @@ export async function developmentRevisionCommentAdoptionReady(db:Pick<PoolClient
 
 export async function readAdoptedDevelopmentRevisionComment(db:Pick<PoolClient,'query'>,sourceId:string,roundNumber:number){
  if(!await developmentRevisionCommentAdoptionReady(db))return null;
- const {rows:[ref]}=await db.query<DevelopmentRevisionCommentRef>(`SELECT based_on_source_id AS "sourceId",based_on_round AS "roundNumber",
- based_on_scope AS "scopeRef",comment_id AS "commentId",comment_version AS version FROM digital_development_revision_comment_adoptions
- WHERE source_id=$1 AND round_number=$2`,[sourceId,roundNumber]);
- return ref?readDevelopmentRevisionCommentBasis(db,ref):null;
+ // Old databases have just the first adoption. A repeated print additionally
+ // needs the exact preceding adoption of the same immutable comment.
+ const {rows:[selected]}=await db.query<DevelopmentRevisionCommentRef&{sequence:number;previousSourceId:string|null;previousRoundNumber:number|null}>(`SELECT
+  a.based_on_source_id AS "sourceId",a.based_on_round AS "roundNumber",a.based_on_scope AS "scopeRef",a.comment_id AS "commentId",a.comment_version AS version,
+  COALESCE((to_jsonb(a)->>'adoption_number')::int,1) AS sequence,p.source_id AS "previousSourceId",p.round_number AS "previousRoundNumber"
+  FROM digital_development_revision_comment_adoptions a LEFT JOIN digital_development_revision_comment_adoptions p
+    ON p.source_id=(to_jsonb(a)->>'previous_source_id')::uuid AND p.round_number=(to_jsonb(a)->>'previous_round_number')::int
+    AND p.based_on_source_id=a.based_on_source_id AND p.based_on_round=a.based_on_round AND p.based_on_scope=a.based_on_scope
+    AND p.comment_id=a.comment_id AND p.comment_version=a.comment_version
+    AND (to_jsonb(p)->>'adoption_number')::int=(to_jsonb(a)->>'adoption_number')::int-1
+  WHERE a.source_id=$1 AND a.round_number=$2`,[sourceId,roundNumber]);
+ if(!selected)return null;
+ const {sequence,previousSourceId,previousRoundNumber,...ref}=selected;
+ const original=await readDevelopmentRevisionCommentBasis(db,ref);
+ return original?{...original,sequence,previousSourceId,previousRoundNumber}:null;
 }
 
 export async function revisionCommentImages(db:Pick<PoolClient,'query'>,original:NonNullable<Awaited<ReturnType<typeof readDevelopmentRevisionCommentBasis>>>){
