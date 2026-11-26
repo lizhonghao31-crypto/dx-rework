@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "3323c5e063ebca305f5850f73bf1fc3daa5835f7",
+  "base": "02ae70756e6902117d95b0e17109a50436a61e5a",
   "risk": "full",
-  "sourceFingerprint": "ec57a07c3db292422653c08adb1c4652b12d4212fbb69f4a7bc00674f9a518ad",
+  "sourceFingerprint": "9172e681c5ebea33bc25aa63b689f23d181ae732f9052336fd016800a66dac24",
   "rules": [
     {
       "rule": "G4 两处旧面料实收／辅料实物凭据以同一函数计算原序列化指纹。原授权、原记录/版本、失效原因优先顺序、按批/供方/单位实体判别与采购余额继续沿原路径。",
@@ -32,7 +32,8 @@
       "checks": [
         "g4-legacy-unit",
         "g4-warehouse-pg",
-        "g4-static"
+        "g4-static",
+        "g4-short-preflight"
       ]
     }
   ],
@@ -56,59 +57,91 @@
         ".node-version",
         "package.json",
         "package-lock.json",
+        "tsconfig.base.json",
         "packages",
-        "apps/api/src",
-        "apps/web/src",
-        "tests/unit/warehouse-material-balance.test.ts",
-        "vitest.config.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "apps/api/src/access/business-authority.ts",
+        "apps/api/src/access/export-authority.ts",
+        "apps/api/src/access/root-authority.ts",
+        "apps/api/src/auth/acceptance-control.ts",
+        "apps/api/src/auth/provider.ts",
+        "apps/api/src/auth/request-identity-context.ts",
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/platform/errors.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/development-amendment-repository.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/preorder-investment-applicability.ts",
+        "apps/api/src/production-platform/preorder-investment-evidence.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/style-label-evidence.ts",
+        "apps/api/src/production-platform/warehouse-material-balance.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/api/src/tools/repositories.ts",
+        "scripts/test-execution-config.mjs",
         "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs"
+        "tests/unit/warehouse-material-balance.test.ts",
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "c090978e1062fdde69ef48ce8c311890748a86123f336ada30ffcae7aa06961b",
+      "inputFingerprint": "bcb90c0f3295e1e03d7202506cb7852f3cfc49fff01989ebe9d6c9adf75a29f9",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "d084a1db559dcc99db22e949d7d6a803774be1415317d001947b47d50fc771e4"
         }
       ],
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，非 DB worker=1。先捕获准确基座原读写两路 16 个序列化／SHA／valid 对，后核冻结 G4 核心 3 例。原文件的 14 例更早同源码通过，本次过滤只保留新增例。后续仅隔离另一 PG 测试夹具，有效非 DB 文件集合不变。"
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，非 DB worker=1。先捕获准确基座原读写两路 16 个序列化／SHA／valid 对，后核冻结 G4 核心 3 例。原文件的 14 例更早同源码通过，本次过滤只保留新增例。后续仅隔离另一 PG 测试夹具，有效非 DB 文件集合不变。 G1 入基座后复核 23 个本地 TS/JS 依赖树、packages／锁文件及有效 Vitest PostgreSQL 排除名单。保留受测输入不变的原非 DB 结果。"
     },
     {
       "id": "g4-warehouse-pg",
-      "command": "node /tmp/dx-g4-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g4-evidence/pg-final.json tests/integration/production-readiness-postgres.test.ts -t \"G4 reads the same authorized\"",
+      "command": "node /tmp/dx-g4-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g4-evidence/pg-post-g1.json tests/integration/production-readiness-postgres.test.ts -t \"G4 reads the same authorized|Acceptance H1 projects an exact PO|X3 guards native accessory issues\"",
+      "testedHead": "973dcc7315a94f4d00028f2f3db05b4875b2bb27",
+      "sourceFingerprint": "9172e681c5ebea33bc25aa63b689f23d181ae732f9052336fd016800a66dac24",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3323c5e063ebca305f5850f73bf1fc3daa5835f7",
-      "sourceFingerprint": "ec57a07c3db292422653c08adb1c4652b12d4212fbb69f4a7bc00674f9a518ad",
-      "startedAt": "2026-11-26T16:05:02Z",
-      "endedAt": "2026-11-26T16:05:19Z",
-      "log": "/tmp/dx-g4-evidence/pg-final.log",
-      "logSha256": "60d5e43519530e85ec1847769655bd8e1055e39d69df67203fab521a871e4cea",
+      "log": "/tmp/dx-g4-evidence/pg-post-g1.log",
+      "logSha256": "59110079540b046a4f5b351a1379c5f677bbea0f52ab63cef6627f332f886f20",
+      "startedAt": "2026-11-26T16:19:57Z",
+      "endedAt": "2026-11-26T16:20:22Z",
       "kind": "tests",
-      "passed": 1,
+      "passed": 3,
       "failed": 0,
-      "skipped": 65,
+      "skipped": 63,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1a2bd9e1593af40a259f99e8650f6537204013a902aac97f3a46c5be513b1bda"
+          "sha256": "5444da996270cffb6f715440a2281ce582c6aed9f6345beb43140dd0be328085"
         }
       ],
-      "context": "Node 22.22.2 / Vitest 4.1.10，配置 worker 上限 2、实际 1 PG worker；本地 PG16.14 / 127.0.0.1:55441 低权限 dx_g4_test，有隔离标记，独立持有和清理两份测试 schema。原岗位、实际投料与同一 asOf，原基座实际读器与候选各读 1 / 15 / 50 个原授权任务，SQL 均 11，原件读结果和参数相同。仅修正了 ESLint 要求的类型断言写法，验证修正前后测试编译所得 JS 字节相同。"
+      "context": "Node 22.22.2 / Vitest 4.1.10；PG16.14、隔离 dx_g4_test、原业务角色和场景时钟，worker 上限 2、实际 1。G1 改了迁移和 PG 夹具共享的时钟／存储代码，因此在包含 0316 的新候选定向复验三个受影响用例。本轮基线 02ae707 的 G4 旧读器和候选各读 1／15／50 个授权资源，分别 11 次 SQL，实际绑定和原件相同。受管清理 3 schema；63 个无关案本轮过滤。"
     },
     {
       "id": "g4-static",
       "command": "npx eslint --max-warnings=0 apps/api/src/production-platform/preparation-material-repository.ts apps/api/src/production-platform/warehouse-receipt-page.ts tests/integration/production-readiness-postgres.test.ts tests/unit/warehouse-material-balance.test.ts && npm run typecheck --workspace @dx-rework/api",
+      "testedHead": "973dcc7315a94f4d00028f2f3db05b4875b2bb27",
+      "sourceFingerprint": "9172e681c5ebea33bc25aa63b689f23d181ae732f9052336fd016800a66dac24",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3323c5e063ebca305f5850f73bf1fc3daa5835f7",
-      "sourceFingerprint": "ec57a07c3db292422653c08adb1c4652b12d4212fbb69f4a7bc00674f9a518ad",
-      "startedAt": "2026-11-26T16:06:42Z",
-      "endedAt": "2026-11-26T16:06:58Z",
-      "log": "/tmp/dx-g4-evidence/static-final.log",
+      "log": "/tmp/dx-g4-evidence/static-post-g1.log",
       "logSha256": "43216d064a742da824c408dfc04fb0437d9b5dc05e1b91f8de4b2af21a489a2b",
+      "startedAt": "2026-11-26T16:21:05Z",
+      "endedAt": "2026-11-26T16:21:24Z",
       "kind": "command",
-      "context": "Node 22.22.2，npm 10.9.9，锁定依赖并预先编译共享 packages。检查两份后端、精准 unit／PG 测试和整个 API workspace 类型。"
+      "context": "Node 22.22.2 / npm 10.9.9；合入 02ae707、移除本地对照探针后的实际 G4 diff。变更文件 ESLint 与含 G1 的 API workspace 类型检查。"
+    },
+    {
+      "id": "g4-short-preflight",
+      "command": "npm run test:preflight",
+      "testedHead": "973dcc7315a94f4d00028f2f3db05b4875b2bb27",
+      "sourceFingerprint": "9172e681c5ebea33bc25aa63b689f23d181ae732f9052336fd016800a66dac24",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "/tmp/dx-g4-evidence/preflight-clean.log",
+      "logSha256": "ec37c010f81bdcbffaa80e4ff59db43bb896a2c13288c15d6a546bf639ee0b57",
+      "startedAt": "2026-11-26T16:21:05Z",
+      "endedAt": "2026-11-26T16:21:13Z",
+      "kind": "command",
+      "context": "Node 22.22.2 / npm 10.9.9；基座 02ae707；原静态协议 worker 上限 2，经脚本完成资源注册校验、协议测试和迁移静态检查。原临时探针移出 tracked 源路径后校验。"
     }
   ]
 }

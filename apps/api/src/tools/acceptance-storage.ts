@@ -41,23 +41,27 @@ export class AcceptanceObjectStorage implements ObjectStorage {
     const token = this.sign({ key, action: "download", expires, filename: options.filename, disposition: options.disposition ?? "attachment" });
     return { downloadUrl: this.baseUrl + "/acceptance-files/download?grant=" + token, expiresAt: new Date(expires).toISOString() };
   }
-  private async record(key: string): Promise<{ metadata: StoredObjectMetadata; bytes: string }> {
-    try { return JSON.parse(await readFile(this.path(key), "utf8")) as { metadata: StoredObjectMetadata; bytes: string }; }
+  private async record(key: string, signal?: AbortSignal): Promise<{ metadata: StoredObjectMetadata; bytes: string }> {
+    try { return JSON.parse(await readFile(this.path(key), { encoding: "utf8", signal })) as { metadata: StoredObjectMetadata; bytes: string }; }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ObjectStorageObjectNotFoundError(); throw error; }
   }
-  async head(key: string) { return (await this.record(key)).metadata; }
-  async readBytes(key: string, maxBytes: number) {
-    const record = await this.record(key);
+  async head(key: string, signal?: AbortSignal) { return (await this.record(key, signal)).metadata; }
+  async readBytes(key: string, maxBytes: number, signal?: AbortSignal) {
+    const record = await this.record(key, signal);
     if (record.metadata.sizeBytes > maxBytes) return fail("File exceeds read limit");
     return Buffer.from(record.bytes, "base64");
   }
   async computeSha256(key: string) { return createHash("sha256").update(await this.readBytes(key, MAX_BYTES)).digest("hex"); }
-  async writeImmutable(key: string, content: Uint8Array, options: { mimeType: string; sha256: string }) {
+  async writeImmutable(key: string, content: Uint8Array, options: { mimeType: string; sha256: string; signal?: AbortSignal }) {
     if (content.byteLength > MAX_BYTES || createHash("sha256").update(content).digest("hex") !== options.sha256) return fail("File size or checksum mismatch");
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const target = this.path(key), temporary = join(this.directory, randomUUID() + ".tmp");
     try {
-      await writeFile(temporary, JSON.stringify({ metadata: { ...options, sizeBytes: content.byteLength }, bytes: Buffer.from(content).toString("base64") }), { flag: "wx", mode: 0o600 });
+      await writeFile(temporary, JSON.stringify({
+        metadata: { mimeType: options.mimeType, sha256: options.sha256, sizeBytes: content.byteLength },
+        bytes: Buffer.from(content).toString("base64"),
+      }), { flag: "wx", mode: 0o600, signal: options.signal });
+      options.signal?.throwIfAborted();
       await link(temporary, target);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") return fail("File already exists", 409);

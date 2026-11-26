@@ -586,6 +586,14 @@ export const classifyFullGatePaths = (inputPaths) => {
       || path === 'tests/integration/journey-diagnostic-postgres.test.ts') {
       mappedTests.add('tests/integration/journey-diagnostic-postgres.test.ts');
     }
+    if (path === 'tests/integration/business-anchors-clock-postgres.test.ts'
+      || path === 'apps/api/src/platform/contract-recovery-database.ts'
+      || /^apps\/api\/src\/sourcing\/sourcing-contract-(?:service|recovery(?:-render)?|render-child)\.ts$/.test(path)) {
+      addAll(mappedTests, ['tests/integration/business-anchors-clock-postgres.test.ts',
+        'tests/integration/sourcing-owner-readiness-postgres.test.ts',
+        'tests/integration/contract-return-cycles-postgres.test.ts']);
+      domains.add('sourcing-contract-generation');
+    }
     if (path === 'tests/helpers/business-anchor-fixture.ts'
       || path === 'tests/helpers/bulk-preparation-fixture.ts'
       || path === 'tests/helpers/bulk-preshrink-correction-fixture.ts'

@@ -5,7 +5,7 @@ correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutM
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow,ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
@@ -14,7 +14,23 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {factoryBatchTiming} from '../../apps/api/src/production-platform/factory-batch-timing.js';
 import {firstContractBusinessReady} from '../../apps/api/src/production-platform/contract-business-ready.js';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
-import pg from 'pg';
+import Fastify from 'fastify';
+import {fork} from 'node:child_process';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import type {PoolClient} from 'pg';
+import {SourcingContractService} from '../../apps/api/src/sourcing/sourcing-contract-service.js';
+import {SourcingContractRecovery} from '../../apps/api/src/sourcing/sourcing-contract-recovery.js';
+import * as contractPdf from '../../apps/api/src/sourcing/sourcing-contract-pdf.js';
+import {AttachmentService} from '../../apps/api/src/tools/attachments.js';
+import {AcceptanceObjectStorage,registerAcceptanceStorageRoutes} from '../../apps/api/src/tools/acceptance-storage.js';
+import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
+import {AuthService} from '../../apps/api/src/auth/service.js';
+import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
+import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from '../../apps/api/src/auth/acceptance-provider.js';
+import {registerSourcingRoutes} from '../../apps/api/src/sourcing/sourcing-routes.js';
+import {acceptanceClockLockKey} from '../../apps/api/src/acceptance-clock/repository.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecutionConfig.correctnessTimeoutMs);
@@ -124,7 +140,24 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
    expect((await f.db.query("SELECT count(*)::int n FROM operation_events WHERE entity_type='sourcing_contract_document' AND entity_id IN (SELECT sourcing_contract_document_id::text FROM sourcing_contract_documents WHERE sourcing_case_id=$1) AND action='sourcing.contract.business_ready'",[ready!.caseId])).rows[0].n).toBe(0);
   }
   // Background resume has no ALS request; the installed guarded resource reader must supply the scene.
-  await original(f.root,ready!.caseId);
+  const docId=(await f.contracts.getCurrent(f.root,ready!.caseId)).item!.sourcingContractDocumentId;
+  expect((await f.db.query("SELECT 1 FROM attachments WHERE entity_type='sourcing_contract_document' AND entity_id=$1",[docId])).rowCount).toBe(0);
+  const publish=f.attachments.publishContractPdf.bind(f.attachments);
+  let committedWithoutAck=false;
+  const lostAck=vi.spyOn(f.attachments,'publishContractPdf').mockImplementationOnce(async(client,...args)=>{
+   const file=await publish(client,...args);
+   const query=client.query.bind(client),release=client.release.bind(client);
+   client.query=(async(statement: string, ...params: unknown[])=>{
+    const result=await (query as (text: string,...params: unknown[])=>Promise<unknown>)(statement,...params);
+    if(statement==='COMMIT'){committedWithoutAck=true;throw new Error('TEST lost acknowledgement after actual COMMIT');}
+    return result;
+   }) as PoolClient['query'];
+   client.release=(error)=>{client.query=query;client.release=release;release(error);};
+   return file;
+  });
+  try{await expect(original(f.root,ready!.caseId)).resolves.toMatchObject({item:{status:'ready',sourcingContractDocumentId:docId}});}
+  finally{lostAck.mockRestore();}
+  expect(committedWithoutAck).toBe(true);
   const first=await firstContractBusinessReady(f.db,ready!.id),businessAt=(await f.runtime.repository.row(scene)).business_now.toISOString();
   expect(first.at).toBe(businessAt);
   const window=(await factoryBatchTiming(f.db,ready!.id))!.windows.find(w=>w.kind==='warehouse_dispatch')!;
@@ -224,36 +257,255 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
    const rows=(await f.db.query('SELECT created_at FROM rework_work_reports WHERE rework_order_id=$1',[id])).rows;expect(rows).toHaveLength(2);for(const row of rows)expect(row.created_at.getTime()).toBeGreaterThanOrEqual(wall-1000);
   });
  });
- nativeIt('resumes a full ten-connection batch without ALS, extra clock connections or lost scenarios',async()=>{
+ nativeIt('recovers committed documents in bounded pages after listen without overlapping a blocked first PDF',async()=>{
   const f=fixture,cases:Array<{caseId:string;orderId:string;sceneId:string;at:string}>=[];
   const defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValue(new Error('TEST defer until startup recovery'));
   try{
    for(const delta of [-7,7]){
     const at=new Date(Date.now()+delta*86400000).toISOString(),sceneId=await f.scene(at);
-    await f.runtime.run(sceneId,f.root,async()=>{for(let i=0;i<5;i++){const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});cases.push({caseId:ready.caseId,orderId:ready.id,sceneId,at});}});
+    await f.runtime.run(sceneId,f.root,async()=>{for(let i=0;i<2;i++){const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});cases.push({caseId:ready.caseId,orderId:ready.id,sceneId,at});}});
    }
   }finally{defer.mockRestore();}
-  const caseIds=cases.map(c=>c.caseId);
-  expect((await f.db.query("SELECT count(*)::int n FROM sourcing_contract_documents WHERE sourcing_case_id=ANY($1::uuid[]) AND status='generation_pending'",[caseIds])).rows[0].n).toBe(10);
-  // A separate read-only observer does not lend the service pool a connection.
-  // Wait for nine actual transaction lock waiters, not merely ten busy queries.
-  const observer=new pg.Pool({connectionString:url!,application_name:'TEST-clock-pool-observer',max:1});
-  const read=ContextBusinessClock.prototype.read;let heldAtCapacity=false;
-  const barrier=vi.spyOn(ContextBusinessClock.prototype,'read').mockImplementation(async function(this:ContextBusinessClock,...args){
-   if(!heldAtCapacity){heldAtCapacity=true;await vi.waitFor(async()=>{expect(f.db.totalCount).toBe(10);expect(f.db.idleCount).toBe(0);
-    const waiting=(await observer.query("SELECT count(*)::int n FROM pg_stat_activity WHERE application_name=$1 AND state='active' AND wait_event_type='Lock' AND wait_event='advisory' AND xact_start IS NOT NULL",[f.db.options.application_name])).rows[0].n;expect(waiting).toBe(9);
-   },{timeout:15000,interval:20});}
-   return read.apply(this,args);
+  const ids=cases.map(c=>c.caseId);
+  const query=()=>f.db.query("SELECT sourcing_case_id,status,generation_attempt_id FROM sourcing_contract_documents WHERE sourcing_case_id=ANY($1::uuid[]) ORDER BY prepared_at,sourcing_contract_document_id",[ids]);
+  expect((await query()).rows.map(r=>r.status)).toEqual(Array(4).fill('generation_pending'));
+  const release=Promise.withResolvers<void>();
+  let storageBlocked=false;
+  const write=f.storage.writeImmutable.bind(f.storage);
+  const barrier=vi.spyOn(f.storage,'writeImmutable').mockImplementationOnce(async(...args)=>{
+   storageBlocked=true;await release.promise;await write(...args);
   });
-  try{await f.contracts.resumePendingContracts();}finally{barrier.mockRestore();await observer.end();}
-  expect(heldAtCapacity).toBe(true);
-  const documents=(await f.db.query('SELECT status,failure_reason FROM sourcing_contract_documents WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows;
-  expect(documents,JSON.stringify(documents)).toHaveLength(10);
-  expect(documents,JSON.stringify(documents)).toEqual(Array.from({length:10},()=>({status:'ready',failure_reason:null})));
-  const facts=(await f.db.query('SELECT sourcing_case_id,business_ready_at,business_time FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows;
-  expect(facts).toHaveLength(10);
-  for(const expected of cases){const fact=facts.find(row=>row.sourcing_case_id===expected.caseId)!;expect(fact.business_ready_at.toISOString()).toBe(expected.at);expect(fact.business_time).toEqual({now:expected.at,scenarioId:expected.sceneId,revision:1});}
-  await f.contracts.resumePendingContracts();
-  expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows[0].n).toBe(10);
+  const scan=f.contracts.resumePendingContracts.bind(f.contracts),passes=vi.spyOn(f.contracts,'resumePendingContracts');
+  passes.mockImplementation((_limit,options)=>scan(1,options));
+  const app=Fastify(),root=new RootAuthority(f.db,'anchor-test','uat-root'),secret='TEST local read while contract recovery runs '.repeat(3);
+  const auth=new AuthService(new AcceptanceDingTalkProvider(f.db,'anchor-test',secret),new PostgresAuthStore(f.db,'anchor-test','uat-root'),'anchor-test',3600000,secret);
+  registerSourcingRoutes(app,{service:f.sourcing,contracts:f.contracts,root,authenticate:token=>auth.authenticate(token)});
+  const login=await auth.loginMobile(mintAcceptanceLoginCode('merchandiser',secret));
+  const reports:unknown[]=[];
+  const log=(value:unknown,message?:string)=>reports.push({value,message});
+  const recovery=new SourcingContractRecovery(f.contracts,{info:log,warn:log},true,f.runtime);
+  try{
+   const origin=await app.listen({host:'127.0.0.1',port:0});
+   recovery.start();recovery.start();
+   await vi.waitFor(()=>expect(storageBlocked,JSON.stringify(reports)).toBe(true),{timeout:8_000,interval:100});
+   const other=cases.at(-1)!;
+   const response=await fetch(`${origin}/sourcing/cases/${other.caseId}`,{
+    headers:{cookie:`dx_rework_session=${login.token}`},
+   });
+   const detail=await response.json();
+   expect(response.status,JSON.stringify(detail)).toBe(200);
+   expect(detail.sourcingCaseId).toBe(other.caseId);
+   expect(passes).toHaveBeenCalledTimes(1);
+   expect((await query()).rows.filter(r=>r.status==='generating')).toHaveLength(1);
+   const stopped=recovery.stop();
+   release.resolve();
+   await stopped;
+   expect((await query()).rows.map(r=>r.status)).toEqual(['ready','generation_pending','generation_pending','generation_pending']);
+   const withoutClock=await scan(1,{report:log});
+   expect(withoutClock).toMatchObject({candidates:1,advanced:1,ready:0});
+   expect(reports).toEqual(expect.arrayContaining([expect.objectContaining({message:'contract recovery requires the verified Acceptance clock and actor'})]));
+   let cursor=withoutClock.cursor;
+   for(let i=0;i<5;i++){
+    const result=await scan(1,{cursor,acceptanceClock:f.runtime});
+    expect(result.advanced).toBeLessThanOrEqual(1);cursor=result.cursor;
+   }
+   expect((await query()).rows.map(r=>r.status)).toEqual(Array(4).fill('ready'));
+   const facts=(await f.db.query('SELECT sourcing_case_id,business_ready_at,business_time FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=ANY($1::uuid[])',[ids])).rows;
+   expect(facts).toHaveLength(4);
+   for(const expected of cases){
+    const fact=facts.find(row=>row.sourcing_case_id===expected.caseId)!;
+    expect(fact.business_ready_at.toISOString()).toBe(expected.at);
+    expect(fact.business_time).toEqual({now:expected.at,scenarioId:expected.sceneId,revision:1});
+   }
+  }finally{
+   release.resolve();await recovery.stop();await app.close();passes.mockRestore();barrier.mockRestore();
+  }
+ });
+
+ nativeIt('G1 shutdown detaches a recovery transaction blocked on the real lifecycle lock',async()=>{
+  const f=fixture,defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValueOnce(new Error('TEST owner commit before recovery'));
+  let ready:Awaited<ReturnType<typeof f.bulkReady>>;
+  try{ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});}finally{defer.mockRestore();}
+  const caseId=ready.caseId,documentId=(await f.contracts.getCurrent(f.root,caseId)).item!.sourcingContractDocumentId;
+  const state=async()=>(await f.db.query("SELECT status,pdf_attachment_id,generation_attempt_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[documentId])).rows[0];
+  const blocker=await f.db.connect();
+  const recovery=new SourcingContractRecovery(f.contracts,{info:()=>{},warn:()=>{}},true,f.runtime,30);
+  try{
+   await blocker.query('BEGIN');
+   await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+   const blockedBy=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+   const waiting=async()=>(await f.db.query(`SELECT pid FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))
+      AND application_name=$2 AND wait_event_type='Lock' AND wait_event='advisory'`,[blockedBy,f.db.options.application_name])).rows;
+   recovery.start();
+   await vi.waitFor(async()=>expect(await waiting()).toHaveLength(1),{timeout:5000,interval:30});
+   const started=performance.now();
+   await recovery.stop();
+   expect(performance.now()-started).toBeLessThan(1500);
+   await vi.waitFor(async()=>expect(await waiting()).toHaveLength(0),{timeout:2000,interval:30});
+   const interrupted=await state();
+   expect(interrupted).toMatchObject({status:'generating',pdf_attachment_id:null,generation_attempt_id:expect.any(String)});
+   expect((await f.db.query("SELECT 1 FROM sourcing_contract_generation_staging WHERE generation_attempt_id=$1 AND published_attachment_id IS NULL",[interrupted.generation_attempt_id])).rowCount).toBe(1);
+  }finally{
+   await recovery.stop();await blocker.query('ROLLBACK');blocker.release();
+  }
+  await f.db.query("UPDATE sourcing_contract_documents SET generation_lease_until=clock_timestamp()-INTERVAL '1 second' WHERE sourcing_contract_document_id=$1",[documentId]);
+  expect(await f.contracts.resumePendingContracts(1,{acceptanceClock:f.runtime})).toMatchObject({ready:1});
+  expect(await state()).toMatchObject({status:'ready',pdf_attachment_id:expect.any(String),generation_attempt_id:null});
+ });
+
+ nativeIt('G1 a held Acceptance clock lock leaves the original document recoverable without waiting on that scenario',async()=>{
+  const f=fixture,at='2026-11-22T09:00:00Z',scene=await f.scene(at);
+  const defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValueOnce(new Error('TEST owner commit before recovery'));
+  let ready:Awaited<ReturnType<typeof f.bulkReady>>;
+  try{ready=await f.runtime.run(scene,f.root,()=>f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}));}
+  finally{defer.mockRestore();}
+  const caseId=ready.caseId,documentId=(await f.contracts.getCurrent(f.root,caseId)).item!.sourcingContractDocumentId;
+  const blocker=await f.db.connect();
+  const details:unknown[]=[];
+  try{
+   await blocker.query('BEGIN');
+   await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[acceptanceClockLockKey(scene)]);
+   expect(await f.contracts.resumePendingContracts(1,{
+    acceptanceClock:f.runtime,jobTimeoutMs:3500,report:(fields,message)=>details.push({fields,message}),
+   })).toMatchObject({candidates:1,advanced:1,ready:0});
+   expect(details).toEqual(expect.arrayContaining([expect.objectContaining({fields:expect.objectContaining({documentId,code:'ACCEPTANCE_ISOLATION'})})]));
+   expect((await f.db.query("SELECT status,pdf_attachment_id,failure_reason FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[documentId])).rows[0])
+    .toEqual({status:'generating',pdf_attachment_id:null,failure_reason:null});
+  }finally{await blocker.query('ROLLBACK');blocker.release();}
+  await f.db.query("UPDATE sourcing_contract_documents SET generation_lease_until=clock_timestamp()-INTERVAL '1 second' WHERE sourcing_contract_document_id=$1",[documentId]);
+  expect(await f.contracts.resumePendingContracts(1,{acceptanceClock:f.runtime})).toMatchObject({ready:1});
+  expect(await firstContractBusinessReady(f.db,ready.id)).toMatchObject({kind:'business',at:'2026-11-22T09:00:00.000Z'});
+ });
+
+ for(const mode of ['same bytes','different bytes','storage failure','late after commit','storage failure after commit'] as const)nativeIt(`G1 ${mode}: a prior owner cannot publish, fail, or project after takeover`,async()=>{
+  const f=fixture;
+  const defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValueOnce(new Error('TEST stop after owner approval'));
+  let original:Awaited<ReturnType<typeof f.bulkReady>>;
+  try{original=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});}finally{defer.mockRestore();}
+  const {caseId,id:orderId}=original;
+  const afterCommit=mode.endsWith('after commit'),oldFails=mode.startsWith('storage failure');
+  const document=(await f.contracts.getCurrent(f.root,caseId)).item!;
+  const documentId=document.sourcingContractDocumentId;
+  const row=async()=>(await f.db.query('SELECT status,pdf_attachment_id,pdf_sha256,snapshot_fingerprint,generated_at,failure_reason,generation_attempt_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1',[documentId])).rows[0];
+  const attachmentsRows=async()=>(await f.db.query("SELECT attachment_id,object_key,sha256 FROM attachments WHERE entity_type='sourcing_contract_document' AND entity_id=$1",[documentId])).rows;
+  const facts=async()=>(await f.db.query('SELECT * FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[caseId])).rows;
+  const todoRows=async()=>(await f.db.query("SELECT todo_id,recipient_user_id,status,route_descriptor FROM rework_todos WHERE entity_id=$1 AND entity_type='sourcing_case' ORDER BY todo_id",[caseId])).rows;
+  const todoBefore=await todoRows();
+  const oldEntered=Promise.withResolvers<void>(),oldRelease=Promise.withResolvers<void>();
+  const newEntered=Promise.withResolvers<void>(),newRelease=Promise.withResolvers<void>();
+  const dir=await mkdtemp(join(tmpdir(),'dx-g1-pdf-')), app=Fastify();
+  const objectStore=new AcceptanceObjectStorage(dir,'http://localhost','TEST local object grants for the original contract PDF');
+  registerAcceptanceStorageRoutes(app,objectStore);
+  const attachments=new AttachmentService(f.db,objectStore,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
+  const priorWorker=new SourcingContractService(f.db,attachments),nextWorker=new SourcingContractService(f.db,attachments);
+  const copyImages=async()=>{
+   const images=(await f.db.query("SELECT object_key,mime_type,sha256 FROM attachments WHERE entity_type='sourcing_case' AND entity_id=$1 AND mime_type LIKE 'image/%'",[caseId])).rows;
+   for(const image of images)await objectStore.writeImmutable(image.object_key,await f.storage.readBytes(image.object_key,1000000),{mimeType:image.mime_type,sha256:image.sha256});
+  };
+  try{
+   await copyImages();
+   const render=contractPdf.renderSourcingContractPdf;
+   if(mode==='different bytes')vi.spyOn(contractPdf,'renderSourcingContractPdf').mockImplementationOnce(async snapshot=>
+    Buffer.concat([await render(snapshot),Buffer.from('\n% TEST previous attempt differential bytes\n')]));
+   const realWrite=objectStore.writeImmutable.bind(objectStore);
+   const block=vi.spyOn(objectStore,'writeImmutable')
+    .mockImplementationOnce(async(...args)=>{
+     if(!oldFails)await realWrite(...args);
+     oldEntered.resolve();await oldRelease.promise;
+     if(oldFails)throw new Error('TEST stale storage failure');
+    }).mockImplementationOnce(async(...args)=>{await realWrite(...args);newEntered.resolve();await newRelease.promise;});
+   const former={...f.root,requestId:`TEST-G1-old-${documentId}`},winner={...f.root,requestId:`TEST-G1-new-${documentId}`};
+   const old=priorWorker.generateIfReady(former,caseId,documentId);
+   void old.catch(oldEntered.reject);
+   let next:ReturnType<typeof nextWorker.generateIfReady>|undefined;
+   try{
+    await oldEntered.promise;
+    const previous=(await row()).generation_attempt_id;
+    expect(previous).toBeTruthy();
+    expect((await f.db.query('SELECT object_key FROM sourcing_contract_generation_staging WHERE generation_attempt_id=$1',[previous])).rowCount).toBe(1);
+    expect(await nextWorker.generateIfReady(winner,caseId,documentId)).toMatchObject({item:{status:'generating'}});
+    expect(block).toHaveBeenCalledTimes(1);
+    await f.db.query("UPDATE sourcing_contract_documents SET generation_lease_until=clock_timestamp()-INTERVAL '1 second' WHERE sourcing_contract_document_id=$1",[documentId]);
+    next=nextWorker.generateIfReady(winner,caseId,documentId);
+    void next.catch(newEntered.reject);
+    await newEntered.promise;
+    expect((await row()).generation_attempt_id).not.toBe(previous);
+    const staged=(await f.db.query('SELECT sha256 FROM sourcing_contract_generation_staging WHERE sourcing_contract_document_id=$1',[documentId])).rows.map(r=>r.sha256);
+    expect(new Set(staged).size).toBe(mode==='different bytes'?2:1);
+    if(afterCommit){
+     newRelease.resolve();await next;
+    }
+    oldRelease.resolve();await old;
+    expect((await f.db.query('SELECT action FROM operation_events WHERE request_id=$1',[former.requestId])).rows).toEqual([]);
+    if(!afterCommit){
+     expect(await row()).toMatchObject({status:'generating',pdf_attachment_id:null,generated_at:null,failure_reason:null});
+     expect(await attachmentsRows()).toEqual([]);expect(await facts()).toEqual([]);expect(await todoRows()).toEqual(todoBefore);
+     expect(await firstContractBusinessReady(f.db,orderId)).toMatchObject({kind:'unknown',at:null});
+     newRelease.resolve();await next;
+    }
+    const published=await row(),files=await attachmentsRows();
+    expect(published).toMatchObject({status:'ready',failure_reason:null,generation_attempt_id:null});
+    expect(files).toEqual([expect.objectContaining({attachment_id:published.pdf_attachment_id,sha256:published.pdf_sha256})]);
+    expect(await facts()).toEqual([expect.objectContaining({pdf_attachment_id:published.pdf_attachment_id,is_first_for_case:true})]);
+    expect(await firstContractBusinessReady(f.db,orderId)).toMatchObject({kind:'business'});
+    const reader={...f.people.merchandiser!,authorizationCapabilities:['sourcing:view','supplier_contract_data:read']};
+    const grant=await attachments.createDownloadIntent(reader,published.pdf_attachment_id,binding=>Promise.resolve(f.sourcing.canDownloadBoundAttachment(reader,binding)));
+    const url=new URL(grant.downloadUrl);
+    const download=await app.inject({url:url.pathname+url.search});
+    expect(download.statusCode).toBe(200);
+    expect(createHash('sha256').update(download.rawPayload).digest('hex')).toBe(published.pdf_sha256);
+    const after=await todoRows();
+    const relevant=after.filter(r=>r.route_descriptor?.transferContract?.documentId===documentId||r.route_descriptor?.contractReturn?.documentId===documentId);
+    expect(new Set(relevant.map(r=>r.recipient_user_id)).size).toBe(relevant.length);
+    expect(await nextWorker.generateIfReady(winner,caseId,documentId)).toMatchObject({item:{snapshotFingerprint:published.snapshot_fingerprint}});
+    expect(await row()).toEqual(published);expect(await todoRows()).toEqual(after);expect(await facts()).toHaveLength(1);
+   }finally{
+    oldRelease.resolve();newRelease.resolve();await Promise.allSettled(next?[old,next]:[old]);
+   }
+  }finally{await app.close();await rm(dir,{recursive:true,force:true});}
+ });
+
+ for(const checkpoint of ['claim','object'] as const)nativeIt(`G1 hard stop after ${checkpoint} retains recoverable document and leaves no formal file`,async()=>{
+  const f=fixture,defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValueOnce(new Error('TEST committed owner approval before generation'));
+  let ready:Awaited<ReturnType<typeof f.bulkReady>>;
+  try{ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});}finally{defer.mockRestore();}
+  const caseId=ready.caseId,documentId=(await f.contracts.getCurrent(f.root,caseId)).item!.sourcingContractDocumentId;
+  const directory=await mkdtemp(join(tmpdir(),'dx-g1-crashed-pdf-'));
+  const storage=new AcceptanceObjectStorage(directory,'http://localhost','TEST isolated contract crash storage');
+  const attachments=new AttachmentService(f.db,storage,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
+  try{
+   const images=(await f.db.query("SELECT object_key,mime_type,sha256 FROM attachments WHERE entity_type='sourcing_case' AND entity_id=$1 AND mime_type LIKE 'image/%'",[caseId])).rows;
+   for(const image of images)await storage.writeImmutable(image.object_key,await f.storage.readBytes(image.object_key,1000000),{mimeType:image.mime_type,sha256:image.sha256});
+   const child=fork(new URL('../helpers/sourcing-contract-crash-worker.ts',import.meta.url),[],{execArgv:['--import','tsx'],stdio:['ignore','ignore','ignore','ipc']});
+   await new Promise<void>((resolve,reject)=>{
+    let expired=false,failure:string|undefined;
+    const timer=setTimeout(()=>{expired=true;child.kill('SIGKILL');},15000);
+    child.once('error',reject);
+    child.once('message',(message:{error:string})=>{failure=message.error;});
+    child.once('close',(_code,signal)=>{
+     clearTimeout(timer);
+     if(signal==='SIGKILL'&&!expired&&!failure)resolve();
+     else reject(new Error(failure??'Isolated worker did not stop at the checkpoint'));
+    });
+    child.send({connectionString:url,schemaOptions:f.db.options.options,directory,actor:f.root,
+     caseId,documentId,checkpoint});
+   });
+   const state=async()=>(await f.db.query("SELECT status,pdf_attachment_id,generated_at,generation_attempt_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[documentId])).rows[0];
+   const staged=async()=>(await f.db.query("SELECT generation_attempt_id,object_key,sha256,published_attachment_id FROM sourcing_contract_generation_staging WHERE sourcing_contract_document_id=$1 ORDER BY staged_at",[documentId])).rows;
+   const before=await state();
+   expect(before).toMatchObject({status:'generating',pdf_attachment_id:null,generated_at:null,generation_attempt_id:expect.any(String)});
+   const prior=await staged();
+   expect(prior).toHaveLength(checkpoint==='claim'?0:1);
+   if(prior[0]){
+    expect(prior[0]).toMatchObject({generation_attempt_id:before.generation_attempt_id,published_attachment_id:null});
+    expect(await storage.computeSha256(prior[0].object_key)).toBe(prior[0].sha256);
+   }
+   expect((await f.db.query("SELECT 1 FROM attachments WHERE entity_type='sourcing_contract_document' AND entity_id=$1",[documentId])).rowCount).toBe(0);
+   await f.db.query("UPDATE sourcing_contract_documents SET generation_lease_until=clock_timestamp()-INTERVAL '1 second' WHERE sourcing_contract_document_id=$1",[documentId]);
+   const next=new SourcingContractService(f.db,attachments);
+   expect(await next.generateIfReady(f.root,caseId,documentId)).toMatchObject({item:{sourcingContractDocumentId:documentId,status:'ready'}});
+   expect((await staged()).filter(row=>row.published_attachment_id)).toHaveLength(1);
+   expect((await f.db.query("SELECT 1 FROM sourcing_contract_business_ready_facts WHERE sourcing_contract_document_id=$1",[documentId])).rowCount).toBe(1);
+  }finally{await rm(directory,{recursive:true,force:true});}
  });
 });

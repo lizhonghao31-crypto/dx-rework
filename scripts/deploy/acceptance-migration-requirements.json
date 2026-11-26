@@ -2734,5 +2734,23 @@
       "guard_development_revision_comment_lineage"
     ],
     "sequences": []
+  },
+  "0316_sourcing_contract_generation_attempts": {
+    "checksum": "6cb9d8181ba45e3118195d5f91d636687e35f1a530687c041ce685ef3c886d56",
+    "tables": [
+      "sourcing_contract_documents"
+    ],
+    "functions": [],
+    "references": [
+      "attachments",
+      "sourcing_contract_documents"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_contract_generation_staging"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }
