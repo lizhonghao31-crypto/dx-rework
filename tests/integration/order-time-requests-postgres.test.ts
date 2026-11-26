@@ -6,6 +6,7 @@ import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput} from '@dx-rework/contracts/digital-production';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
@@ -49,9 +50,18 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 native first-effective order time and one request transaction',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,requests:OrderTimeRequestService,standardId:string,native:PatternRoomOrderService;
- const make=async(date:string|null,withMaterial=false,washing:'免洗'|'内洗'|'外洗'='免洗')=>{
-  const original=f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']},source=await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-R507-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
-  const material=withMaterial?{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:'TEST',name:'TEST 已备主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}:null;
+ const make=async(date:string|null,withMaterial=false,washing:'免洗'|'内洗'|'外洗'='免洗',numbered=false)=>{
+  const original=f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']};
+  const source=numbered?await identity.reserveNumberedDraft(actor,{developmentType:'头版',temporaryStyleNo:null,
+   numbering:{kind:'development',customerCode:null,productGroup:'男装',salesYear:2027,salesSeries:null}},randomUUID()):
+   await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-R507-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
+  const supplierName=numbered?'TEST 编号原材料 '+randomUUID().slice(0,8):'TEST';
+  const supplier=numbered?await f.access.createSupplier(f.root,CreateSupplierSchema.parse({
+   supplierCode:'TEST-R2-'+randomUUID().slice(0,8).toUpperCase(),supplierName,
+   supplierType:'fabric',changeReason:'TEST 原供应商档案',
+  })):null;
+  const material=withMaterial?{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:supplierName,
+   ...(supplier?{supplierReference:supplier}:{}),name:'TEST 主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:!numbered,expectedDate:null}:null;
   const photo=await f.image(actor),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original business source',craft:'无',washing,materials:material?[material]:[],files:[{attachmentId:photo,kind:'款图'}]});
   const sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document},randomUUID()),price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   const operation:OrderTimeOperation={kind:'development_publish',sourceId:source.sourceId,input:{expectedVersion:sheet.version,patternOrder:{categoryId:price.price_id,priceVersion:price.version}}};
@@ -136,6 +146,54 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await forms.read(missing.actor,missing.sourceId)).status).toBe('draft');
    const unknownPo=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:'TEST-missing-client-date-'+randomUUID(),orderDate:'2027-01-08',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-Po-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:null,sizes:[{size:'M',quantity:1}]}]});
    expect((await requests.check(row.actor,{kind:'direct_order',input:unknownPo,route:{craftSteps:[],preshrink:false}})).feasibility).toBe('unknown');
+  });
+ });
+ it('Acceptance R2 publishes a numbered draft with unconfirmed fabric and uses required accessory estimates only for sewing',async()=>{
+  const actor=f.people['sample-designer']!,settings=await identity.orderNumberSettings(f.root);
+  await identity.saveOrderNumberSettings(f.root,{...settings.values,expectedVersion:settings.version,
+   designers:[...settings.values.designers.filter(row=>row.userId!==actor.actorId),{userId:actor.actorId,code:'LH'}]},randomUUID());
+  const scene=await f.scene('2027-01-08T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const draft=await make(null,true,'免洗',true),sheet=await forms.read(draft.actor,draft.sourceId);
+   if(draft.operation.kind!=='development_publish'||!sheet.document)throw Error('TEST expects a real numbered draft');
+   const fabric=sheet.document.materials[0]!;
+   const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 需用钮扣',
+    designerHasMaterial:false,expectedDate:null};
+   const optional={...accessory,materialId:randomUUID(),name:'TEST 可选衬布',requiredThisRound:false};
+   const save=async(version:number,expectedDate:string|null,returnDate:string|null)=>{
+    const updated=await forms.save(draft.actor,draft.sourceId,{expectedVersion:version,document:{...sheet.document!,
+     returnDate,materials:[fabric,{...accessory,expectedDate},optional]}},randomUUID());
+    return {kind:'development_publish' as const,sourceId:draft.sourceId,input:{...draft.operation.input,expectedVersion:updated.version}};
+   };
+   let operation=await save(sheet.version,null,null);
+   expect(await requests.check(draft.actor,operation)).toMatchObject({feasibility:'unknown',
+    coverage:expect.arrayContaining([expect.stringContaining('TEST 需用钮扣选择了没有实物')])});
+   await expect(forms.publish(draft.actor,draft.sourceId,operation.input.expectedVersion,randomUUID(),operation.input.patternOrder))
+    .rejects.toMatchObject({code:'VALIDATION_ERROR'});
+   operation=await save(operation.input.expectedVersion,'2027-01-20',null);
+   const checked=await requests.check(draft.actor,operation);
+   expect(checked).toMatchObject({feasibility:'unknown',forecastQuality:'lower_bound',lateMinutes:null,
+    publicationMayProceedWithUnconfirmedFabric:true,sourceVersion:{materialBounds:{development_sewing:{value:'2027-01-20'}}}});
+   expect(checked.sourceVersion.materialBounds).not.toHaveProperty('development_materials');
+   const published=await forms.publish(draft.actor,draft.sourceId,operation.input.expectedVersion,randomUUID(),operation.input.patternOrder);
+   expect(published).toMatchObject({status:'published',document:{materials:[{expectedDate:null,available:false},{expectedDate:'2027-01-20'}, {requiredThisRound:false}]}});
+   const materialTask=await new DigitalProductionTaskService(f.db).read(draft.actor,published.taskId!);
+   expect(materialTask).toMatchObject({taskKind:'development_materials',enteredAt:'2027-01-08T00:00:00.000Z'});
+   const short=await make('2027-01-08',true,'免洗',true),shortSheet=await forms.read(short.actor,short.sourceId);
+   if(short.operation.kind!=='development_publish')throw Error('TEST expects a development publication');
+   const tight=await forms.save(short.actor,short.sourceId,{expectedVersion:shortSheet.version,document:{...shortSheet.document!,
+    materials:[shortSheet.document!.materials[0]!,{...accessory,materialId:randomUUID(),expectedDate:'2027-01-20'}]}},randomUUID());
+   const shortOp={...short.operation,input:{...short.operation.input,expectedVersion:tight.version}};
+   expect(await requests.check(short.actor,shortOp)).toMatchObject({feasibility:'insufficient',forecastQuality:'lower_bound'});
+   await expect(forms.publish(short.actor,short.sourceId,tight.version,randomUUID(),shortOp.input.patternOrder))
+    .rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
+   const shortCheck=await requests.check(short.actor,shortOp);
+   const requested=await requests.submit(short.actor,{operation:shortOp,fingerprint:shortCheck.fingerprint,reason:'TEST 原短交期确认'},randomUUID());
+   const review=await requests.read(f.root,requested.requestId);
+   const applied=await requests.apply(f.root,requested.requestId,{expectedVersion:review.version,fingerprint:review.check.fingerprint,
+    overrides:{},acceptLate:true},randomUUID());
+   expect(applied.state).toBe('applied');
+   expect((await forms.read(short.actor,short.sourceId)).status).toBe('published');
   });
  });
  it('delivers one captured pre-deadline reminder through the real bounded todo scheduler, preserving later reminder counters and mute',async()=>{

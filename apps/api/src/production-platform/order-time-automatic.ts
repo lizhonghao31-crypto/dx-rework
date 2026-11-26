@@ -18,7 +18,8 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
  if(!existing&&!await acceptsNewOrderTime(db))return work();
  const time=resource?await new ContextBusinessClock(database,db).read(resource):observedBusinessTime(businessNow);
  const state=await loadOrderTimeOperation(database,db,actor,operation,time);
- if(state.check.feasibility==='unknown')throw new ApplicationError('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间',409);
+ if(state.check.feasibility==='unknown'&&!state.check.publicationMayProceedWithUnconfirmedFabric)
+  throw new ApplicationError('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间',409);
  if(state.check.feasibility==='insufficient')throw new ApplicationError('ORDER_TIME_REQUEST_REQUIRED','按本单实际流程计算，现有时间不足，请提交本单时效申请',409);
  const eventId=randomUUID();
  await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'order_time_activated','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,resource?.id??eventId,JSON.stringify({automatic:true,designerId:state.designerId,plan:state.value.plan,lateMinutes:state.check.lateMinutes})]);
