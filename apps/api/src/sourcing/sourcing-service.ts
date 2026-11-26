@@ -1166,7 +1166,7 @@ export class SourcingService {
           if(!basis.basis||!currentBudget||facts.gender!==before.gender||facts.styleName!==before.styleName||
             facts.lineItems.length!==before.lineItems.length||facts.lineItems.some((line,index)=>{
              const original=before.lineItems[index]!;
-             return line.styleNo!==original.formalStyleNo||(line.alternateStyleNo??"")!==(original.alternateStyleNo??"")||
+             return (line.styleNo??"")!==(original.formalStyleNo??"")||(line.alternateStyleNo??"")!==(original.alternateStyleNo??"")||
                line.color!==original.color||line.quantity!==original.quantity;
             }))fail("本次更正会改变已采用的IE报价依据，请回原报价及预算核对后继续",409,"CONFLICT");
         }

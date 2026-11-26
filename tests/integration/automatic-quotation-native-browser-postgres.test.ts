@@ -37,7 +37,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),
    quotes=new DigitalQuotationService(db,true),budgets=new DigitalBudgetService(db,true);
   const sourcing=new SourcingService(db,undefined,undefined,new TodoProjectionService(new TodoService(db)),f.contracts);
-  const style='TEST-R6-IE-'+randomUUID(),source=await identity.createSource(designer,
+  const style='TEST-R6-IE-'+randomUUID(),alternate=style+'-ALT',source=await identity.createSource(designer,
    {developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const resource={kind:'source' as const,id:source.sourceId},today=beijingCalendarDate(new Date()),delivery=minimumInitialCustomerDate();
   const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
@@ -56,7 +56,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
    designStyleNo:style,orderDate:today,primaryMerchandiserId:merch.actorId,
    lines:[{formalPoNo:style+'-1',color:'黑',customerWarehouseArrivalDate:delivery,sizes:[{size:'M',quantity:5}]},
-    {formalPoNo:style+'-2',color:'白',customerWarehouseArrivalDate:delivery,sizes:[{size:'M',quantity:8}]}]}),randomUUID(),source.sourceId);
+    {temporaryStyleNo:alternate,color:'白',customerWarehouseArrivalDate:delivery,sizes:[{size:'M',quantity:8}]}]}),randomUUID(),source.sourceId);
   const id=order.productionOrderId,preparedBudget=await budgets.read(merch,id);
   expect(preparedBudget).toMatchObject({status:'draft',document:{outsourcingUnitPrice:'15.8'},outsourcingIeBasis:{unitPrice:'15.8'}});
   const filled={...preparedBudget.document!,fabricType:'针织',productCategory:'上衣',date:today,
@@ -114,7 +114,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const prepared=await budgets.prepareSourcing(merch,id,budget.version,f.attachments);
   const payload=CreateSourcingCaseSchema.parse({gender:prepared.gender,styleName:prepared.styleName,deliveryDate:delivery,
    estimatedCutPieceSendDate:today,daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(image=>image.attachmentId),
-   lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:delivery})),
+   lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,...(styleNo?{styleNo}:{}),alternateStyleNo,color,quantity,factoryDeliveryDate:delivery})),
    digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}});
   await expect(sourcing.createCase(merch,{...payload,daxingUnitPrice:'32.4'},randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(sourcing.createCase(merch,{...payload,digitalBudget:{...payload.digitalBudget!,budgetVersion:prepared.budgetVersion+1}},randomUUID()))
@@ -139,11 +139,39 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const returned=(await sourcing.returnToMerchandiser(owner,created.sourcingCaseId,{
    expectedVersion:created.version,reason:'TEST 仅更正交付日期说明'},randomUUID())).value;
   expect(returned.status).toBe('pending_merchandiser_correction');
+  expect(returned.lineItems[1]).toMatchObject({formalStyleNo:null,alternateStyleNo:alternate});
   const correction=CorrectSourcingCaseSchema.parse({gender:payload.gender,styleName:payload.styleName,deliveryDate:payload.deliveryDate,
    estimatedCutPieceSendDate:payload.estimatedCutPieceSendDate,attachmentIds:payload.attachmentIds,lineItems:payload.lineItems,
    expectedVersion:returned.version,reason:'TEST 继续采用原前置IE价'});
-  const corrected=(await sourcing.correctCase(merch,created.sourcingCaseId,correction,randomUUID())).value;
-  expect(corrected).toMatchObject({status:'pending_management_decision',ieQuote:{quoteVersion:1}});
+  await expect(sourcing.correctCase(merch,created.sourcingCaseId,{...correction,lineItems:correction.lineItems.map((row,index)=>
+   index===1?{...row,alternateStyleNo:alternate+'-DIFFERENT'}:row)},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const earlierFactoryDate=beijingCalendarDate(new Date(Date.parse(delivery+'T12:00:00+08:00')-86_400_000));
+  const afterReturn=await h.open(merch.actorId,1165,{},`/ui/sourcing/orders/${created.sourcingCaseId}`);
+  let corrected:Awaited<ReturnType<typeof sourcing.correctCase>>['value'];
+  try{
+   await afterReturn.page.getByRole('link',{name:'修改订单资料',exact:true}).click();
+   await afterReturn.page.getByLabel('本 PO 加工厂交货日（必填）').nth(1).fill(earlierFactoryDate);
+   await afterReturn.page.getByLabel('修改说明（必填）',{exact:true}).fill('TEST 只改代用款号 PO 的加工厂交货日');
+   const actual=afterReturn.page.waitForResponse(response=>response.request().method()==='POST'&&
+    new URL(response.url()).pathname.endsWith(`/sourcing/cases/${created.sourcingCaseId}/corrections`),{timeout:8000});
+   await afterReturn.page.getByRole('button',{name:'提交并进入审批',exact:true}).click();
+   const response=await actual;
+   expect(response.request().postDataJSON().lineItems[1]).toMatchObject({alternateStyleNo:alternate,factoryDeliveryDate:earlierFactoryDate});
+   expect(response.request().postDataJSON().lineItems[1]).not.toHaveProperty('styleNo');
+   expect(response.status(),response.ok()?undefined:await response.text()).toBe(200);
+   corrected=await sourcing.getCase({...merch,authorizationCapability:'sourcing:view'},created.sourcingCaseId);
+  }finally{await afterReturn.close();}
+  expect(corrected).toMatchObject({status:'pending_management_decision',ieQuote:{quoteVersion:1,quotedBy:ie.actorId,quotedAt:created.ieQuote!.quotedAt}});
+  expect(corrected.lineItems[1]).toMatchObject({formalStyleNo:null,alternateStyleNo:alternate});
+  const center=await h.open(ie.actorId,1165,{},'/ui/ie-processing?directory=unified&kind=sourcing_review');
+  try{
+   const response=await center.page.request.get(h.base+'/api/digital-production/quotations/ie-directory?'+
+    new URLSearchParams({kind:'sourcing_review',page:'1',search:alternate}));
+   expect(response.status(),await response.text()).toBe(200);
+   const name=(await db.query('SELECT display_name FROM app_users WHERE id=$1',[ie.actorId])).rows[0]!.display_name;
+   expect(await response.json()).toMatchObject({total:1,items:[{objectId:created.sourcingCaseId,state:'priced',assigneeName:name,
+    pricing:{kind:'single',amount:'15.8000',unit:'件'}}]});
+  }finally{await center.close();}
   expect((await db.query('SELECT count(*)::int AS count FROM sourcing_ie_quotes WHERE sourcing_case_id=$1',[created.sourcingCaseId])).rows[0]!.count).toBe(1);
   expect((await db.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_ie_quote'",[created.sourcingCaseId])).rows[0]!.count).toBe(0);
   const secondReturn=(await sourcing.returnToMerchandiser(owner,created.sourcingCaseId,{
@@ -171,10 +199,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     new URL(response.url()).pathname.endsWith(`/sourcing/cases/${created.sourcingCaseId}/corrections`),{timeout:8000});
    await correctedBudgetUi.page.getByRole('button',{name:'提交并进入审批',exact:true}).click({timeout:8000});
    const response=await actual;
-   expect(response.status(),await response.text()).toBe(200);
+   expect(response.status(),response.ok()?undefined:await response.text()).toBe(200);
    expect(response.request().postDataJSON()).toMatchObject({expectedVersion:secondReturn.version,
     adoptedBudget:{budgetVersion:publishedNew.version,orderVersion:publishedNew.linkedIeCorrection!.orderVersion}});
-   readopt=await response.json();
+   readopt=await sourcing.getCase({...merch,authorizationCapability:'sourcing:view'},created.sourcingCaseId);
   }catch(error){
    const current=new URL(correctedBudgetUi.page.url());
    await writeFile(join(h.evidence,'r6-sourcing-correction.txt'),current.pathname+'?'+current.searchParams.toString()+'\n'+await correctedBudgetUi.page.locator('body').innerText());

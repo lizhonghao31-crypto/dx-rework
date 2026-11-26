@@ -17,6 +17,14 @@ export const sourcingIeHistoryPredicate=(actor:string,canReadAll:string)=>`(case
   AND (${canReadAll}::boolean OR history_quote.quoted_by=${actor}::uuid)
 ))`;
 
+/** The original quote timestamp is never refreshed when a correction retains its adopted basis.
+ * A subsequent return makes it ineffective again until that correction is completed. */
+export const currentSourcingIePricePredicate=`(quote.quoted_at>COALESCE((SELECT max(transitioned_at)
+ FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'),'-infinity'::timestamptz)
+ OR (to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL AND (SELECT business_action FROM sourcing_case_transitions
+ WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action IN ('returned_to_merchandiser','correction_retained_ie_basis')
+ ORDER BY sequence DESC LIMIT 1)='correction_retained_ie_basis'))`;
+
 export function sourcingIeCandidates(actor:TrustedActorContext):IeAuthorizedCandidates['sourcing_review']{
  if(!mayReadSourcing(actor))return undefined;
  return ({bind,search})=>{
@@ -36,10 +44,9 @@ export function sourcingIeCandidates(actor:TrustedActorContext):IeAuthorizedCand
     WHEN case_view.status='pending_merchandiser_correction' THEN 'not_started' ELSE 'priced' END AS state
   FROM current_sourcing_cases case_view
   JOIN app_users creator ON creator.id=case_view.created_by
-  LEFT JOIN LATERAL (SELECT q.sourcing_ie_quote_id,q.quoted_by,q.unit_price FROM sourcing_ie_quotes q
-    WHERE q.sourcing_case_id=case_view.sourcing_case_id AND q.quoted_at>coalesce((SELECT max(t.transitioned_at)
-      FROM sourcing_case_transitions t WHERE t.sourcing_case_id=case_view.sourcing_case_id AND t.business_action='returned_to_merchandiser'),'-infinity'::timestamptz)
-    ORDER BY q.quote_version DESC LIMIT 1) current_price ON case_view.status<>'pending_ie_quote'
+  LEFT JOIN LATERAL (SELECT quote.sourcing_ie_quote_id,quote.quoted_by,quote.unit_price FROM sourcing_ie_quotes quote
+    WHERE quote.sourcing_case_id=case_view.sourcing_case_id AND ${currentSourcingIePricePredicate}
+    ORDER BY quote.quote_version DESC LIMIT 1) current_price ON case_view.status<>'pending_ie_quote'
   LEFT JOIN sourcing_ie_quotes adopted ON adopted.sourcing_ie_quote_id=current_price.sourcing_ie_quote_id
     AND (${readAll}::boolean OR adopted.quoted_by=${actorId}::uuid)
   LEFT JOIN app_users owner ON owner.id=adopted.quoted_by

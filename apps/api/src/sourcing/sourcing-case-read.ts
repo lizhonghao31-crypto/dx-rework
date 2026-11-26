@@ -8,7 +8,7 @@ import {currentFactoryPagePoLines,factoryPoLines,factoryProposals} from "../prod
 import {assertContractReturnCaseClocks,assertContractReturnListClock,contractReturnClock} from "./contract-return-clock.js";
 import type {ContractReturnFilter} from "./contract-return-state.js";
 import {mapSourcingCase as mapCase,toSourcingIso as toIso,type SourcingCaseRow} from "./sourcing-case-mapping.js";
-import {sourcingIeHistoryAll,sourcingIeHistoryPredicate} from "./sourcing-ie-directory.js";
+import {currentSourcingIePricePredicate,sourcingIeHistoryAll,sourcingIeHistoryPredicate} from "./sourcing-ie-directory.js";
 
 const SOURCING_LIST_PAGE_SIZE=15;
 const fail=(message:string,status=400,code="VALIDATION_ERROR"):never=>{throw new ApplicationError(code,message,status);};
@@ -150,7 +150,7 @@ export async function readSourcingCase(database:Pool,client:Pick<PoolClient,"que
          SELECT quote.*
          FROM sourcing_ie_quotes quote
          WHERE quote.sourcing_case_id=case_view.sourcing_case_id
-           ${history ? "AND COALESCE((SELECT adoption.created_at FROM operation_events adoption WHERE adoption.event_id=quote.operation_event_id AND adoption.action='sourcing.ie_basis.adopt'),quote.quoted_at) <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : "AND (quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz) OR (to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL AND (SELECT business_action FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action IN ('returned_to_merchandiser','correction_retained_ie_basis') ORDER BY sequence DESC LIMIT 1)='correction_retained_ie_basis'))"}
+           ${history ? "AND COALESCE((SELECT adoption.created_at FROM operation_events adoption WHERE adoption.event_id=quote.operation_event_id AND adoption.action='sourcing.ie_basis.adopt'),quote.quoted_at) <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : `AND ${currentSourcingIePricePredicate}`}
          ORDER BY quote.quote_version DESC
          LIMIT 1
        ) quote_row ON true
@@ -490,7 +490,7 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
          SELECT quote.*
          FROM sourcing_ie_quotes quote
          WHERE quote.sourcing_case_id=case_view.sourcing_case_id
-         AND (quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz) OR (to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL AND (SELECT business_action FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action IN ('returned_to_merchandiser','correction_retained_ie_basis') ORDER BY sequence DESC LIMIT 1)='correction_retained_ie_basis'))
+         AND ${currentSourcingIePricePredicate}
          ORDER BY quote.quote_version DESC
          LIMIT 1
        ) quote_row ON true
