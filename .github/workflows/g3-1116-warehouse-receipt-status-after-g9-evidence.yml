@@ -1,0 +1,98 @@
+name: "G3 #1116 targeted warehouse receipt evidence after G9"
+
+on:
+  push:
+    branches: [evidence/g3-1116-warehouse-receipt-status-after-g9]
+
+permissions:
+  contents: read
+
+jobs:
+  warehouse-receipt-status:
+    name: G3 warehouse receipt status single-file test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      NODE_ENV: test
+      TESTED_HEAD: 6b77fb3b6bc12cb2ee6e62938005a5ddf459bb17
+      TEST_FILE: tests/unit/warehouse-receipt-status.test.ts
+    steps:
+      - name: "Checkout fixed PR #1116 candidate"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TESTED_HEAD }}
+          persist-credentials: false
+
+      - name: Assert actual checkout SHA and test file
+        run: |
+          set -euo pipefail
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "$TESTED_HEAD"
+          test -f "$TEST_FILE"
+          printf 'workflow_trigger_sha=%s\nactual_checkout_sha=%s\ntest_file=%s\n' "$GITHUB_SHA" "$actual" "$TEST_FILE"
+
+      - name: Set up repository Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Install locked dependencies and build test imports
+        run: |
+          set -euo pipefail
+          npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund
+          npm ci --no-audit --no-fund
+          npm run build:packages
+
+      - name: Run only the pinned test file and record the result
+        id: test
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ACTUAL_CHECKOUT_SHA=$(git rev-parse HEAD)
+          test "$ACTUAL_CHECKOUT_SHA" = "$TESTED_HEAD"
+          export EVIDENCE_DIR="$RUNNER_TEMP/g3-1116-evidence"
+          mkdir -p "$EVIDENCE_DIR"
+          test_exit=0
+          node node_modules/vitest/vitest.mjs run "$TEST_FILE" --reporter=verbose --reporter=json \
+            --outputFile.json="$EVIDENCE_DIR/vitest.json" 2>&1 | tee "$EVIDENCE_DIR/vitest.log" || test_exit=$?
+          export TEST_EXIT_CODE="$test_exit"
+          test "$(git rev-parse HEAD)" = "$TESTED_HEAD"
+          node --input-type=module <<'JS'
+          import { createHash } from 'node:crypto';
+          import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+          import { join, relative } from 'node:path';
+
+          const env = process.env;
+          const path = name => join(env.EVIDENCE_DIR, name);
+          const sha256 = data => createHash('sha256').update(data).digest('hex');
+          const log = readFileSync(path('vitest.log'));
+          const bytes = readFileSync(path('vitest.json'));
+          const report = JSON.parse(bytes);
+          const files = report.testResults.map(file => relative(env.GITHUB_WORKSPACE, file.name));
+          const results = report.testResults.flatMap(file => file.assertionResults);
+          const receipt = {
+            repository: env.GITHUB_REPOSITORY, pr: 1116,
+            workflowTriggerSha: env.GITHUB_SHA, actualCheckoutSha: env.ACTUAL_CHECKOUT_SHA,
+            testFile: env.TEST_FILE, actualFiles: files,
+            run: Number(env.GITHUB_RUN_ID), job: env.GITHUB_JOB, attempt: Number(env.GITHUB_RUN_ATTEMPT),
+            node: process.version, exitCode: Number(env.TEST_EXIT_CODE),
+            passed: report.numPassedTests, failed: report.numFailedTests, skipped: report.numPendingTests,
+            reportSha256: sha256(bytes), logSha256: sha256(log),
+          };
+          writeFileSync(path('receipt.json'), JSON.stringify(receipt, null, 2) + '\n');
+          console.log('DX_G3_TARGETED_TEST_RECEIPT_V1=' + JSON.stringify(receipt));
+          appendFileSync(env.GITHUB_STEP_SUMMARY, '### G3 #1116 supplemental CI evidence\n\n```json\n'
+            + JSON.stringify(receipt, null, 2) + '\n```\n');
+          if (files.length !== 1 || files[0] !== env.TEST_FILE || receipt.exitCode !== 0 || !report.success
+            || receipt.passed < 1 || receipt.failed !== 0 || receipt.skipped !== 0
+            || results.length !== receipt.passed || results.some(result => result.status !== 'passed')) process.exitCode = 1;
+          JS
+
+      - name: Preserve the original single-file result and run receipt
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: g3-1116-warehouse-receipt-status-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/g3-1116-evidence/
+          if-no-files-found: error
+          retention-days: 30
