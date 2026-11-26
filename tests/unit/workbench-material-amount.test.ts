@@ -73,7 +73,7 @@ describe('C2 material supplier snapshot authority',()=>{
 
 describe('C2 auxiliary planning remains distinct from material receipt',()=>{
  const base=initialDevelopmentDocument();
- const auxiliary={...base.materials[0]!,category:'辅料' as const,label:'TEST 辅料',name:'TEST 拉链'};
+ const auxiliary={...base.materials[0]!,category:'辅料' as const,label:'TEST 辅料',name:'TEST 拉链',requiredThisRound:true};
  const doc={...base,templateConfirmed:true as const,materials:[auxiliary]};
  it('keeps unknown historical data unknown and accepts draft gaps, but blocks explicit no without date on publication',()=>{
   expect(developmentAuxiliaryPlanningPublishIssues(doc)).toEqual([]);
@@ -85,6 +85,12 @@ describe('C2 auxiliary planning remains distinct from material receipt',()=>{
   const withDate={...doc,materials:[{...auxiliary,designerHasMaterial:false,expectedDate:'2026-12-03'}]};
   expect(developmentAuxiliaryPlanningPublishIssues(withDate)).toEqual([]);
   expect(withDate.materials[0]?.available).toBe(false);
+ });
+ it('does not demand a purchase date for an unavailable accessory that is not required this round',()=>{
+  const notRequired={...doc,materials:[{...auxiliary,designerHasMaterial:false,requiredThisRound:false}]};
+  expect(developmentAuxiliaryPlanningPublishIssues(notRequired)).toEqual([]);
+  expect(developmentPublishErrors(notRequired)).not.toContain('TEST 辅料选择了没有实物，请填写预计日期');
+  expect(notRequired.materials[0]?.available).toBe(false);
  });
  it('does not treat even an explicit yes as an arrival or let fabric adopt the auxiliary-only control',()=>{
   const yes={...auxiliary,designerHasMaterial:true};
