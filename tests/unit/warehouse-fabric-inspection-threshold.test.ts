@@ -5,7 +5,7 @@ import {warehouseFabricInspectionEligibility} from '../../apps/api/src/productio
 const meters=(quantity:string)=>({quantity,unit:'米'});
 describe('Acceptance R5 exact purchase receipt threshold',()=>{
  it.each([['500','449',false],['500','450',true],['500','490',true],['500','500',true],['520','450',false],
-  ['520','468',true],['500.000001','450.000000',false],['500.000001','450.000001',true],['500','0',false]] as const)(
+  ['520','467',false],['520','468',true],['500.000001','450.000000',false],['500.000001','450.000001',true],['500','0',false]] as const)(
   'uses actual purchase expectation %s and actual received %s without percentage rounding',(expected,received,eligible)=>{
    expect(warehouseFabricInspectionThreshold('米',meters(expected),meters(received))).toBe(eligible);
   });

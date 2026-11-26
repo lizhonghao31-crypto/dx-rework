@@ -1307,41 +1307,66 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const merch=own.people.merchandiser!;
    const instructions=new ProductionInstructionService(own.db,true);
-   const result=await warehouseOriginalIssueFixture(own,{fabricPurchaseQuantity:500,exerciseFabric:async({service,bulk,warehouse,orderId})=>{
+   const result=await warehouseOriginalIssueFixture(own,{fabricPurchaseQuantity:520,exerciseFabric:async({service,bulk,warehouse,orderId})=>{
     const resource={kind:'order' as const,id:orderId},now=businessNow().toISOString();
     const draft=await instructions.read(merch,orderId);
     expect(draft).toMatchObject({version:1,publishedVersion:null});
+    const noWholeArrival=async()=>{
+     const readiness=await service.read(warehouse,resource);
+     expect(readiness.history.some(row=>row.kind==='fabric_receipt'&&row.scopeRef==='whole')).toBe(false);
+     return readiness;
+    };
     const blockPublish=async()=>{
      const current=await instructions.read(merch,orderId),readiness=await service.read(merch,resource);
+     expect(current).toMatchObject({version:1,publishedVersion:null});
+     expect(readiness.finalReasons).toContain('主料未通过验布或尚无有效允许使用决定');
      await expect(instructions.publish(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,expectedReadinessRevision:readiness.revision},randomUUID()))
-      .rejects.toMatchObject({statusCode:409});
+      .rejects.toMatchObject({statusCode:409,message:expect.stringContaining('主料未通过验布或尚无有效允许使用决定')});
     };
     const work=(await service.warehouseReceiptWork(warehouse,resource)).find(row=>row.kind==='fabric_receipt')!;
+    expect(work).toMatchObject({purchase:{invested:{quantity:'520',unit:'米'}},received:null,productionRequired:null});
+    const original=await noWholeArrival();
+    const technical=await new DevelopmentTechnicalService(own.db,true).read(own.root,original.sourceId!,1,'整款');
+    const use=technical.artifacts.find(row=>row.status==='published')?.body.consumptionRows.find(row=>row.materialId===work.materialId);
+    expect(use).toMatchObject({unit:'米',consumption:'1'});
+    expect(original.lines.reduce((sum,row)=>sum+row.orderQuantity,0)*Number(use!.consumption)).toBe(500);
     const baseBatch={kind:'fabric_receipt',scopeRef:work.scopeRef,materialId:work.materialId,lineId:work.lineId,unit:'米',supplierId:work.basis.supplierId,
      investment:work.purchase.original,materialFingerprint:work.basis.adoptedRef,expectedReceiptVersion:0,occurredAt:now,note:'TEST native R5 fabric lot'};
-    const report={expectedReportId:null,expectedReceiptVersion:0,material:work.name,arrivedAt:now,inspectedAt:now,result:'不合格' as const,note:'TEST actual R5 quality'};
+    const report={expectedReportId:null,expectedReceiptVersion:0,material:work.name,arrivedAt:null,inspectedAt:now,result:'不合格' as const,note:'TEST actual R5 quality from warehouse batches only'};
     await blockPublish();
     await expect(bulk.reportFabric(warehouse,orderId,report,randomUUID())).rejects.toMatchObject({statusCode:409});
-    const partial=await service.recordWarehouseReceiptBatch(warehouse,resource,{...baseBatch,quantity:'449'},randomUUID());
-    const first=partial.history.find(row=>row.warehouseReceipt?.materialId===work.materialId)!;
-    const references=[{materialId:work.materialId,receipt:{recordId:first.recordId,version:first.version}}];
-    await expect(bulk.reportFabric(warehouse,orderId,{...report,receiptBatches:references},randomUUID())).rejects.toMatchObject({statusCode:409});
-    const next=await service.recordWarehouseReceiptBatch(warehouse,resource,{...baseBatch,expectedReceiptVersion:1,quantity:'1'},randomUUID());
-    const second=next.history.find(row=>row.warehouseReceipt?.materialId===work.materialId&&row.version===2)!;
-    const known=await bulk.read(warehouse,orderId);
-    expect(known.fabric).toMatchObject({warehouseInspection:{eligible:true},usable:false,report:null});
-    await blockPublish();
-    const rejected=await bulk.reportFabric(warehouse,orderId,{...report,receiptBatches:[...references,{materialId:work.materialId,receipt:{recordId:second.recordId,version:second.version}}]},randomUUID());
+    const references:Array<{materialId:string;receipt:{recordId:string;version:number}}> = [];
+    for(const [index,lot] of [{quantity:'450',total:'450',remaining:'70',eligible:false},
+     {quantity:'17',total:'467',remaining:'53',eligible:false},{quantity:'1',total:'468',remaining:'52',eligible:true}].entries()){
+     const state=await service.recordWarehouseReceiptBatch(warehouse,resource,{...baseBatch,expectedReceiptVersion:index,quantity:lot.quantity},randomUUID());
+     const originalLot=state.history.find(row=>row.warehouseReceipt?.materialId===work.materialId&&row.version===index+1)!;
+     expect(originalLot).toMatchObject({valid:true,warehouseReceipt:{quantity:lot.quantity}});
+     references.push({materialId:work.materialId,receipt:{recordId:originalLot.recordId,version:originalLot.version}});
+     expect((await service.warehouseReceiptWork(warehouse,resource)).find(row=>row.materialId===work.materialId)).toMatchObject({
+      received:{quantity:lot.total,unit:'米'},balance:{procurementRemaining:lot.remaining},activeBatches:expect.arrayContaining(references.map(ref=>({
+       ref:ref.receipt,quantity:expect.objectContaining({unit:'米'}),occurredAt:now,
+      })))});
+     expect((await bulk.read(warehouse,orderId)).fabric).toMatchObject({warehouseInspection:{eligible:lot.eligible},usable:false,report:null});
+     await noWholeArrival();
+     await blockPublish();
+     if(!lot.eligible)await expect(bulk.reportFabric(warehouse,orderId,{...report,receiptBatches:references},randomUUID()))
+      .rejects.toMatchObject({statusCode:409,message:expect.stringContaining('未达到采购应收90%')});
+    }
+    const rejected=await bulk.reportFabric(warehouse,orderId,{...report,receiptBatches:references},randomUUID());
     expect(rejected.fabric).toMatchObject({usable:false,warehouseCoverageCurrent:true,report:{result:'不合格'}});
+    await noWholeArrival();
     await blockPublish();
     const accepted=await bulk.decideFabric(own.root,orderId,{reportId:rejected.fabric!.report!.reportId,expectedDecisionId:null,allowUse:true,note:'TEST original authorized quality decision'},randomUUID());
     expect(accepted.fabric).toMatchObject({usable:true,warehouseCoverageCurrent:true});
     expect((await service.warehouseReceiptWork(warehouse,resource)).find(row=>row.materialId===work.materialId)).toMatchObject({
-     received:{quantity:'450',unit:'米'},balance:{procurementRemaining:'50'}});
-    expect((await service.read(warehouse,resource)).facts.some(row=>row.kind==='fabric_receipt'&&row.state==='ready')).toBe(false);
+     received:{quantity:'468',unit:'米'},balance:{procurementRemaining:'52'}});
+    await noWholeArrival();
    }});
    await own.runtime.run(result.scene,own.root,async()=>{
     expect(await instructions.read(merch,result.id)).toMatchObject({version:1,publishedVersion:1});
+    expect((await result.preparation.warehouseReceiptWork(result.warehouse,result.resource)).find(row=>row.kind==='fabric_receipt')).toMatchObject({
+     purchase:{invested:{quantity:'520',unit:'米'}},productionRequired:{quantity:'500',unit:'米'},received:{quantity:'468',unit:'米'},balance:{procurementRemaining:'52'}});
+    expect((await result.preparation.read(result.warehouse,result.resource)).history.some(row=>row.kind==='fabric_receipt'&&row.scopeRef==='whole')).toBe(false);
    });
   }finally{await own.dispose();}
  },50_000);
