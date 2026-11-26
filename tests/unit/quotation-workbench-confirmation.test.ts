@@ -58,7 +58,7 @@ it('keeps saved customer-price input and previous confirmation separate until an
   if(endpoint===path&&method==='GET')return draft;
   if(endpoint===`${path}/workbench-pricing`&&method==='GET')return {resource,quoteId,version:6,unitCost:'40.123456',
    status:'awaiting_customer_confirmation',counts:{returned:0,resubmitted:0,incomplete:0,pendingCraftApproval:0},reviews:[],
-   saved:{input,version:5},confirmation:'joint_release_ready'};
+   saved:{input,version:5},confirmation:'joint_release_ready',readiness:{canMeasure:true,canConfirm:true,reasons:[]}};
   if(endpoint===`${path}/confirm`&&method==='POST')return {...draft,status:'confirmed',confirmedVersion:6,versions:[6,5],canConfirm:false,
    confirmation:QuotationConfirmationSchema.parse(body),commandReceipt:{action:'confirm',appliedVersion:6}};
   throw Error(`Unexpected request ${method} ${endpoint}`);
@@ -66,13 +66,16 @@ it('keeps saved customer-price input and previous confirmation separate until an
  try{
   await h.render();
   expect(h.element.textContent).toContain('客户上次确认版：5');
-  expect(h.element.textContent).toContain('客户确认单件金额：48.123456 元 · 含税');
+  expect(h.element.textContent).toContain('客户确认单件金额：48.1 元 · 含税');
+  expect(h.element.querySelector('[title="原客户确认金额 48.123456 元"]')?.textContent).toBe('48.1');
   expect(h.element.textContent).toContain('已保存测算 · 报价 v5 · 客户单件报价 49.7 元/件 · 测算不等于客户确认');
   expect(h.element.querySelector('[title="客户单件报价 49.654321 元/件"]')).not.toBeNull();
   const amount=h.element.querySelector<HTMLInputElement>('input[aria-label="客户确认金额"]')!;
   expect(amount.value).toBe('');
   expect(request.mock.calls.every(([,method])=>method===undefined||method==='GET')).toBe(true);
   await h.click('用于本单客户确认');
+  expect(amount.value).toBe('49.7');
+  await act(async()=>amount.focus());
   expect(amount.value).toBe('49.654321');
   expect(h.element.textContent).toContain('TEST 第五版原始确认依据');
   expect(request.mock.calls.some(([,method])=>method==='POST')).toBe(false);
@@ -84,18 +87,20 @@ it('keeps saved customer-price input and previous confirmation separate until an
   expect(actions).toHaveLength(1);
   expect(actions[0]).toEqual([`${path}/confirm`,'POST',expect.objectContaining({expectedVersion:6,customerConfirmedTotal:'49.654321',
    amountScope:'per_piece',taxBasis:'excludes_tax',currency:'人民币',workbenchPricing:input,evidenceNote:'TEST 第六版实际客户同意'}),expect.any(String)]);
-  expect(h.element.textContent).toContain('客户确认单件金额：49.654321 元 · 不含税');
+  expect(h.element.textContent).toContain('客户确认单件金额：49.7 元 · 不含税');
+  expect(h.element.querySelector('[title="原客户确认金额 49.654321 元"]')?.textContent).toBe('49.7');
   expect(h.element.textContent).not.toContain('已保存测算');
  }finally{await h.close();}
 });
 
-it('renders the selected historical confirmation exactly and does not load the current pricing preview',async()=>{
+it('keeps the exact selected historical confirmation accessible behind the display and never loads current pricing',async()=>{
  const h=mountPanel(),request=vi.mocked(digitalRequest);
  request.mockImplementation(async()=>{throw Error('Historical snapshot must not issue a new quotation request');});
  try{
   await h.render({...draft,version:5,status:'confirmed',confirmedVersion:6,versions:[6,5],canConfirm:false});
   expect(h.element.textContent).toContain('v5 · 客户已确认');
-  expect(h.element.textContent).toContain('客户确认单件金额：48.123456 元 · 含税');
+  expect(h.element.textContent).toContain('客户确认单件金额：48.1 元 · 含税');
+  expect(h.element.querySelector('[title="原客户确认金额 48.123456 元"]')?.textContent).toBe('48.1');
   expect(h.element.textContent).toContain('TEST 第五版原始确认依据');
   expect(h.element.querySelector('#quote-confirmation')).toBeNull();
   expect(h.element.textContent).not.toContain('已保存测算');
