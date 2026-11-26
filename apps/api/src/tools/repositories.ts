@@ -16,6 +16,16 @@ export type OperationEventInput = Readonly<{
   reason?: string;
 }>;
 
+type IdempotencyInput = {
+  scope: string;
+  actorKey: string;
+  key: string;
+  requestHash: string;
+  expiresAt: Date;
+  /** This business command uses a saved receipt even after the generic retry window. */
+  retainReceipt?: true;
+};
+
 const validateClaimOptions = (limit: number, leaseSeconds: number): void => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new ApplicationError("VALIDATION_ERROR", "Claim limit must be between 1 and 100", 400);
@@ -32,7 +42,7 @@ const validateRetryDelay = (delaySeconds: number): void => {
 };
 
 export class IdempotencyRepository {
-  async begin(client: SqlClient, input: { scope: string; actorKey: string; key: string; requestHash: string; expiresAt: Date }): Promise<{ kind: "acquired"; acquisitionToken: string } | { kind: "completed"; statusCode: number; response: unknown }> {
+  async begin(client: SqlClient, input: IdempotencyInput): Promise<{ kind: "acquired"; acquisitionToken: string } | { kind: "completed"; statusCode: number; response: unknown }> {
     const acquisitionToken = randomUUID();
     const acquired = await client.query(
       `INSERT INTO idempotency_records(scope,actor_key,idempotency_key,request_hash,expires_at,acquisition_token)
@@ -41,9 +51,9 @@ export class IdempotencyRepository {
        SET request_hash=EXCLUDED.request_hash,status='in_progress',status_code=NULL,response=NULL,
            acquisition_token=EXCLUDED.acquisition_token,created_at=CURRENT_TIMESTAMP,
            updated_at=CURRENT_TIMESTAMP,expires_at=EXCLUDED.expires_at
-       WHERE idempotency_records.expires_at <= CURRENT_TIMESTAMP
+       WHERE idempotency_records.expires_at <= CURRENT_TIMESTAMP AND NOT $7::boolean
        RETURNING acquisition_token`,
-      [input.scope, input.actorKey, input.key, input.requestHash, input.expiresAt, acquisitionToken],
+      [input.scope, input.actorKey, input.key, input.requestHash, input.expiresAt, acquisitionToken, input.retainReceipt === true],
     );
     if (acquired.rowCount === 1) return { kind: "acquired", acquisitionToken };
 
@@ -79,7 +89,7 @@ export class IdempotencyRepository {
 
 export class IdempotencyService {
   constructor(private readonly records = new IdempotencyRepository()) {}
-  async execute<T>(client: SqlClient, input: { scope: string; actorKey: string; key: string; requestHash: string; expiresAt: Date }, work: () => Promise<{ statusCode: number; response: T }>): Promise<{ statusCode: number; response: T; reused: boolean }> {
+  async execute<T>(client: SqlClient, input: IdempotencyInput, work: () => Promise<{ statusCode: number; response: T }>): Promise<{ statusCode: number; response: T; reused: boolean }> {
     const begun = await this.records.begin(client, input);
     if (begun.kind === "completed") return { statusCode: begun.statusCode, response: begun.response as T, reused: true };
     const result = await work();

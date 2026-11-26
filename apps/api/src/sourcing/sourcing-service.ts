@@ -2,7 +2,7 @@ import {readSourcingOwnerApprovalBasis,requireSourcingOwnerApproval,sourcingOwne
 import type {RootAuthority} from "../access/root-authority.js";
 import {readSourcingCase,readSourcingCaseList,sourcingCaseStages,type SourcingCaseHistory,type SourcingCaseStage} from "./sourcing-case-read.js";
 import {mayReadSourcing,sourcingReadCapability as READ_CAPABILITY} from "./sourcing-ie-directory.js";
-import {toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-case-mapping.js";
+import {canViewSourcingDaxingPrice,toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-case-mapping.js";
 export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js";
 import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
@@ -72,6 +72,8 @@ import {
 } from "../tools/repositories.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
 import type {ContractReturnFilter} from "./contract-return-state.js";
+
+export type SourcingContractTarget = Readonly<{caseId: string; documentId: string}>;
 
 const CASE_CREATE_CAPABILITY = "sourcing:inquiry:create";
 const IE_QUOTE_CAPABILITY = "sourcing:price:quote";
@@ -1005,11 +1007,12 @@ export class SourcingService {
     return matches.rows.map(row => row.style_no);
   }
 
-  async reviseDigitalNumbersWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+  async reviseDigitalNumbersWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string):Promise<SourcingContractTarget[]>{
     const order=(await client.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
     const leader=actor.actorRoles.some(role=>['root_superuser','owner_group','production_management'].includes(role));
     if(!order||!leader&&!(actor.actorRoles.includes('sample_designer')&&order.created_by===actor.actorId)&&!(actor.actorRoles.includes('order_merchandiser')&&order.primary_merchandiser_id===actor.actorId))fail('无权补齐本单编号',403,'FORBIDDEN');
     const links=(await client.query("SELECT s.sourcing_case_id,s.workflow_generation FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.production_order_id=$1 ORDER BY l.child_id",[orderId])).rows;
+    const targets = new Map<string,SourcingContractTarget>();
     for(const link of links){
       await resolveDigitalChild(client,'sourcing',link.sourcing_case_id,link.workflow_generation);
       await client.query('SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE',[link.sourcing_case_id]);
@@ -1022,11 +1025,16 @@ export class SourcingService {
       const auditActor={...actor,authorizationCapability:'digital_production:numbers:correct'};
       const eventId=await this.events.append(client,auditActor,{action:'sourcing.styles.revise',entityType:'sourcing_case',entityId:link.sourcing_case_id,before:{lines:previous},after:{lines:mapped},reason:'数字母单补号同步，原数量价格审批及实裁计时保持不变'});
       await client.query('INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)',[link.sourcing_case_id,(before.identityRevision??0)+1,JSON.stringify(mapped),actor.actorId,eventId,actor.requestId]);
-      if(before.approvalSnapshot){if(!this.contractService)fail('合同服务未就绪，补号不能只改单据一侧');await this.contractService!.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor);}
+      if(before.approvalSnapshot){
+        if(!this.contractService)fail('合同服务未就绪，补号不能只改单据一侧');
+        const documentId=await this.contractService!.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor,true);
+        if(documentId)targets.set(documentId,{caseId:link.sourcing_case_id,documentId});
+      }
     }
+    return [...targets.values()];
   }
-  async generateDigitalNumberContracts(actor:TrustedActorContext,orderId:string){
-    for(const row of (await this.database.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1",[orderId])).rows)await this.contractService?.generateIfReady({...actor,authorizationCapability:READ_CAPABILITY},row.child_id).catch(()=>undefined);
+  async generateDigitalNumberContracts(actor:TrustedActorContext,targets:readonly SourcingContractTarget[]){
+    for(const {caseId,documentId} of targets) await this.contractService?.generateChangedNumberDocument(actor,caseId,documentId).catch(()=>undefined);
   }
   async reviseStyles(actor: TrustedActorContext, sourcingCaseId: string, input: ReviseSourcingStyles, key: string): Promise<Result<SourcingCaseSummary>> {
     const parsed = ReviseSourcingStylesSchema.safeParse(input);
@@ -1039,6 +1047,7 @@ export class SourcingService {
     const lines = [...parsed.data!.lines].sort((a,b) => a.position-b.position);
     const client = await this.database.connect();
     const scope = "sourcing.styles.revise";
+    let documentId: string | null | undefined;
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
@@ -1047,7 +1056,7 @@ export class SourcingService {
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && ((!manager && await effectiveSourcingMerchandiser(client,sourcingCaseId,source!.created_by) !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
-        requestHash:requestHash(scope,{sourcingCaseId,input:{...parsed.data,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)},async () => {
+        requestHash:requestHash(scope,{sourcingCaseId,input:{...parsed.data,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000),retainReceipt:true},async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
         const generatedContract = (await client.query<{status:string;pdf_attachment_id:string|null;identity_version:number}>(
           `SELECT status,pdf_attachment_id,identity_version FROM sourcing_contract_documents
@@ -1077,11 +1086,11 @@ export class SourcingService {
             await client.query('UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1',[link.production_order_id]);
           }
         }
-        if (before.approvalSnapshot) await this.contractService?.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor);
+        if (before.approvalSnapshot) documentId=await this.contractService?.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor,true);
         return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
       });
       await client.query("COMMIT");
-      await this.contractService?.generateIfReady({...actor,authorizationCapability:READ_CAPABILITY},sourcingCaseId).catch(() => undefined);
+      if (!result.reused && documentId) await this.contractService?.generateIfReady({...actor,authorizationCapability:READ_CAPABILITY},sourcingCaseId,documentId).catch(() => undefined);
       return {value:result.response,reused:result.reused};
     } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
     finally { client.release(); }
@@ -2750,6 +2759,15 @@ export class SourcingService {
       : "pending_finance_reconciliation";
   }
 
+  private async assertFactoryChangeReceiptReadable(client: PoolClient, actor: TrustedActorContext, caseId: string, creator: string, receipt: SourcingCaseSummary) {
+    this.assertReader({...actor,authorizationCapability:READ_CAPABILITY});
+    if (receipt?.sourcingCaseId !== caseId) fail("操作已登记，原转厂回执待核，可从本单历史核对。",409,"CONFLICT");
+    if (receipt.daxingUnitPrice !== undefined || receipt.approvalSnapshot?.daxingUnitPrice !== undefined || receipt.originalIeBudgetOrderId !== undefined) {
+      if (!canViewSourcingDaxingPrice(actor,await effectiveSourcingMerchandiser(client,caseId,creator)))
+        fail("原回执包含当前无权查看的外发资料，请从本单历史核对。",403,"FORBIDDEN");
+    }
+  }
+
   private async applyFactoryChange(
     client: PoolClient,
     actor: TrustedActorContext,
@@ -2770,10 +2788,11 @@ export class SourcingService {
     }>,
     eventId: string,
     reason: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const nextDecisionVersion = Number(source.decision_version) + 1;
     const nextStatus = this.factoryChangeTargetStatus(source.status, actor);
     const decisionId = randomUUID();
+    let documentId: string | null = null;
     await client.query(
       `INSERT INTO sourcing_decisions(
          sourcing_decision_id,sourcing_case_id,decision_version,source_type,
@@ -2850,7 +2869,7 @@ export class SourcingService {
       );
       if(!(await client.query('SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1',[source.sourcing_case_id])).rowCount)await ensureCuttingOrdersForApproval(client,source.sourcing_case_id,snapshotId);
       await approveTransferPoDates(client,actor,source.sourcing_case_id,source.factory_change_request_id,eventId,reason);
-      await this.contractService?.prepareForApproval(client, snapshotId, actor);
+      documentId = await this.contractService?.prepareForApproval(client, snapshotId, actor, true) ?? null;
       await transferProductionFactory(client,source.sourcing_case_id,source.sourcing_decision_id,decisionId,eventId);
     }
     if (nextStatus !== source.status) {
@@ -2923,6 +2942,7 @@ export class SourcingService {
       });
       // Current transfer contract tasks are projected only after the new PDF is ready.
     }
+    return documentId;
   }
 
   async requestFactoryChange(
@@ -2944,10 +2964,15 @@ export class SourcingService {
     const changeReason = normalizeText(input.changeReason, "换厂原因", 500);
     const scope = `sourcing.factory-change.request.${initiatorRole}`;
     const client = await this.database.connect();
+    let documentId: string | null = null;
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
+      const locked = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
+      if (!locked) return fail("报价选厂询价不存在",404,"NOT_FOUND");
+      if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
+        && (await readAdditionalMerchandiserIds(client,sourcingCaseId)).includes(actor.actorId) && await effectiveSourcingMerchandiser(client,sourcingCaseId,locked.created_by) !== actor.actorId)
+        fail("添加跟单仅可回传合同",403,"FORBIDDEN");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -2956,6 +2981,7 @@ export class SourcingService {
           sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(input.deliveryDate !== undefined ? {deliveryDate:input.deliveryDate} : {}),
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        retainReceipt: true,
       }, async () => {
         const current = await client.query<{
           sourcing_case_id: string;
@@ -3027,9 +3053,6 @@ export class SourcingService {
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         const transferDeliveryDate = input.deliveryDate ?? source.current_delivery_date;
         if (!sourcingDatesValid(source.estimated_send_date,transferDeliveryDate)) fail(SOURCING_DATE_ORDER_ERROR);
-        if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
-          && (await readAdditionalMerchandiserIds(client,sourcingCaseId)).includes(actor.actorId) && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId)
-          fail("添加跟单仅可回传合同",403,"FORBIDDEN");
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
           fail("供应链总监首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
         }
@@ -3131,7 +3154,7 @@ export class SourcingService {
           proposed_total_amount: totalAmount,
         };
         if (immediate) {
-          await this.applyFactoryChange(client, actor, effectSource, eventId, changeReason);
+          documentId = await this.applyFactoryChange(client, actor, effectSource, eventId, changeReason);
         } else {
           if (source.status === "pending_finance_reconciliation") {
             await this.todoProjection?.completeOpenByDedupePrefix(
@@ -3163,9 +3186,10 @@ export class SourcingService {
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
-      await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
+      if (outcome.reused) await this.assertFactoryChangeReceiptReadable(client,actor,sourcingCaseId,locked.created_by,outcome.response);
+      else await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
       await client.query("COMMIT");
-      await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
+      if (!outcome.reused && documentId) await this.contractService?.generateIfReady(actor,sourcingCaseId,documentId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -3207,10 +3231,20 @@ export class SourcingService {
     const verificationReason = normalizeText(input.verificationReason, "核实说明", 500);
     const scope = `sourcing.factory-change.${reviewerRole}.${input.decision}`;
     const client = await this.database.connect();
+    let documentId: string | null = null;
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
+      const locked = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
+      if (!locked) return fail("报价选厂询价不存在",404,"NOT_FOUND");
+      // The legacy receipt namespace includes the decision. Keep that namespace
+      // when reading old receipts, but reject a changed decision under the same key.
+      const opposite = `sourcing.factory-change.${reviewerRole}.${input.decision === "approved" ? "rejected" : "approved"}`;
+      const legacyScopes = (await client.query<{scope:string}>(`SELECT scope FROM idempotency_records
+        WHERE scope IN ($1,$2) AND actor_key=$3 AND idempotency_key=$4 ORDER BY scope FOR UPDATE`,[scope,opposite,actor.actorId,idempotencyKey])).rows;
+      if (legacyScopes.length && !legacyScopes.some(receipt=>receipt.scope===scope)) {
+        fail("同一操作标识不能用于不同决定",409,"IDEMPOTENCY_CONFLICT");
+      }
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -3219,6 +3253,7 @@ export class SourcingService {
           sourcingCaseId,factoryChangeRequestId,decision: input.decision,verificationReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        retainReceipt: true,
       }, async () => {
         const current = await client.query<{
           sourcing_case_id: string;
@@ -3367,7 +3402,7 @@ export class SourcingService {
              WHERE request_row.factory_change_request_id=$1`,[factoryChangeRequestId,sourcingCaseId])).rows[0]!;
           if ('baseContractDocumentId' in basis.after_state && basis.after_state.baseContractDocumentId !== basis.id)
             fail("合同版本已经变化，请驳回后重新发起转厂",409,"CONFLICT");
-          await this.applyFactoryChange(client, actor, source, eventId, verificationReason);
+          documentId = await this.applyFactoryChange(client, actor, source, eventId, verificationReason);
         } else if (input.decision === "approved") {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_factory_change_owner_approve",
@@ -3413,9 +3448,10 @@ export class SourcingService {
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
-      await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
+      if (outcome.reused) await this.assertFactoryChangeReceiptReadable(client,actor,sourcingCaseId,locked.created_by,outcome.response);
+      else await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
       await client.query("COMMIT");
-      await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
+      if (!outcome.reused && documentId) await this.contractService?.generateIfReady(actor,sourcingCaseId,documentId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
