@@ -215,22 +215,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await forms.read(draft.actor,draft.sourceId)).document?.materials[1]?.available).toBe(false);
   });
  });
- it('Acceptance R2 refuses to apply the fabric exception to a publication that would create the formal order',async()=>{
+ it.each([false,true])('Acceptance R2 refuses to apply the fabric exception to a publication that would create the formal order, known late=%s',async(knownLate)=>{
   const actor=f.people['sample-designer']!,settings=await identity.orderNumberSettings(f.root);
   if(!settings.values.designers.some(row=>row.userId===actor.actorId))await identity.saveOrderNumberSettings(f.root,{...settings.values,
    expectedVersion:settings.version,designers:[...settings.values.designers,{userId:actor.actorId,code:'LH'}]},randomUUID());
   const scene=await f.scene('2027-01-08T00:00:00.000Z');
   await f.runtime.run(scene,f.root,async()=>{
-   const draft=await make(null,true,'免洗',true),before=await forms.read(draft.actor,draft.sourceId);
+   const draft=await make(knownLate?'2027-01-08':null,true,'免洗',true),before=await forms.read(draft.actor,draft.sourceId);
    if(draft.operation.kind!=='development_publish')throw Error('TEST original publication required');
+   const formalDue=knownLate?'2027-01-08':'2027-04-30';
    const ordering=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:before.designStyleNo,
     orderDate:'2027-01-08',contractDeliveryDate:null,requiresColorMatching:false,
-    lines:[{formalPoNo:'TEST-R2-formal-'+randomUUID(),color:'黑',deliveryDate:null,customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:'2'}]}]});
-   const saved=await forms.save(draft.actor,draft.sourceId,{expectedVersion:before.version,document:{...before.document!,
+    lines:[{formalPoNo:'TEST-R2-formal-'+randomUUID(),color:'黑',deliveryDate:null,customerWarehouseArrivalDate:formalDue,sizes:[{size:'M',quantity:'2'}]}]});
+   const original=before.document!,fabric=original.materials[0]!;
+   const materials=knownLate?[fabric,{...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 合并转正所需钮扣',
+    designerHasMaterial:false,expectedDate:'2027-01-20'}]:[fabric];
+   const saved=await forms.save(draft.actor,draft.sourceId,{expectedVersion:before.version,document:{...original,materials,
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'formal',order:ordering}}},randomUUID());
    const operation={...draft.operation,input:{...draft.operation.input,expectedVersion:saved.version}};
    const check=await requests.check(draft.actor,operation);
-   expect(check.customerDates).toContainEqual(expect.objectContaining({date:'2027-04-30'}));
+   expect(check.customerDates).toContainEqual(expect.objectContaining({date:formalDue}));
    expect(check).toMatchObject({feasibility:'unknown',forecastQuality:'lower_bound'});
    expect(check.publicationMayProceedWithUnconfirmedFabric).toBeUndefined();
    const pending=await requests.submit(draft.actor,{operation,fingerprint:check.fingerprint,reason:'TEST 原合并发布转正申请'},randomUUID());

@@ -409,10 +409,13 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(unconfirmedFabric.length){
   check.coverage.push(`${unconfirmedFabric.join('、')}的实际到料待跟单核实，板房核配仍以原文员确认实物为准`);
   if(check.expectedEnd)check.forecastQuality='lower_bound';
-  if(check.feasibility==='sufficient'||check.feasibility==='not_applicable'){
-   // The same operation can create a formal order inside the approval
-   // transaction. A development-only exception never admits that write.
-   if(operation.kind==='development_publish'&&!includesProduction)check.publicationMayProceedWithUnconfirmedFabric=true;
+  const developmentOnly=operation.kind==='development_publish'&&!includesProduction;
+  const formalAdmission=includesProduction&&(operation.kind==='development_publish'||operation.kind==='confirm_order');
+  if(formalAdmission||check.feasibility==='sufficient'||check.feasibility==='not_applicable'){
+   // Accepting a known delay cannot stand in for missing material facts when
+   // this approval would create a formal order in the same transaction.
+   if(formalAdmission&&check.feasibility==='insufficient')check.coverage.push('已核实的安排也存在交期缺口，补齐资料后仍须按原时效审批办理');
+   if(developmentOnly)check.publicationMayProceedWithUnconfirmedFabric=true;
    check.feasibility='unknown';
    check.lateMinutes=null;
   }
