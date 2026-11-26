@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
-  "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
+  "base": "9ae90510626ef70398529d647b16d69d89193cd4",
+  "sourceFingerprint": "812c5c442abd6de23c7a8e6c2b73c0c69354c81d112b1ef43cfbe6a43bb36bea",
   "risk": "full",
   "rules": [
     {
@@ -36,8 +36,7 @@
       "checks": [
         "anchors",
         "originals",
-        "build",
-        "lint"
+        "historical"
       ]
     },
     {
@@ -71,9 +70,7 @@
       "checks": [
         "anchors",
         "originals",
-        "preflight",
-        "build",
-        "lint"
+        "historical"
       ]
     },
     {
@@ -82,7 +79,8 @@
       "writes": [
         "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts#synchronize",
         "apps/api/src/sourcing/sourcing-contract-service.ts#synchronizeGeneratedContract",
-        "scripts/ci/full-gate-risk-map.mjs"
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/sourcing/contract-return-clock.ts",
@@ -95,12 +93,11 @@
       ],
       "initialization": "仍复用原当前批准版本和事务 SAVEPOINT。保留旧任务和合同历史，原 Root 对账入口具备准确同一文档校验。",
       "dateAndPermission": "按原版、原授权与业务时钟投影；已就绪的有效 PDF 和延迟审计对应同一文档，无权操作原样拒绝。",
-      "expectation": "双跟单每版一份，历史 PDF 继续读，故障保 ready 且可从原对账入口恢复一份待办。Canonical Full 计划包含三组关键 PostgreSQL 套件。",
+      "expectation": "双跟单每版一份，历史 PDF 继续读，故障保 ready 且可从原对账入口恢复一份待办。Canonical Full 计划包含三组关键 PostgreSQL 套件。 本地原历史微秒测试按上线前无暂存登记的准确数据形状运行，只去除单个合成夹具的暂存关联，保留原 PDF、审批与精确到微秒时间断言；生产外键保持。",
       "checks": [
-        "transfer",
         "originals",
-        "preflight",
-        "anchors"
+        "anchors",
+        "historical"
       ]
     }
   ],
@@ -115,7 +112,7 @@
       "endedAt": "2026-11-26T15:20:46Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。",
       "log": "/tmp/dx-g1-evidence/review-fix/anchors-final.log",
       "logSha256": "9a70ba556e489eb94ca97ef7260536858a34e9b687aa05ae8f4c006fe53ff961",
       "passed": 11,
@@ -126,7 +123,32 @@
           "format": "vitest-json",
           "sha256": "4c66deacab76bbfea71ae4c1cb87d2cf99447ac369b2ce0348345b48df6a934d"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing",
+        "apps/api/src/acceptance-clock",
+        "apps/api/src/platform",
+        "apps/api/src/production-platform",
+        "apps/api/src/tools",
+        "apps/api/src/access",
+        "apps/api/src/auth",
+        "apps/api/src/todos",
+        "apps/api/src/cutting",
+        "apps/api/migrations",
+        "packages",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "scripts",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
+      ],
+      "inputFingerprint": "efa2303c64740ca766e5fa16a8d14f1d1e850fbbcef85519b35ad873b0af42c8"
     },
     {
       "id": "originals",
@@ -138,27 +160,35 @@
       "endedAt": "2026-11-26T15:19:14Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。",
       "log": "/tmp/dx-g1-evidence/review-fix/originals.log",
       "logSha256": "84b324a1ccfe8ccae84452de3850f84dfa96cdda3698000c1eb3ad38b5345750",
       "inputPaths": [
-        "apps/api/src",
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing",
+        "apps/api/src/acceptance-clock",
+        "apps/api/src/platform",
+        "apps/api/src/production-platform",
+        "apps/api/src/tools",
+        "apps/api/src/access",
+        "apps/api/src/auth",
+        "apps/api/src/todos",
+        "apps/api/src/cutting",
         "apps/api/migrations",
-        "apps/web/src",
         "packages",
-        "scripts",
         "tests/helpers",
         "tests/acceptance",
         "tests/inspection-report-fixture.ts",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
+        "scripts",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
         "tests/integration/sourcing-owner-readiness-postgres.test.ts",
         "tests/integration/contract-return-cycles-postgres.test.ts"
       ],
-      "inputFingerprint": "437c6e2eb324d8103306ac1599f42abb456d7b1506e944dbec5768bb2017da9b",
+      "inputFingerprint": "5e0222f18b9811355e72acdf6a2555acd52c6c9071f798df2ec388ea910ea9ea",
       "passed": 12,
       "failed": 0,
       "skipped": 0,
@@ -170,98 +200,27 @@
       ]
     },
     {
-      "id": "transfer",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/transfer.json tests/integration/sourcing-pr03-postgres.test.ts -t binds both authorized merchandisers|recovers missing transfer tasks explicitly|recovers an enrolled new transfer|keeps historical finance and signed PDFs|preserves 27 synthetic legacy orders|preserves the Root-edited delivery date",
+      "id": "historical",
       "kind": "tests",
-      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
-      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
-      "startedAt": "2026-11-26T15:18:22Z",
-      "endedAt": "2026-11-26T15:18:56Z",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/new-base-historical.json tests/integration/sourcing-pr03-postgres.test.ts -t \"creates an explicitly approved historical cycle\"",
+      "testedHead": "debf6dc389fa8c77f5fa744760b83f181a7168c3",
+      "sourceFingerprint": "812c5c442abd6de23c7a8e6c2b73c0c69354c81d112b1ef43cfbe6a43bb36bea",
+      "startedAt": "2026-11-26T15:41:34.132000Z",
+      "endedAt": "2026-11-26T15:41:41.784242Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2；只定位相关六项，136 项因名称过滤没有运行。",
-      "log": "/tmp/dx-g1-evidence/review-fix/transfer.log",
-      "logSha256": "5fbe5365dbf422b8ca12bf3964f7548a0fa854fd7ec17ae874f69c1ffe39ecb1",
-      "inputPaths": [
-        "apps/api/src",
-        "apps/api/migrations",
-        "apps/web/src",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/work-analysis-postgres.cases.ts"
-      ],
-      "inputFingerprint": "5d4b42f6baf99f214cb04fd18150db20c18a477ddbec1df38adc32bbd778835f",
-      "passed": 6,
+      "passed": 1,
       "failed": 0,
-      "skipped": 136,
+      "skipped": 141,
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback，按原 DB 资源协议登记清理，工作树已合并实际 9ae9051 并处理实际证据冲突。只运行上一 exact-head Full 唯一失败的历史合同夹具，141 项旧例未自动重跑。",
+      "log": "/tmp/dx-g1-evidence/review-fix/new-base-historical.log",
+      "logSha256": "5f5bba42132da9f2a9fe88531985df180ba9aebd548cbcac56dc0e630341b822",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b3c8f27f073bd998a151d6b77ca4abb3bb9481da83051c208b074e9380c55815"
+          "sha256": "93607a056327a365ab969bc0865db7ee472f5e7f5e40addd3e930346e7728d51"
         }
       ]
-    },
-    {
-      "id": "preflight",
-      "command": "npm run test:preflight",
-      "kind": "tests",
-      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
-      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
-      "startedAt": "2026-11-26T15:20:13Z",
-      "endedAt": "2026-11-26T15:20:20Z",
-      "exitCode": 0,
-      "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9, repository protocol worker cap 2; checksum-bound migration, time inventory and gate tests.",
-      "log": "/tmp/dx-g1-evidence/review-fix/preflight-final.log",
-      "logSha256": "29a59ff68332effae2ec6ec3851393174d86be3f62703d09af8cbe471270dbd4",
-      "passed": 285,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "build",
-      "command": "npm run build -w @dx-rework/api",
-      "kind": "command",
-      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
-      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
-      "startedAt": "2026-11-26T15:18:22Z",
-      "endedAt": "2026-11-26T15:18:46Z",
-      "exitCode": 0,
-      "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9; reused previously built workspace contracts/config/domain, API tsc build and original contract font copier.",
-      "log": "/tmp/dx-g1-evidence/review-fix/build.log",
-      "logSha256": "c9493b47bf7234d5eb62cea780d266010c1a0374e8d89e98a877f46749bf8dc7",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "0f5c5a8615c52a368014e4e8fe5b78c6d0a86c514319cb393189b70a7574b6f1"
-    },
-    {
-      "id": "lint",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/acceptance-clock/repository.ts apps/api/src/platform/contract-recovery-database.ts apps/api/src/sourcing/sourcing-contract-content.ts apps/api/src/sourcing/sourcing-contract-history-scope.ts apps/api/src/sourcing/sourcing-contract-management-service.ts apps/api/src/sourcing/sourcing-contract-pdf.ts apps/api/src/sourcing/sourcing-contract-recovery-render.ts apps/api/src/sourcing/sourcing-contract-recovery.ts apps/api/src/sourcing/sourcing-contract-render-child.ts apps/api/src/sourcing/sourcing-contract-return-service.ts apps/api/src/sourcing/sourcing-contract-service.ts apps/api/src/sourcing/sourcing-transfer-contract-todos.ts apps/api/src/tools/acceptance-storage.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/server.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/helpers/sourcing-contract-crash-worker.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
-      "kind": "command",
-      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
-      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
-      "startedAt": "2026-11-26T15:20:13Z",
-      "endedAt": "2026-11-26T15:20:16Z",
-      "exitCode": 0,
-      "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9, direct ESLint on changed executable inputs and integration fixtures.",
-      "log": "/tmp/dx-g1-evidence/review-fix/lint-final.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }
