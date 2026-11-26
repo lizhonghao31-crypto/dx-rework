@@ -316,9 +316,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const bounds=waiting.map(material=>({material,name:material.name||material.label,date:(expected.find(row=>row.material_id===material.materialId)?.expected_date??material.expectedDate) as string|null}));
   if(source?.workbench_generated_number||source?.workbench_number_root_id){
    const fabric=bounds.filter(row=>row.material.category!=='辅料'&&!isDevelopmentMaterialPlaceholder(row.material));
-   const accessories=bounds.filter(row=>row.material.category==='辅料'&&!isDevelopmentMaterialPlaceholder(row.material));
+   const accessories=bounds.filter(row=>row.material.category==='辅料'&&row.material.designerHasMaterial===false&&!isDevelopmentMaterialPlaceholder(row.material));
    for(const row of fabric)if(!row.date)unconfirmedFabric.push(row.name);
-   for(const row of accessories)if(!row.date&&row.material.designerHasMaterial===false){
+   for(const row of accessories)if(!row.date){
     value.route.complete=false;
     value.route.missing.push(`${row.name}选择了没有实物，请填写预计日期`);
    }
@@ -410,7 +410,9 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   check.coverage.push(`${unconfirmedFabric.join('、')}的实际到料待跟单核实，板房核配仍以原文员确认实物为准`);
   if(check.expectedEnd)check.forecastQuality='lower_bound';
   if(check.feasibility==='sufficient'||check.feasibility==='not_applicable'){
-   if(operation.kind==='development_publish')check.publicationMayProceedWithUnconfirmedFabric=true;
+   // The same operation can create a formal order inside the approval
+   // transaction. A development-only exception never admits that write.
+   if(operation.kind==='development_publish'&&!includesProduction)check.publicationMayProceedWithUnconfirmedFabric=true;
    check.feasibility='unknown';
    check.lateMinutes=null;
   }
