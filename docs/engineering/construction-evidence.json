@@ -1,242 +1,136 @@
 {
   "version": 1,
-  "base": "3323c5e063ebca305f5850f73bf1fc3daa5835f7",
-  "sourceFingerprint": "68a43e4b216b51a38b9ffcb846d701567b566e500830afa7c65e9e41d1c1f902",
-  "risk": "full",
+  "base": "02ae70756e6902117d95b0e17109a50436a61e5a",
+  "risk": "quick",
+  "sourceFingerprint": "dd99e2c1536029ade8fb7c1d736cafefbd3c6fe573b4621c3951acfe36a60841",
   "rules": [
     {
-      "rule": "G1 后监听恢复、每进程单任务和有界游标，租约过期按原身份及场景处理指定合同。",
-      "source": "2026-11-26 Eric 审核 G1–G9 施工与验收方案，G1 §1、§2、1a 和 §7。docs/requirements/sourcing-supplier-production-v1.0.md §8.1。",
+      "rule": "删除无运行引用的 FinancePage 包装，原工资列表和历史书签使用现行同一权限门。",
+      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
       "writes": [
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing/sourcing-contract-recovery.ts",
-        "apps/api/src/platform/contract-recovery-database.ts",
-        "apps/api/src/acceptance-clock/repository.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#resumePendingContracts",
-        "apps/api/src/sourcing/sourcing-contract-recovery-render.ts",
-        "apps/api/src/sourcing/sourcing-contract-render-child.ts",
-        "apps/api/src/sourcing/sourcing-contract-content.ts#hydrateContractContentImages",
-        "apps/api/src/sourcing/sourcing-contract-pdf.ts#normalizeSourcingContractSnapshotImages",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
+        "apps/web/src/finance-page.tsx#FinancePage"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/acceptance-clock/runtime.ts",
-        "apps/api/src/sourcing/current-merchandiser.ts",
-        "apps/api/src/sourcing/sourcing-service.ts"
+        "apps/web/src/App.tsx#financePageRequirements",
+        "apps/web/src/finance-access.ts#financePageRequirements",
+        "apps/web/src/wages/wage-page.tsx#WagePage",
+        "apps/web/src/wages/wage-period-list.tsx#readWageListQuery"
       ],
       "oldTests": [
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
+        "tests/unit/finance-navigation-hierarchy.test.ts#preserves legacy routes",
+        "tests/unit/wage-web-and-export.test.ts#wires read-only wage viewing"
       ],
-      "initialization": "原 API listen 成功后才调度，旧实例排空后由配置显式打开。shutdown 停止领取并给出短暂收尾时间，随后取消恢复任务连接及子进程。原按文档与人工入口保留。",
-      "dateAndPermission": "数据库真实时间决定租约，业务就绪时间用原 Acceptance 场景或普通业务时钟。原账号能力、精确关联和场景身份缺失时记为待办理。",
-      "expectation": "持有首份 PDF 写入障碍时另一张单的原认证 GET 仍成功；扫描无重叠，跨页继续，丢场景身份时零领取。独立 PG 连接保持生命周期锁时退出停止等待，真实场景锁占用时记录原单待核并后续恢复。删除原单、旧人工重试和 superseded PDF 留存。",
+      "initialization": "原 Vite HTML/静态与异步导入链不加载该包装；旧名字只在静态否定断言或历史记录出现。",
+      "dateAndPermission": "原 /ui/finance 与 /ui/wages 共享原角色加 capability；用模拟的工资历史期间、工资会计与仓管走真实编译路由。",
+      "expectation": "有权身份读到同一工资期间并展示原导出 GET 链接，无权身份访问任一旧路径都拒绝且零工资请求；读取零写入。",
       "checks": [
-        "anchors",
-        "originals",
-        "historical"
+        "g5-original-routes",
+        "g5-web-build",
+        "g5-browser-assets"
       ]
     },
     {
-      "rule": "G1 同文档只认持有有效凭证的获胜者，一次提交正式 PDF、首次就绪和工厂起钟。",
-      "source": "2026-11-26 Eric 审核施工单 G1 §3–§6、1b–1c，兼容原未领取文档和已生成 PDF。",
+      "rule": "删除未挂载的 PlatformHomePage 及其专属样式，保留原首页与角色分流。",
+      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
       "writes": [
-        "apps/api/migrations/0316_sourcing_contract_generation_attempts.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/src/tools/attachments.ts#publishContractPdf",
-        "apps/api/src/tools/acceptance-storage.ts",
-        "apps/api/src/tools/storage.ts",
-        "apps/api/src/tools/aliyun-oss-v4-client.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#generateIfReady",
-        "tests/helpers/sourcing-contract-crash-worker.ts"
+        "apps/web/src/platform-home-page.tsx#PlatformHomePage",
+        "apps/web/src/platform-home.css"
       ],
       "reads": [
-        "apps/api/src/production-platform/contract-business-ready.ts",
-        "apps/api/src/production-platform/factory-batch-timing.ts",
-        "apps/api/src/tools/routes.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent"
+        "apps/web/src/App.tsx#HomeLanding",
+        "apps/web/src/platform-modules.ts#platformLandingTarget",
+        "apps/web/src/shell-navigation.css"
       ],
       "oldTests": [
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/unit/sourcing-ssp05-contract-pdf.test.ts",
-        "tests/unit/aliyun-oss-v4-client.test.ts"
+        "tests/unit/ui-prototype.test.ts#routes the authenticated root",
+        "tests/unit/platform-modules.test.ts#retires the legacy module selector",
+        "tests/unit/platform-modules.test.ts#existing direct landing"
       ],
-      "initialization": "迁移新增可空凭证与私有暂存登记，保留既有文档/附件。不回填历史。获胜登记、绑定和真实业务事实共享事务。",
-      "dateAndPermission": "正式下载仍经原绑定授权。旧凭证不再写；业务事实失败一并撤回。仅对已写、本次归属且无正式引用的对象做限定清理。",
-      "expectation": "接手后未提交时放行旧成功及失败，最终真实下载 SHA、正式附件、待办和首次就绪均只由获胜执行者决定。两个独立子进程硬停和实际数据库 COMMIT 已执行丢回执均核对原文档。",
+      "initialization": "静态、动态、配置及测试引用反查；专属选择器只来自这一对文件。原 shell 的 app-shell__platform-home 属于自身样式。",
+      "dateAndPermission": "使用当前设计与仓管岗位分流及授权身份无模块分支；不更改首页用户、焦点、导航、缓存和 CSS。",
+      "expectation": "两种首页书签走现有 HomeLanding；看见原岗位目标或原无模块消息，打包无遗留专属样式。",
       "checks": [
-        "anchors",
-        "originals",
-        "historical"
+        "g5-original-routes",
+        "g5-web-build",
+        "g5-browser-assets"
       ]
     },
     {
-      "rule": "G1 待办仍按当前业务文档处理，投影失败保留 PDF 并走原对账恢复。",
-      "source": "2026-11-26 Eric 审核施工单 G1 §6 与 1c；原合同回传版本、岗位资格和取消顺序。",
+      "rule": "删除无调用且只返回 null 的 SeriesCreationPreview；原新建、草稿、历史照原业务路径。",
+      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
       "writes": [
-        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts#synchronize",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#synchronizeGeneratedContract",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "apps/web/src/series-creation-preview.tsx#SeriesCreationPreview"
       ],
       "reads": [
-        "apps/api/src/sourcing/contract-return-clock.ts",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/api/src/todos/projection-service.ts"
+        "apps/web/src/App.tsx#DigitalDesignerWorkspace",
+        "apps/web/src/digital-designer-workspace.tsx#DevelopmentCreateForm",
+        "apps/web/src/digital-production-page.tsx#customerWarehouseArrivalDate"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/contract-return-cycles-postgres.test.ts"
+        "tests/unit/development-confirmation-resume.test.ts#restores saved colors, quantities and dates",
+        "tests/unit/digital-detail-route.test.ts#returns a child document to its exact historical mother record",
+        "tests/unit/digital-po-identity-dates.test.ts#one formal PO and explicit customer promise contract"
       ],
-      "initialization": "仍复用原当前批准版本和事务 SAVEPOINT。保留旧任务和合同历史，原 Root 对账入口具备准确同一文档校验。",
-      "dateAndPermission": "按原版、原授权与业务时钟投影；已就绪的有效 PDF 和延迟审计对应同一文档，无权操作原样拒绝。",
-      "expectation": "双跟单每版一份，历史 PDF 继续读，故障保 ready 且可从原对账入口恢复一份待办。Canonical Full 计划包含三组关键 PostgreSQL 套件。 本地原历史微秒测试按上线前无暂存登记的准确数据形状运行，只去除单个合成夹具的暂存关联，保留原 PDF、审批与精确到微秒时间断言；生产外键保持。",
+      "initialization": "原旧包装没有业务请求或 UI 输出，整仓没有入口、动态加载、打包清单或测试夹具引用。",
+      "dateAndPermission": "保存草稿按原创建权限恢复；旧单及带 PO 参数的原路径、正式 PO 及客户交期原语义保持。",
+      "expectation": "原保存草稿字段、PO 标识和已存日期/历史仍可读，本地未创建或修改业务单，Acceptance 另按原角色与原单回读。",
       "checks": [
-        "originals",
-        "anchors",
-        "historical"
+        "g5-original-routes",
+        "g5-web-build"
       ]
     }
   ],
   "checks": [
     {
-      "id": "anchors",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/anchors-final.json tests/integration/business-anchors-clock-postgres.test.ts -t G1 |bounded pages|rolls back a failed first-ready",
+      "id": "g5-original-routes",
       "kind": "tests",
-      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
-      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
-      "startedAt": "2026-11-26T15:20:13Z",
-      "endedAt": "2026-11-26T15:20:46Z",
-      "exitCode": 0,
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/finance-navigation-hierarchy.test.ts tests/unit/wage-web-and-export.test.ts tests/unit/platform-modules.test.ts tests/unit/ui-prototype.test.ts tests/unit/digital-detail-route.test.ts tests/unit/digital-po-identity-dates.test.ts tests/unit/development-confirmation-resume.test.ts tests/unit/m01-series-plan-reading.test.ts -t 'finance secondary navigation|wires read-only wage viewing|existing direct landing|retires the legacy module selector|protects sourcing with AuthGate|routes the authenticated root|legacy digital detail compatibility|one formal PO and explicit customer promise contract|published customer confirmation resumes its saved PO|switches history as one saved snapshot' --reporter=default --reporter=json",
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
-      "log": "/tmp/dx-g1-evidence/review-fix/anchors-final.log",
-      "logSha256": "9a70ba556e489eb94ca97ef7260536858a34e9b687aa05ae8f4c006fe53ff961",
-      "passed": 11,
+      "exitCode": 0,
+      "testedHead": "bdbd220e700a4cff212c02d8c091d573f6208e70",
+      "sourceFingerprint": "dd99e2c1536029ade8fb7c1d736cafefbd3c6fe573b4621c3951acfe36a60841",
+      "context": "Node 22.22.2 / Vitest 4.1.10。仅选择既有入口、权限、草稿和 PO 历史用例，29 项由定向名称过滤。",
+      "startedAt": "2026-11-26T16:21:24Z",
+      "endedAt": "2026-11-26T16:21:29Z",
+      "log": "/tmp/dx-g5-evidence.GzLGdB/routes.log",
+      "logSha256": "18c97c53867dff35a3740aa221f10366f62bb308af1baf81d17bf085b551264c",
+      "passed": 62,
       "failed": 0,
-      "skipped": 18,
+      "skipped": 29,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4c66deacab76bbfea71ae4c1cb87d2cf99447ac369b2ce0348345b48df6a934d"
-        }
-      ],
-      "inputPaths": [
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing",
-        "apps/api/src/acceptance-clock",
-        "apps/api/src/platform",
-        "apps/api/src/production-platform",
-        "apps/api/src/tools",
-        "apps/api/src/access",
-        "apps/api/src/auth",
-        "apps/api/src/todos",
-        "apps/api/src/cutting",
-        "apps/api/migrations",
-        "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "scripts",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts"
-      ],
-      "inputFingerprint": "efa2303c64740ca766e5fa16a8d14f1d1e850fbbcef85519b35ad873b0af42c8"
-    },
-    {
-      "id": "originals",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g1-evidence/review-fix/originals.json tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts",
-      "kind": "tests",
-      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
-      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
-      "startedAt": "2026-11-26T15:18:22Z",
-      "endedAt": "2026-11-26T15:19:14Z",
-      "exitCode": 0,
-      "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
-      "log": "/tmp/dx-g1-evidence/review-fix/originals.log",
-      "logSha256": "84b324a1ccfe8ccae84452de3850f84dfa96cdda3698000c1eb3ad38b5345750",
-      "inputPaths": [
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing",
-        "apps/api/src/acceptance-clock",
-        "apps/api/src/platform",
-        "apps/api/src/production-platform",
-        "apps/api/src/tools",
-        "apps/api/src/access",
-        "apps/api/src/auth",
-        "apps/api/src/todos",
-        "apps/api/src/cutting",
-        "apps/api/migrations",
-        "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "scripts",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
-        "tests/integration/contract-return-cycles-postgres.test.ts"
-      ],
-      "inputFingerprint": "5e0222f18b9811355e72acdf6a2555acd52c6c9071f798df2ec388ea910ea9ea",
-      "passed": 12,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "221fd7ecec99a6f121d86fc11fd00b7578ff580392478b91f6daea5c560eb57c"
+          "sha256": "8ff81f90bebc9567dcd22f9ad7edf18d00aa2b5491ca2a2ccb125441ccc81ffa"
         }
       ]
     },
     {
-      "id": "historical",
-      "kind": "tests",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/new-base-historical.json tests/integration/sourcing-pr03-postgres.test.ts -t \"creates an explicitly approved historical cycle\"",
-      "testedHead": "debf6dc389fa8c77f5fa744760b83f181a7168c3",
-      "sourceFingerprint": "812c5c442abd6de23c7a8e6c2b73c0c69354c81d112b1ef43cfbe6a43bb36bea",
-      "startedAt": "2026-11-26T15:41:34.132000Z",
-      "endedAt": "2026-11-26T15:41:41.784242Z",
-      "exitCode": 0,
+      "id": "g5-web-build",
+      "kind": "command",
+      "command": "npm run build --workspace @dx-rework/web",
       "status": "passed",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 141,
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback，按原 DB 资源协议登记清理，工作树已合并实际 9ae9051 并处理实际证据冲突。只运行上一 exact-head Full 唯一失败的历史合同夹具，141 项旧例未自动重跑。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
-      "log": "/tmp/dx-g1-evidence/review-fix/new-base-historical.log",
-      "logSha256": "5f5bba42132da9f2a9fe88531985df180ba9aebd548cbcac56dc0e630341b822",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "93607a056327a365ab969bc0865db7ee472f5e7f5e40addd3e930346e7728d51"
-        }
-      ],
-      "inputPaths": [
-        "apps/api",
-        "apps/web/src/cutting-query.ts",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "39618c8d2035ad4fcc063ccc241314924cf394f06732dd32fecb9409e2865709"
+      "exitCode": 0,
+      "testedHead": "bdbd220e700a4cff212c02d8c091d573f6208e70",
+      "sourceFingerprint": "dd99e2c1536029ade8fb7c1d736cafefbd3c6fe573b4621c3951acfe36a60841",
+      "context": "原 Vite 生产构建命令，锁定依赖与本地 workspace 包，未启动后端。",
+      "startedAt": "2026-11-26T16:21:24Z",
+      "endedAt": "2026-11-26T16:21:26Z",
+      "log": "/tmp/dx-g5-evidence.GzLGdB/build.log",
+      "logSha256": "d54b692acb636d24bf9cc85ff1bb37a814f5e9b8636db5bb65164b80fc31710a"
+    },
+    {
+      "id": "g5-browser-assets",
+      "kind": "command",
+      "command": "node /tmp/dx-g5-evidence.GzLGdB/browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "bdbd220e700a4cff212c02d8c091d573f6208e70",
+      "sourceFingerprint": "dd99e2c1536029ade8fb7c1d736cafefbd3c6fe573b4621c3951acfe36a60841",
+      "context": "原编译产物的 loopback Chromium 只读检查，使用模拟的 auth/me 和工资空表响应，核对资产、允许/拒绝、工资期间与原导出链接、首页分流。未读实际 Acceptance 业务数据。",
+      "startedAt": "2026-11-26T16:23:49Z",
+      "endedAt": "2026-11-26T16:23:53Z",
+      "log": "/tmp/dx-g5-evidence.GzLGdB/browser.log",
+      "logSha256": "5f28b1f7863156328ad702dd90b0646c7ad3d43ae205e3332677bdb1a45ea7aa"
     }
   ]
 }
