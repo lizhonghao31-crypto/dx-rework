@@ -31,7 +31,8 @@
       "checks": [
         "native",
         "order-time",
-        "static"
+        "static",
+        "protocol"
       ]
     },
     {
@@ -56,7 +57,8 @@
       "checks": [
         "native",
         "order-time",
-        "static"
+        "static",
+        "protocol"
       ]
     }
   ],
@@ -117,6 +119,19 @@
       "startedAt": "2026-11-26T06:51:28.450743+00:00",
       "endedAt": "2026-11-26T06:52:15.758892+00:00",
       "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
+    },
+    {
+      "id": "protocol",
+      "kind": "command",
+      "command": "bash -lc 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "ebaf2dab62767dcdbc1f6cd8eac4ab7d6e2d0538",
+      "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
+      "context": "Exact GitHub Light protocol regression command checked locally. Only the known reviewed display-site signature changed.",
+      "startedAt": "2026-11-26T06:55:18.021853+00:00",
+      "endedAt": "2026-11-26T06:55:21.156889+00:00",
+      "logSha256": "f28a184413f02be5a0fca67ff7965823c25e916a191e0c17cf3843b70e222005"
     }
   ]
 }
