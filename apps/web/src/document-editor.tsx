@@ -47,16 +47,17 @@ export function DocumentErrors({ issues, error, onLocateField }: { issues: Docum
   if (!issues.length && !error) return null;
   return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => locate(issue.id)}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
 }
-export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur, savedValue, savedRevision }: {
+export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur, savedValue, savedRevision, displayValue }: {
   id: string; label: string; value: string; onValue?: (value: string) => void; readonly?: boolean; disabled?: boolean;
   numeric?: boolean; multiline?: boolean; maxLength?: number; type?: string; column?: string; issue?: string | undefined; onBlur?: (() => void) | undefined;
-  savedValue?: string; savedRevision?: number;
+  savedValue?: string; savedRevision?: number; displayValue?: string;
 }) {
-  const entered = useRef(value);
+  const entered = useRef(value), [focused,setFocused]=useState(false);
   useEffect(() => { if (savedRevision !== undefined && savedValue !== undefined) entered.current = savedValue; }, [savedRevision, savedValue]);
-  const shared = { id, "aria-label": label, "aria-invalid": Boolean(issue), "aria-describedby": issue ? `${id}-error` : undefined, disabled, value, maxLength,
+  const shared = { id, "aria-label": label, "aria-invalid": Boolean(issue), "aria-describedby": issue ? `${id}-error` : undefined, disabled, value:focused?value:displayValue??value, maxLength,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onValue?.(event.target.value),
-    onFocus: () => { entered.current = value; }, onBlur,
+    onFocus: () => { entered.current = value;if(displayValue!==undefined)setFocused(true); },
+    onBlur: () => { if(displayValue!==undefined)setFocused(false);onBlur?.(); },
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing || event.keyCode === 229) return;
       if (event.key === "Escape") { event.preventDefault(); onValue?.(entered.current); }
@@ -70,7 +71,7 @@ export function DocumentField({ id, label, value, onValue, readonly, disabled, n
       }
     },
   };
-  return <span className="dx-doc-field">{readonly ? <span id={id} className="dx-doc-readonly" tabIndex={-1}>{value || "—"}</span> : multiline ? <textarea {...shared} /> : <input {...shared} type={type} inputMode={numeric ? "decimal" : undefined} data-doc-column={column} />}{!readonly&&type==="date"&&<span className="dx-doc-date-value" aria-hidden="true">{value||"请选择日期"}</span>}<span className="dx-doc-print-value">{column ? value : value || "—"}</span>{issue && <small id={`${id}-error`} className="dx-doc-field-error">{issue}</small>}</span>;
+  return <span className="dx-doc-field">{readonly ? <span id={id} className="dx-doc-readonly" tabIndex={-1}>{(displayValue??value) || "—"}</span> : multiline ? <textarea {...shared} /> : <input {...shared} type={type} inputMode={numeric ? "decimal" : undefined} data-doc-column={column} />}{!readonly&&type==="date"&&<span className="dx-doc-date-value" aria-hidden="true">{value||"请选择日期"}</span>}<span className="dx-doc-print-value">{column ? value : value || "—"}</span>{issue && <small id={`${id}-error`} className="dx-doc-field-error">{issue}</small>}</span>;
 }
 export function DocumentSection({ id, title, detail, children }: { id: string; title: string; detail?: string; children: ReactNode }) {
   const chapter=useContext(DocumentChapterContext);

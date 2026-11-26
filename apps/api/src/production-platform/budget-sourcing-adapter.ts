@@ -8,15 +8,16 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden } from "./access-policy.js";
 import { linkNewDigitalChild } from "./child-link-repository.js";
-import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
+import {assertBudgetCraftBasis,readBudgetIeAdoption,readBudgetQuoteComparison} from './quotation-budget-basis.js';
+import {quotationExact} from '@dx-rework/contracts/digital-quotation';
 
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
-export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: TrustedActorContext, orderId: string) {
+export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: TrustedActorContext, orderId: string, correctionCaseId?:string) {
   await new DigitalProductionAccessPolicy(db).assert(actor, "order", orderId, "budget");
   const order = (await db.query("SELECT *,contract_delivery_date::text AS delivery FROM digital_production_orders WHERE production_order_id=$1", [orderId])).rows[0];
   if (!isRootActor(actor) && (!actor.actorRoles.includes("order_merchandiser") || order.primary_merchandiser_id !== actor.actorId || !await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId, "order_merchandiser"))) digitalForbidden();
   const linked = (await db.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1", [orderId])).rows[0];
-  if (linked) conflict("该母单已关联外发订单，请打开原订单");
+  if (linked?.child_id!==correctionCaseId&&(linked||correctionCaseId)) conflict("该母单已关联外发订单，请打开原订单");
   const lifecycle = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [orderId])).rows[0];
   if (lifecycle && lifecycle.state !== "active") conflict("母单已暂停或取消");
   const budget = (await db.query(`SELECT d.* FROM digital_budget_documents d JOIN digital_budget_preparations p USING(production_order_id)
@@ -24,10 +25,14 @@ export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: T
   const document = budget.document as BudgetDocument;
   const comparison=await readBudgetQuoteComparison(db,orderId,budget);
   if(!['legacy','within_limit'].includes(comparison.state))conflict(`${comparison.reason}；请跟单回预算页处理，未改变原批准合同`);
+  const ie=await readBudgetIeAdoption(db,orderId,budget);
+  if(ie.required&&(!ie.basis||!document.outsourcingUnitPrice||
+    quotationExact(document.outsourcingUnitPrice)!==quotationExact(ie.basis.unitPrice)))
+    conflict(ie.reason??'已发布预算的外发价与采用的IE原价不一致，请按原预算版本核对');
   const lines = (await db.query(`SELECT l.line_id,l.position,l.formal_style_no,l.temporary_style_no,l.color,l.customer_warehouse_arrival_date::text AS customer,
     (SELECT sum(s.quantity)::integer FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS quantity
     FROM digital_production_po_lines l WHERE l.production_order_id=$1 ORDER BY l.position`, [orderId])).rows;
-  return { order, budgetVersion: budget.version as number, document, lines };
+  return { order, budgetVersion: budget.version as number, document, lines, ieBasis:ie.basis };
 }
 export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActorContext, input: CreateSourcingCase) {
   const ref = input.digitalBudget;
@@ -35,6 +40,7 @@ export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActor
   await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
   await db.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [ref.productionOrderId]);
   const source = await readBudgetSourcing(db, actor, ref.productionOrderId);
+  if(source.ieBasis)await assertBudgetCraftBasis(db,ref.productionOrderId,'quote_v1');
   if (source.budgetVersion !== ref.budgetVersion || source.order.version !== ref.orderVersion) conflict("母单或预算已更新，请重新从预算进入外发发起");
   const gender = ["男装", "男童"].includes(source.order.product_group) ? "男装" : "女装";
   const numericPrice = (value: string) => { const [whole, fraction = ""] = value.split("."); return BigInt(whole!) * 1_000_000n + BigInt(fraction.padEnd(6, "0")); };
@@ -46,7 +52,7 @@ export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActor
     if (entered.lineId !== line.line_id || (entered.alternateStyleNo ?? "") !== alternate || entered.color !== line.color || entered.quantity !== line.quantity) conflict("PO 身份、代用号、颜色和数量须沿用当前母单");
     if (!entered.factoryDeliveryDate || entered.factoryDeliveryDate < input.estimatedCutPieceSendDate || line.customer && entered.factoryDeliveryDate > line.customer) conflict("请逐 PO 填写合法的加工厂交货日，不能早于裁片发出或晚于出货日期");
   }
-  return source.lines.map((line, index) => ({ childLineKey: String(index + 1), lineId: line.line_id as string }));
+  return {lines:source.lines.map((line, index) => ({ childLineKey: String(index + 1), lineId: line.line_id as string })),ieBasis:source.ieBasis};
 }
 export async function bindBudgetSourcing(db: PoolClient, pool: Pool, actor: TrustedActorContext, input: CreateSourcingCase, caseId: string, lines: Array<{ childLineKey: string; lineId: string }> | null) {
   if (!input.digitalBudget || !lines) return;

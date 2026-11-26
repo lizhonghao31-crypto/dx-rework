@@ -496,6 +496,11 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   useEffect(()=>()=>{uploadGeneration.current++;},[]);
   const [activeCreateInput, setActiveCreateInput] = useState<string | null>(null);
   const [correctionReason, setCorrectionReason] = useState("");
+  const [acceptRevisedBudget,setAcceptRevisedBudget]=useState(false);
+  const revisedBudget=correction?.item.originalIeBudgetOrderId?(() => {
+    const params=new URLSearchParams(window.location.search),budgetVersion=Number(params.get('budgetVersion')),orderVersion=Number(params.get('orderVersion'));
+    return Number.isSafeInteger(budgetVersion)&&budgetVersion>0&&Number.isSafeInteger(orderVersion)&&orderVersion>0?{budgetVersion,orderVersion}:null;
+  })():null;
   const [busy, setBusy] = useState(false);
   const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("");
@@ -786,6 +791,9 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate:effectiveDeliveryDate, digitalPo,
       lineItems, daxingUnitPrice: normalizedDaxingPrice, imageCount: images.length, uploading, uploadFailed });
     const effectiveIssues = correction ? issues.filter(issue=>issue.fieldId!=="sourcing-create-budget") : issues;
+    if(revisedBudget&&!acceptRevisedBudget){
+      await alertInApp('请明确确认采用本单的新报价和已发布预算，再提交更正。',{title:'采用依据待确认'});return;
+    }
     if (correction && !correctionReason.trim()) effectiveIssues.push({fieldId:"sourcing-correction-reason",message:"请填写修改说明"});
     if (effectiveIssues.length) { await feedback.reject(effectiveIssues); return; }
     const normalizedLines = lineItems.map((line) => ({
@@ -798,7 +806,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
     const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate:effectiveDeliveryDate,
-      lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice,
+      lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim(),...(revisedBudget&&acceptRevisedBudget?{adoptedBudget:revisedBudget}:{})} : {daxingUnitPrice: normalizedDaxingPrice,
         ...(additionalMerchandiserUserId ? {additionalMerchandiserUserId} : {})}),
       ...(budgetPreparation ? { digitalBudget: { productionOrderId: budgetPreparation.productionOrderId, budgetVersion: budgetPreparation.budgetVersion, orderVersion: budgetPreparation.orderVersion } } : {}),
       attachmentIds: images.map(image => image.attachmentId) });
@@ -824,6 +832,11 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       {budgetPreparation&&<section aria-label="本单预算来源"><p>客户：{budgetPreparation.customerCode??"未登记"} · 有效预算第{budgetPreparation.budgetVersion}版 · 母单版本{budgetPreparation.orderVersion}</p><p role="status">{budgetDraftStatus}</p>{budgetNeedsReview&&<Button onClick={acceptBudgetReview} disabled={busy||uploading}>已核对当前来源，沿用合法补填</Button>}{budgetPreparation.budgetRows&&<details onToggle={event=>setBudgetSourceOpen(event.currentTarget.open)}><summary>查看设计师预算项</summary>{budgetSourceOpen&&budgetPreparation.budgetRows.map(row=><p key={row.rowId}>{row.section} · {row.category} · {row.name} {row.specification} · 单耗：{row.consumption||"未填"} · 单价：{row.unitPrice||"未填"} 元/{row.unit||"未填单位"}</p>)}</details>}</section>}
       {!correction&&budgetOrderId&&sourcingReturnPath(window.location.search)&&<a className="dx-button dx-button--secondary" href={pageUrl(sourcingReturnPath(window.location.search)!)}>返回来源</a>}
       {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
+      {correction?.item.originalIeBudgetOrderId&&<section aria-label="本次外发采用依据">
+       <a href={pageUrl(`ui/digital-production?budget=${correction.item.originalIeBudgetOrderId}`)}>打开本单预算核对前置 IE 报价</a>
+       {revisedBudget&&<label><input type="checkbox" checked={acceptRevisedBudget} onChange={event=>{setAcceptRevisedBudget(event.target.checked);createKey.current=null;}}/>
+        明确采用本单新确认报价与已发布预算 v{revisedBudget.budgetVersion}</label>}
+      </section>}
       <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
         <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain || budgetNeedsReview}>
@@ -1854,6 +1867,7 @@ function OrderDetailPage({
           ? <a className="dx-button dx-button--primary" href={`${detailHref(item)}?edit=correction`}>修改订单资料</a> : <p>等待原跟单修改资料</p>}
         <a href={sourcingWorkflowNodeHref(item.sourcingCaseId,"created",detailReturnPath,true)}>查看历次提交资料</a>
       </section> : null}
+      {item.ieQuote?.adoptedFromBudget&&<p className="sourcing-order-meta">已采用前置 IE 报价 · 已发布预算 v{item.ieQuote.adoptedFromBudget.budgetVersion}。直接进入原生产管理选厂。</p>}
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout sourcing-reference-layout">
         <SourcingDetailFacts item={item} ownerTotalDelta={ownerTotalDelta} approvalProposedDate={ownerReview?.proposal?.deliveryDate??null} />

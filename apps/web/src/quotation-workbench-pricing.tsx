@@ -1,6 +1,7 @@
 import {useCallback,useRef,useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {quotationAmountDisplay} from './quotation-amount-display.js';
 import {formatBusinessDecimal} from '@dx-rework/contracts/business-display';
 import {calculateQuotationPricing,QuotationPricingInputSchema,QuotationWorkbenchPreviewSchema,SaveQuotationPricingDraftSchema,type QuotationPricingInput}
   from '@dx-rework/contracts/digital-quotation';
@@ -67,7 +68,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     // exposes the underlying number without making it the user's last input.
     if(!value||(focused?.field===field&&focused.element.ownerDocument.activeElement===focused.element)||(authored&&!validDraft))return value;
     const exactRate=field==='multiplier'&&!authored?result?.exactMultiplierPercent:null;
-    return exactRate?multiplierPreview(exactRate):previewDecimal(value);
+    return field==='customerUnitPrice'?quotationAmountDisplay(value):exactRate?multiplierPreview(exactRate):previewDecimal(value);
   };
   const edit=(field:QuotationPricingInput['field'],value:string)=>setEditing({input:{field,value},costAtEdit:current.unitCost});
   const costChanged=editing?editing.costAtEdit!==current.unitCost:
@@ -99,8 +100,8 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
   };
   return <div id="quote-cost-reference" className="quotation-workbench-pricing" aria-label="本单报价测算">
     <p>成本合计 {current.unitCost===null?'待补齐':
-      <span title={`精确成本 ${current.unitCost} 元/件`}>{previewDecimal(current.unitCost)} 元/件</span>}</p>
-    <p>报价状态 {statusLabels[current.status]}</p>
+      <span title={`精确成本 ${current.unitCost} 元/件`}>{quotationAmountDisplay(current.unitCost)} 元/件</span>}</p>
+    <p>报价状态 {current.readiness?.canConfirm?'报价资料已齐，待客户确认':current.readiness?.reasons.length?current.readiness.reasons.join('、'):current.status==='awaiting_customer_confirmation'?'待核对确认条件':statusLabels[current.status]}</p>
     {(current.counts.returned+current.counts.resubmitted+current.counts.incomplete+current.counts.pendingCraftApproval)>0&&
       <p>待修改 {current.counts.returned} 项 · 待复核 {current.counts.resubmitted} 项 · 待补齐 {current.counts.incomplete} 项 · 待工艺审批 {current.counts.pendingCraftApproval} 项</p>}
     {current.reviews.length>0&&<ul aria-label="本报价退回明细">{current.reviews.map(review=>
@@ -108,7 +109,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
         review.status==='returned'?'待修改':'待复核'} · {review.reason}</li>)}</ul>}
     {current.saved&&savedInput&&<p>已保存测算 · 报价 v{current.saved.version} · {savedSummary.label}{' '}
       <span title={`${savedSummary.label} ${savedInput.value}${savedSummary.unit}`}>
-        {previewDecimal(savedInput.value)}{savedSummary.unit}</span> · 测算不等于客户确认</p>}
+        {savedInput.field==='customerUnitPrice'?quotationAmountDisplay(savedInput.value):previewDecimal(savedInput.value)}{savedSummary.unit}</span> · 测算不等于客户确认</p>}
     <p>填任意一个，另一个自动算</p>
     <div className="budget-heading quotation-workbench-price-fields" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
       <TextInput label="报价倍率（%）" value={fieldValue('multiplier',result?.multiplierPercent)} isDisabled={unavailable}
@@ -125,7 +126,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     {feedback.notice&&<p role="alert">{feedback.notice}</p>}
     {feedback.uncertain&&<Button label="核对原报价测算保存结果" isDisabled={saving} onClick={()=>void feedback.retry()}/>}
     {current.confirmation==='awaiting_joint_release'?<p>当前仅供测算。新版报价确认将在工艺审批接通后开放。</p>:
-     <Button label="用于本单客户确认" isDisabled={unavailable||current.status!=='awaiting_customer_confirmation'||!result?.customerUnitPrice}
+     <Button label="用于本单客户确认" isDisabled={unavailable||!current.readiness?.canConfirm||!result?.customerUnitPrice}
       onClick={()=>{if(draft&&result?.customerUnitPrice)onAdopt(draft,result.customerUnitPrice);}}/>}
   </div>;
 }

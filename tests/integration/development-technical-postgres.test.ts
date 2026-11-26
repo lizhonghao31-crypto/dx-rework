@@ -299,12 +299,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const approver=await bindFixtureCraftApprover(f);
   await approveFixtureCraftPrice(quotes,p.worker,approver,resource,craft.rowId,'3');
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('45');
+  expect(q.workbenchReadiness).toMatchObject({canConfirm:false,canMeasure:false,reasons:expect.arrayContaining(['待正式纸样技术成果'])});
+  expect(await quotes.workbenchPreview(p.designer,resource)).toMatchObject({readiness:q.workbenchReadiness});
+  expect(q.rows.find(row=>row.rowId===craft.rowId)).toMatchObject({technicalUsage:'not_applicable'});
+  expect(q.rows.find(row=>row.rowId===ie.rowId)).toMatchObject({technicalUsage:'not_applicable'});
+  expect(q.rows.find(row=>row.rowId===p.materialId)).toMatchObject({technicalUsage:'required'});
   await expect(quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:403});
   const terms={customerCode:'PD',customerConfirmedTotal:'45',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST independently confirmed 45, not assumed from cost',workbenchPricing:{field:'customerUnitPrice',value:'45'},confirmedAt:businessNow().toISOString()};
   await expect(quotes.confirm(p.designer,resource,QuotationConfirmationSchema.parse({...terms,expectedVersion:q.version}),randomUUID())).rejects.toMatchObject({statusCode:409});
   const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.5'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST current independently published technical basis',templateRef:null},note:'TEST actual confirmed technical version',basedOnFinalComment:null};
   const originalArtifact=await artifact(p,{body});
   q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('45');
+  expect(q.workbenchReadiness).toEqual({canConfirm:true,canMeasure:true,reasons:[]});
   const confirmation=QuotationConfirmationSchema.parse({...terms,expectedVersion:q.version});
   const confirmedVersion=q.version;
   const simultaneous=await Promise.allSettled([quotes.confirm(p.designer,resource,confirmation,randomUUID()),quotes.confirm(p.designer,resource,confirmation,randomUUID())]);

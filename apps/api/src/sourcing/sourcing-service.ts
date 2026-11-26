@@ -13,7 +13,8 @@ import {factorySettlements,reconcileFactory} from "./factory-settlement-service.
 import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
 import { syncBulkSourcing } from "../production-platform/bulk-preparation-service.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
-import { validateBudgetSourcing, bindBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
+import { validateBudgetSourcing, bindBudgetSourcing,readBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
+import {assertBudgetCraftBasis,readBudgetIeAdoption,readLinkedIeBudgetCorrection} from '../production-platform/quotation-budget-basis.js';
 import { resolveDigitalChild } from "../production-platform/child-link-repository.js";
 import {readQuoteAnalysis} from "./sourcing-analysis.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -573,6 +574,9 @@ export class SourcingService {
     const cutoff = await this.database.query<{ at: string }>(
       node === "created" && entry.entryId !== sourcingCaseId
         ? "SELECT corrected_at::text AS at FROM sourcing_case_corrections WHERE correction_id=$1 AND sourcing_case_id=$2"
+        : node==="ie_quote"?`SELECT COALESCE(adoption.created_at,quote.quoted_at)::text AS at
+          FROM sourcing_ie_quotes quote LEFT JOIN operation_events adoption ON adoption.event_id=quote.operation_event_id AND adoption.action='sourcing.ie_basis.adopt'
+          WHERE quote.sourcing_ie_quote_id=$1 AND quote.sourcing_case_id=$2`
         : `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
     const at = cutoff.rows[0]?.at;
     if (!at) return fail("历史记录不存在", 404, "NOT_FOUND");
@@ -668,11 +672,13 @@ export class SourcingService {
                 NULL::text,NULL::text,NULL::text,NULL::date,NULL::integer,'{}'::text[],NULL::text,NULL::text
          FROM sourcing_style_revisions revision WHERE revision.sourcing_case_id=$1
          UNION ALL
-         SELECT quote.sourcing_ie_quote_id,'ie_quote',quote.quote_version,quote.quoted_by,
-                quote.quoted_at,quote.quote_reason,quote.unit_price,quote.total_amount,
+         SELECT quote.sourcing_ie_quote_id,'ie_quote',quote.quote_version,COALESCE(adoption.actor_id,quote.quoted_by),
+                COALESCE(adoption.created_at,quote.quoted_at),quote.quote_reason,quote.unit_price,quote.total_amount,
                 NULL::text,NULL::text,NULL::text,NULL::date,
                 quote.quantity,'{}'::text[],NULL::text,NULL::text
-         FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1
+         FROM sourcing_ie_quotes quote
+         LEFT JOIN operation_events adoption ON adoption.event_id=quote.operation_event_id AND adoption.action='sourcing.ie_basis.adopt'
+         WHERE quote.sourcing_case_id=$1
          UNION ALL
          SELECT choice.sourcing_decision_id,'management_decision',choice.decision_version,
                 choice.decided_by,choice.decided_at,choice.decision_reason,
@@ -1095,6 +1101,23 @@ export class SourcingService {
     return this.writeCorrection(actor, sourcingCaseId, parsed.data!, key, true);
   }
 
+  private async projectAdoptedIe(client:PoolClient,actor:TrustedActorContext,caseId:string,orderId:string,budgetVersion:number,
+    basis:NonNullable<Awaited<ReturnType<typeof readBudgetSourcing>>['ieBasis']>,quantities:readonly {quantity:number}[],version:number){
+    const reason=version===1?"采用本单已确认报价的原IE加工价":"明确采用本单新确认报价和已发布预算的前置IE加工价";
+    const adoptionEvent=await this.events.append(client,actor,{action:"sourcing.ie_basis.adopt",entityType:"sourcing_case",entityId:caseId,reason,
+      after:{quoteId:basis.quoteId,quoteVersion:basis.quoteVersion,quoteRowId:basis.rowId,fieldVersion:basis.priceVersion,budgetVersion}});
+    const lines=quantities.map((line,index)=>({position:index+1,quantity:line.quantity,
+      unitPrice:basis.unitPrice,totalAmount:calculateSourcingTotal(basis.unitPrice,line.quantity)}));
+    const orderQuantity=quantities.reduce((sum,item)=>sum+item.quantity,0),quoteId=randomUUID();
+    await client.query(`INSERT INTO sourcing_ie_quotes(sourcing_ie_quote_id,sourcing_case_id,quote_version,unit_price,quantity,total_amount,
+      quote_reason,quoted_by,operation_event_id,request_id,quoted_at,adopted_budget_order_id,adopted_budget_version,adopted_quotation_row_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [quoteId,caseId,version,basis.unitPrice,orderQuantity,calculateSourcingLinesTotalExact(lines),reason,
+      basis.actorId,adoptionEvent,actor.requestId,basis.recordedAt,orderId,budgetVersion,basis.rowId]);
+    for(const row of lines)await client.query(`INSERT INTO sourcing_ie_quote_lines(sourcing_ie_quote_id,sourcing_case_id,position,quantity,unit_price,total_amount)
+        VALUES($1,$2,$3,$4,$5,$6)`,[quoteId,caseId,row.position,row.quantity,row.unitPrice,row.totalAmount]);
+  }
+
   private async writeCorrection(actor: TrustedActorContext, sourcingCaseId: string, input: ReturnSourcingCase | CorrectSourcingCase, key: string, correcting: boolean): Promise<Result<SourcingCaseSummary>> {
     const scope = correcting ? "sourcing.case.correct" : "sourcing.case.return";
     const expectation=correcting?null:sourcingOwnerExpectation(input as ReturnSourcingCase);
@@ -1119,9 +1142,36 @@ export class SourcingService {
         if (before.version !== input.expectedVersion) fail("订单已被他人处理，本次未覆盖；请在本单报价选厂页重新读取最新方案与版本，再核对当前待办后提交",409,"CONFLICT");
         if (correcting ? before.status !== "pending_merchandiser_correction"
           : !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(before.status)) fail(workflowStateRejection("外发订单",before.status,correcting?["pending_merchandiser_correction"]:["pending_ie_quote","pending_management_decision","pending_owner_approval"],"本单报价选厂办理页"),409,"INVALID_STATE_TRANSITION");
-        const nextStatus = correcting ? "pending_ie_quote" : "pending_merchandiser_correction";
-        let after: Record<string,unknown> = {status:nextStatus,...(approvalBasis?{ownerReviewBasis:approvalBasis}:{})};
         const facts = correcting ? input as CorrectSourcingCase : null;
+        const adopted=facts?(await client.query<{order_id:string;budget_version:number;ie_version:number;price:string}>(`
+          SELECT to_jsonb(quote)->>'adopted_budget_order_id' AS order_id,
+            (to_jsonb(quote)->>'adopted_budget_version')::int AS budget_version,quote.quote_version AS ie_version,quote.unit_price::text AS price
+          FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1
+            AND to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL ORDER BY quote.quote_version DESC LIMIT 1`,[sourcingCaseId])).rows[0]:null;
+        if(facts?.adoptedBudget&&!adopted)fail("本外发单没有可重新采用的前置IE预算",409,"CONFLICT");
+        const reAdopt=adopted&&facts?.adoptedBudget?await readBudgetSourcing(client,actor,adopted.order_id,sourcingCaseId):null;
+        if(reAdopt&&facts?.adoptedBudget&&adopted){
+          const available=await readLinkedIeBudgetCorrection(client,adopted.order_id);
+          if(!available||available.case_id!==sourcingCaseId||!reAdopt.ieBasis||reAdopt.ieBasis.quoteVersion<=available.quote_version||
+            reAdopt.budgetVersion<=available.budget_version||reAdopt.budgetVersion!==facts.adoptedBudget.budgetVersion||
+            reAdopt.order.version!==facts.adoptedBudget.orderVersion||facts.styleName!==reAdopt.document.productCategory||
+            facts.gender!==(['男装','男童'].includes(reAdopt.order.product_group)?'男装':'女装'))
+            fail("请先核对并发布同一母单的新预算，再采用准确版本",409,"CONFLICT");
+          await assertBudgetCraftBasis(client,adopted.order_id,'quote_v1');
+        }
+        if(adopted&&facts&&!reAdopt){
+          const currentBudget=(await client.query(`SELECT quote_id,quote_version FROM digital_budget_documents
+            WHERE production_order_id=$1 AND version=$2 AND status='published'`,[adopted.order_id,adopted.budget_version])).rows[0];
+          const basis=await readBudgetIeAdoption(client,adopted.order_id,currentBudget);
+          if(!basis.basis||!currentBudget||facts.gender!==before.gender||facts.styleName!==before.styleName||
+            facts.lineItems.length!==before.lineItems.length||facts.lineItems.some((line,index)=>{
+             const original=before.lineItems[index]!;
+             return line.styleNo!==original.formalStyleNo||(line.alternateStyleNo??"")!==(original.alternateStyleNo??"")||
+               line.color!==original.color||line.quantity!==original.quantity;
+            }))fail("本次更正会改变已采用的IE报价依据，请回原报价及预算核对后继续",409,"CONFLICT");
+        }
+        const nextStatus=correcting?(adopted?"pending_management_decision":"pending_ie_quote"):"pending_merchandiser_correction";
+        let after: Record<string,unknown> = {status:nextStatus,...(approvalBasis?{ownerReviewBasis:approvalBasis}:{})};
         let correctionVersion = 0;
         let correctionStyleId: string | null = null;
         if (facts) {
@@ -1167,15 +1217,28 @@ export class SourcingService {
             after.orderQuantity,JSON.stringify(facts.lineItems),facts.attachmentIds,input.reason,actor.actorId,eventId,actor.requestId,correctionStyleId]);
         }
         if(facts)await syncFactoryPoNumbers(client,sourcingCaseId,facts);
+        if(facts&&adopted&&reAdopt?.ieBasis){
+          await this.projectAdoptedIe(client,actor,sourcingCaseId,adopted.order_id,reAdopt.budgetVersion,reAdopt.ieBasis,facts.lineItems,adopted.ie_version+1);
+          const next=normalizeSourcingUnitPrice(reAdopt.ieBasis.unitPrice),previous=normalizeSourcingUnitPrice(adopted.price);
+          if(next!==previous){
+            const revision=Number((await client.query("SELECT COALESCE(max(correction_version),0)+1 AS version FROM sourcing_budget_price_corrections WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]!.version);
+            const reason="按明确采用的新报价及已发布预算更新有效外发预算价";
+            const priceEvent=await this.events.append(client,actor,{action:"sourcing.ie_basis.budget_price.adopt",entityType:"sourcing_case",
+             entityId:sourcingCaseId,reason,after:{budgetPriceCorrected:true,correctionVersion:revision,budgetVersion:reAdopt.budgetVersion}});
+            await client.query(`INSERT INTO sourcing_budget_price_corrections(correction_id,sourcing_case_id,correction_version,
+             old_unit_price,new_unit_price,reason,corrected_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+             [randomUUID(),sourcingCaseId,revision,previous,next,reason,actor.actorId,priceEvent,actor.requestId]);
+          }
+        }
         await client.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
           business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [randomUUID(),sourcingCaseId,before.version+1,before.status,nextStatus,correcting?"correction_submitted":"returned_to_merchandiser",input.reason,actor.actorId,eventId,actor.requestId]);
-        await this.todoProjection?.completeOpenByDedupePrefix(client,actor,`sourcing:${sourcingCaseId}:`,correcting?"跟单已修改，重新交 IE 报价":"老板退回跟单修改");
-        const projection = {category:correcting?"sourcing_ie_quote":"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
-          entityType:"sourcing_case",entityId:sourcingCaseId,requiredRole:correcting?IE_QUOTE_ROLE:CASE_CREATE_ROLE,
-          requiredCapability:correcting?IE_QUOTE_CAPABILITY:CASE_CREATE_CAPABILITY,
+        [randomUUID(),sourcingCaseId,before.version+1,before.status,nextStatus,correcting?(adopted?"correction_retained_ie_basis":"correction_submitted"):"returned_to_merchandiser",input.reason,actor.actorId,eventId,actor.requestId]);
+        await this.todoProjection?.completeOpenByDedupePrefix(client,actor,`sourcing:${sourcingCaseId}:`,correcting?(adopted?"跟单已修改，继续采用原IE报价":"跟单已修改，重新交 IE 报价"):"老板退回跟单修改");
+        const projection = {category:correcting?(adopted?"sourcing_management_decision":"sourcing_ie_quote"):"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
+          entityType:"sourcing_case",entityId:sourcingCaseId,requiredRole:correcting?(adopted?MANAGEMENT_DECISION_ROLE:IE_QUOTE_ROLE):CASE_CREATE_ROLE,
+          requiredCapability:correcting?(adopted?MANAGEMENT_DECISION_CAPABILITY:IE_QUOTE_CAPABILITY):CASE_CREATE_CAPABILITY,
           route:{routeName:"sourcing_detail" as const,entityId:sourcingCaseId},policyKey:"general" as const,
-          dedupeKey:`sourcing:${sourcingCaseId}:${correcting?"ie_quote":"correction"}:${before.version+1}`};
+          dedupeKey:`sourcing:${sourcingCaseId}:${correcting?(adopted?"management:transition":"ie_quote"):"correction"}:${before.version+1}`};
         if (correcting) await this.todoProjection?.actionableForAllAssignedRole(client,actor,projection);
         else {
           const currentPrimary=await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT");
@@ -1248,7 +1311,9 @@ export class SourcingService {
         requestHash: requestHash(scope, {...normalized,confirmedDuplicateStyles:undefined}),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const digitalLines = await validateBudgetSourcing(client, actor, input);
+        const digitalBudget = await validateBudgetSourcing(client, actor, input);
+        const digitalLines=digitalBudget?.lines??null,ieBasis=digitalBudget?.ieBasis??null;
+        const initialStatus=ieBasis?'pending_management_decision':'pending_ie_quote';
         const inherited=input.digitalBudget?(await client.query<{primary_merchandiser_id:string|null;secondary:string[]|null}>(`SELECT o.primary_merchandiser_id,(SELECT array_agg(s.user_id ORDER BY s.position,s.user_id) FROM digital_order_secondary_merchandisers s WHERE s.production_order_id=o.production_order_id) AS secondary FROM digital_production_orders o WHERE o.production_order_id=$1`,[input.digitalBudget.productionOrderId])).rows[0]:null;
         const primary=inherited?.primary_merchandiser_id??actor.actorId;
         if(normalized.additionalMerchandiserUserId===primary||normalized.additionalMerchandiserUserId===actor.actorId)fail('添加跟单必须是当前有效的其它跟单账号');
@@ -1296,7 +1361,7 @@ export class SourcingService {
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
           ...(legacyAdditional ? {additionalMerchandiserUserId:legacyAdditional,additionalMerchandiserUserIds:additionalIds} : {}),
-          pricingOrigin: "ie",
+          pricingOrigin: ieBasis?"adopted_workbench_ie":"ie",
           confirmedDuplicateStyles: confirmedDuplicates,
         };
         const eventId = await this.events.append(client, actor, {
@@ -1310,7 +1375,7 @@ export class SourcingService {
             processDescription: null,
             crafts: [],
             laneKey: LANE_KEY,
-            status: "pending_ie_quote",
+            status: initialStatus,
             attachmentCount: normalized.attachmentIds.length,
             attachmentIds: normalized.attachmentIds,
           },
@@ -1391,33 +1456,43 @@ export class SourcingService {
             [normalized.attachmentIds, sourcingCaseId],
           );
         }
+        if(ieBasis&&input.digitalBudget){
+          await bindBudgetSourcing(client,this.database,actor,input,sourcingCaseId,digitalLines);
+          await syncFactoryPoNumbers(client,sourcingCaseId,input);
+          await this.projectAdoptedIe(client,actor,sourcingCaseId,input.digitalBudget.productionOrderId,
+            input.digitalBudget.budgetVersion,ieBasis,normalized.lineItems,1);
+        }
         await client.query(
           `INSERT INTO sourcing_case_transitions(
              sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
              business_action,transition_reason,actor_id,operation_event_id,request_id
-           ) VALUES($1,$2,1,NULL,'pending_ie_quote','created',$3,$4,$5,$6)`,
+           ) VALUES($1,$2,1,NULL,$3,$4,$5,$6,$7,$8)`,
           [
             randomUUID(),
             sourcingCaseId,
+            initialStatus,
+            ieBasis?"created_with_ie_basis":"created",
             DEFAULT_CREATION_REASON,
             actor.actorId,
             eventId,
             actor.requestId,
           ],
         );
-        await bindBudgetSourcing(client, this.database, actor, input, sourcingCaseId, digitalLines);
-        if(digitalLines) await syncFactoryPoNumbers(client,sourcingCaseId,input);
+        if(!ieBasis){
+          await bindBudgetSourcing(client,this.database,actor,input,sourcingCaseId,digitalLines);
+          if(digitalLines)await syncFactoryPoNumbers(client,sourcingCaseId,input);
+        }
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
-          category: "sourcing_ie_quote",
+          category: ieBasis?"sourcing_management_decision":"sourcing_ie_quote",
           sourceEventId: eventId,
           sourceAction: "sourcing.case.create",
           entityType: "sourcing_case",
           entityId: sourcingCaseId,
-          requiredRole: IE_QUOTE_ROLE,
-          requiredCapability: IE_QUOTE_CAPABILITY,
+          requiredRole: ieBasis?MANAGEMENT_DECISION_ROLE:IE_QUOTE_ROLE,
+          requiredCapability: ieBasis?MANAGEMENT_DECISION_CAPABILITY:IE_QUOTE_CAPABILITY,
           route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
           policyKey: "general",
-          dedupeKey: `sourcing:${sourcingCaseId}:ie_quote:1`,
+          dedupeKey: ieBasis?`sourcing:${sourcingCaseId}:management:transition:1`:`sourcing:${sourcingCaseId}:ie_quote:1`,
         });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
@@ -1493,6 +1568,9 @@ export class SourcingService {
         if (source.approved || !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(source.status)) {
           fail("老板已批准，订单数字已锁定", 409, "INVALID_STATE_TRANSITION");
         }
+        if((await client.query(`SELECT 1 FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=$1
+          AND to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL`,[sourcingCaseId])).rowCount)
+          fail("本单预算价采用原IE加工报价，请回原报价与预算核对",409,"CONFLICT");
         const currentPrice = source.current_price
           ?? fail("该订单没有可更正的预算价", 409, "INVALID_STATE_TRANSITION");
         if (normalizeSourcingUnitPrice(currentPrice) === nextPrice) fail("新预算价与当前预算价相同");
@@ -1813,7 +1891,9 @@ export class SourcingService {
         if (source.sourcing_decision_id && source.owner_decision !== "rejected" && !(await client.query(
           `SELECT 1 FROM sourcing_case_corrections correction JOIN sourcing_ie_quotes quote ON quote.sourcing_ie_quote_id=$2
            JOIN sourcing_decisions decision ON decision.sourcing_decision_id=$3
-           WHERE correction.sourcing_case_id=$1 AND correction.corrected_at>=decision.decided_at AND correction.corrected_at<=quote.quoted_at`,
+           JOIN sourcing_case_transitions transition ON transition.operation_event_id=correction.operation_event_id
+           WHERE correction.sourcing_case_id=$1 AND correction.corrected_at>=decision.decided_at
+             AND (correction.corrected_at<=quote.quoted_at OR to_jsonb(quote)->>'adopted_budget_order_id' IS NOT NULL AND transition.business_action='correction_retained_ie_basis')`,
           [sourcingCaseId,sourceIeQuoteId,source.sourcing_decision_id])).rowCount) {
           fail("只有老板驳回后才能提交新版本", 409, "INVALID_STATE_TRANSITION");
         }

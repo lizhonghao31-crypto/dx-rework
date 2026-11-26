@@ -3,3 +3,8 @@
 .order-document-container .development-document-layout,.order-document-container .budget-document-layout{display:block}
 .order-document-container>footer .dx-doc-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-top:1px solid #dbe7f4;flex-wrap:wrap}
 .order-document-container>footer .dx-doc-toolbar>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.order-document-container>footer h1{font-size:16px;margin:0;max-width:480px;overflow-wrap:anywhere}.document-upload-previews{display:flex;gap:12px;flex-wrap:wrap}.document-upload-previews figure{margin:8px 0}
+
+@media screen and (min-width:801px){
+  .order-document-layout--budget{grid-template-columns:minmax(0,1fr);gap:8px}
+  .order-document-layout--budget>nav{flex-direction:row;flex-wrap:wrap;align-items:center}
+}

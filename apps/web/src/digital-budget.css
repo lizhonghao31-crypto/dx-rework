@@ -111,3 +111,21 @@
 /* Keep the existing semantic label clickable; text can wrap beside the checkbox. */
 .dx-doc-budget.budget-editor label.budget-template-toggle { display:flex;flex-direction:row;align-items:flex-start;gap:var(--dx-v2-space-2); }
 .dx-doc-budget.budget-editor .budget-template-toggle > input[type=checkbox] { flex:0 0 auto;width:auto;min-height:0;margin:3px 0 0; }
+
+@media screen and (min-width:801px){
+  .dx-doc-budget.budget-editor .budget-document-layout{grid-template-columns:minmax(0,1fr)}
+  .dx-doc-budget.budget-editor .budget-document-summary.is-sticky{position:static}
+  .dx-doc-budget.budget-editor .budget-detail-table,.dx-doc-budget.budget-editor .budget-detail-table.has-quotation-delta{min-width:0}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(1){width:9%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(2){width:auto}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(3){width:13%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(4){width:7%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(5){width:13%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(6){width:9%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(7){width:9%}
+  .dx-doc-budget.budget-editor .budget-detail-table th:nth-child(8){width:9%}
+  .dx-doc-budget.budget-editor .budget-detail-table.has-quotation-delta th:nth-child(9){width:14%}
+  .dx-doc-budget.budget-editor .budget-detail-table th.budget-controls{width:66px}
+  .dx-doc-budget.budget-editor .budget-detail-table :is(.dx-doc-readonly,.budget-money,.quotation-delta){overflow-wrap:anywhere}
+  .dx-doc-budget.budget-editor .budget-detail-table .budget-long-field textarea{height:auto;min-height:30px;max-height:180px;field-sizing:content;resize:vertical}
+}

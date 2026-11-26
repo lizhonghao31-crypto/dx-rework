@@ -33,7 +33,7 @@ export const QuotationConfirmationSchema=z.object({
 }).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
 export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
 export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number;materialId?:string}};
-export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {secondaryCraftEntry?:boolean;craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {secondaryCraftEntry?:boolean;craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;technicalUsage?:'required'|'not_applicable'|'unknown';priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
 export const IeProcessingStateSchema=z.enum(['needs_assignment','waiting','awaiting_price','priced']);
 export const IeProcessingQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100_000).default(1),
  search:z.string().trim().max(100).default(''),state:z.union([z.literal('all'),IeProcessingStateSchema]).default('all')}).strict();
@@ -70,12 +70,17 @@ export const UnifiedIeDirectoryPageSchema=z.object({page:z.number().int().positi
  items:z.array(UnifiedIeDirectoryEntrySchema).max(15)}).strict();
 export type UnifiedIeDirectoryQuery=z.infer<typeof UnifiedIeDirectoryQuerySchema>;
 export type UnifiedIeDirectoryEntry=z.infer<typeof UnifiedIeDirectoryEntrySchema>;
+export const QuotationReadinessSchema=z.object({
+  canMeasure:z.boolean(),canConfirm:z.boolean(),reasons:z.array(z.string()),
+}).strict();
+export type QuotationReadiness=z.infer<typeof QuotationReadinessSchema>;
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;
   requiresWorkbenchPricing?:true;
   craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
+  workbenchReadiness?:QuotationReadiness;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;
   commandReceipt?:{action:string;appliedVersion:number};
   quoteId:string|null;resource:QuotationResource;productionOrderId:string|null;sourceId:string|null;
@@ -208,6 +213,7 @@ export const QuotationWorkbenchPreviewSchema = z.object({
     status:z.enum(['returned','resubmitted']), reason:z.string(),
   }).strict()).max(600),
   confirmation: z.enum(['awaiting_joint_release','joint_release_ready']),
+  readiness: QuotationReadinessSchema.optional(),
 }).strict();
 
 export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){

@@ -2693,5 +2693,27 @@
       "original_external_craft_return_snapshot_matches"
     ],
     "sequences": []
+  },
+  "0314_sourcing_adopt_confirmed_ie_basis": {
+    "checksum": "c01f37f79a1b98b9dfbe59f578c922ac083c50d36c3bf8e39541479f93867617",
+    "tables": [
+      "sourcing_case_transitions",
+      "sourcing_ie_quotes",
+      "sourcing_budget_price_corrections"
+    ],
+    "functions": [
+      "guard_sourcing_decision_insert",
+      "guard_sourcing_ie_quote_insert",
+      "guard_sourcing_transition_insert",
+      "guard_sourcing_budget_price_correction"
+    ],
+    "references": [
+      "digital_budget_versions"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

@@ -10,12 +10,25 @@ import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
-import {assertBudgetCraftBasis,budgetCraftBasisIsCurrent,readBudgetQuoteComparison} from './quotation-budget-basis.js';
+import {assertBudgetCraftBasis,budgetCraftBasisIsCurrent,readBudgetIeAdoption,readBudgetQuoteComparison,readLinkedIeBudgetCorrection} from './quotation-budget-basis.js';
+import {quotationExact} from '@dx-rework/contracts/digital-quotation';
 import {BudgetWashingFeeService} from './budget-washing-fees.js';
 import {DigitalProductionIdentityService} from './identity-service.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
+const agreesWithIe=(actual:string,expected:string)=>actual!==''&&quotationExact(actual)===quotationExact(expected);
+function budgetWithIePrice(document:BudgetDocument,adoption:Awaited<ReturnType<typeof readBudgetIeAdoption>>){
+ if(!adoption.required)return document;
+ const basis=adoption.basis??conflict(adoption.reason!);
+ if(document.outsourcingUnitPrice&&!agreesWithIe(document.outsourcingUnitPrice,basis.unitPrice))
+  conflict('本次外发预算价与本单原IE加工价不同，请核对后明确采用当前报价');
+ const items=document.rows.filter(row=>row.rowId===basis.rowId);
+ if(items.length!==1||items[0]!.section!=='外发工序'||items[0]!.unit!==basis.unit||items[0]!.consumption!=='1'
+   ||!agreesWithIe(items[0]!.unitPrice,basis.unitPrice))
+  conflict('须保留同一原IE加工明细、每件用量和单价，请核对原报价');
+ return {...document,outsourcingUnitPrice:basis.unitPrice};
+}
 export class DigitalBudgetService {
   get washingFees(){return new BudgetWashingFeeService(this.database);}
   constructor(private readonly database: Pool, private readonly creationEnabled: boolean) {}
@@ -49,25 +62,39 @@ export class DigitalBudgetService {
     const row = (await db.query(version === undefined ? "SELECT * FROM digital_budget_documents WHERE production_order_id=$1" : "SELECT *, 'published' AS status FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2", version === undefined ? [orderId] : [orderId, version])).rows[0];
     if (version !== undefined && !row) digitalNotFound();
     let comparison=await readBudgetQuoteComparison(db,orderId,row,version!==undefined);
-    if(linked&&comparison.state==='review_required')comparison.reason='客户报价有新确认版；原外发合同保留已采用版本，后续调整沿原外发更正入口办理，不自动改变生产流程';
+    const correction=version===undefined&&linked&&order.canPublish&&comparison.policy==='quote_v1'?
+      await readLinkedIeBudgetCorrection(db,orderId):null;
+    const canReviseLinked=Boolean(correction&&comparison.currentConfirmedVersion!==null&&comparison.currentConfirmedVersion>correction.quote_version);
+    if(linked&&!canReviseLinked&&comparison.state==='review_required')comparison.reason='客户报价有新确认版；原外发合同保留已采用版本，后续调整沿原外发更正入口办理，不自动改变生产流程';
     const current=version===undefined;
     const hasDraft=comparison.policy==='legacy'||Boolean(row);
     const state=comparison.workbenchBasis===undefined?undefined:(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[orderId])).rows[0]?.state;
     const active=state===undefined||state==='active';
-    const checkCraftBasis=current&&!linked&&row?.status!=='published'&&(order.canEdit||order.canPublish)
+    const checkCraftBasis=current&&(!linked||canReviseLinked)&&row?.status!=='published'&&(order.canEdit||order.canPublish)
       &&comparison.policy==='quote_v1'&&comparison.currentConfirmedVersion!==null;
     const craftBasis=!checkCraftBasis||await budgetCraftBasisIsCurrent(db,orderId,comparison.policy);
     if(!craftBasis)comparison={...comparison,state:'incomparable',workbenchBasis:'craft_review_required',
       reason:'请先核对本单当前工艺批准版本及客户确认报价'};
+    const ie=current&&(!linked||canReviseLinked)&&comparison.policy==='quote_v1'?await readBudgetIeAdoption(db,orderId,row):null;
+    const ieMismatch=Boolean(ie?.basis&&row?.document?.outsourcingUnitPrice&&
+      !agreesWithIe(row.document.outsourcingUnitPrice,ie.basis.unitPrice));
+    const document=row?.document&&row.status==='draft'&&ie?.basis&&!row.document.outsourcingUnitPrice?
+      {...row.document,outsourcingUnitPrice:ie.basis.unitPrice}:row?.document??null;
     const writableBasis=craftBasis&&(comparison.workbenchBasis===undefined||comparison.workbenchBasis==='valid'&&active);
     const liveEditor=comparison.workbenchBasis===undefined||order.canPublish
       ||order.created_by===actor.actorId&&actor.actorRoles.includes("sample_designer")
         &&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"sample_designer");
-    return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
-      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && liveEditor && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
-      canPublish: order.canPublish && !linked && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
-      comparison,canAdoptQuotation:current&&craftBasis&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required'&&active,
-      canSubmitSourcing: !linked && row?.status === "published" && ['legacy','within_limit'].includes(comparison.state) && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
+    return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document,
+      totals: document ? calculateBudget(document) : null, canEdit: order.canEdit && liveEditor && (!linked||canReviseLinked) && row?.status !== "published" && current && hasDraft && writableBasis && (Boolean(row) || this.creationEnabled),
+      canPublish: order.canPublish && (!linked||canReviseLinked) && row?.status !== "published" && current && hasDraft && writableBasis && (!ie?.required||Boolean(ie.basis)&&!ieMismatch) && (Boolean(row) || this.creationEnabled),
+      ...(ie?.required?{outsourcingIeBasis:{unitPrice:ie.basis?.unitPrice??null,...(ie.basis?{rowId:ie.basis.rowId}:{}),reason:ieMismatch?'本次外发预算价与原IE加工价不一致，请明确采用当前报价':ie.reason}}:{}),
+      ...(canReviseLinked&&correction&&row?.status==='published'&&comparison.state==='within_limit'&&ie?.basis&&!ieMismatch?
+        {linkedIeCorrection:{sourcingCaseId:correction.case_id,budgetVersion:row.version,orderVersion:order.version}}:{}),
+      comparison,canAdoptQuotation:current&&craftBasis&&this.creationEnabled&&order.canPublish&&(!linked||canReviseLinked)&&comparison.policy==='quote_v1'&&
+        (comparison.state==='review_required'||ieMismatch&&row?.status==='draft')&&active,
+      canSubmitSourcing: !linked && row?.status === "published" && ['legacy','within_limit'].includes(comparison.state) &&
+        (!ie?.required||Boolean(ie.basis)&&!ieMismatch&&Boolean(row.document.outsourcingUnitPrice)) &&
+        (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,
       designerName: order.designer_name, merchandiserName: order.merchandiser_name ?? null };
   }
@@ -147,11 +174,12 @@ export class DigitalBudgetService {
   }
   async save(actor: TrustedActorContext, orderId: string, input: { expectedVersion: number; document: BudgetDocument }, key: string) {
     return this.command(actor, orderId, "save", key, input, async db => {
-      const row = (await db.query("SELECT version FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0];
+      const row = (await db.query("SELECT version,quote_id,quote_version FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0];
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("预算已更新，本次未覆盖；请本单设计师或跟单在预算页重新读取最新版本，核对后再保存");
-      await this.bindFiles(db, actor, orderId, input.document);
+      const document=budgetWithIePrice(input.document,await readBudgetIeAdoption(db,orderId,row));
+      await this.bindFiles(db, actor, orderId, document);
       await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
-        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_budget_documents.version+1,status='draft',document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`, [orderId, JSON.stringify(input.document), actor.actorId]);
+        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_budget_documents.version+1,status='draft',document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`, [orderId, JSON.stringify(document), actor.actorId]);
       return this.read(actor, orderId, db);
     });
   }
@@ -161,10 +189,21 @@ export class DigitalBudgetService {
       if((row?.version??0)!==input.expectedVersion)conflict('预算已更新，请读取当前版本后明确采用报价');
       const quote=(await db.query('SELECT q.quote_id,q.confirmed_version,v.document FROM digital_quotation_documents q JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=q.confirmed_version WHERE q.production_order_id=$1',[orderId])).rows[0];
       if(!quote||quote.confirmed_version!==input.sourceQuoteVersion)conflict('客户确认报价版本已变，请重新核对');
+      if(row?.quote_id===quote.quote_id&&row.quote_version===quote.confirmed_version&&row.status==='published')return this.read(actor,orderId,db);
+      const ie=await readBudgetIeAdoption(db,orderId,{quote_id:quote.quote_id,quote_version:quote.confirmed_version});
+      const original=(row?.document??quote.document) as BudgetDocument;
+      const newBasis=ie.basis;
+      const adoptedRow=newBasis?(quote.document as BudgetDocument).rows.find(item=>item.rowId===newBasis.rowId):null;
+      const previous=row?.quote_id&&row.quote_version&&newBasis?(await db.query(
+        `SELECT to_jsonb(v)->'assembly' AS assembly FROM digital_quotation_versions v WHERE v.quote_id=$1 AND v.version=$2`,
+        [row.quote_id,row.quote_version])).rows[0]?.assembly?.rows as Record<string,{kind:string;sourceRef:string}>|undefined:undefined;
+      const replaces=(id:string)=>id===newBasis?.rowId||previous?.[id]?.kind==='ie'&&previous[id]?.sourceRef==='ie:processing';
+      const document=budgetWithIePrice(ie.required?{...original,outsourcingUnitPrice:'',rows:adoptedRow?
+        [...original.rows.filter(item=>!replaces(item.rowId)),adoptedRow]:original.rows}:original,ie);
       const next=(row?.version??0)+1;
       await db.query('INSERT INTO digital_budget_quote_conversions(production_order_id,quote_id,quote_version,created_budget_version) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[orderId,quote.quote_id,quote.confirmed_version,next]);
       await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,quote_id,quote_version) VALUES($1,$2,'draft',$3,$4,$5,$6)
-        ON CONFLICT(production_order_id) DO UPDATE SET version=EXCLUDED.version,status='draft',quote_id=EXCLUDED.quote_id,quote_version=EXCLUDED.quote_version,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`,[orderId,next,JSON.stringify(row?.document??quote.document),actor.actorId,quote.quote_id,quote.confirmed_version]);
+        ON CONFLICT(production_order_id) DO UPDATE SET version=EXCLUDED.version,status='draft',document=EXCLUDED.document,quote_id=EXCLUDED.quote_id,quote_version=EXCLUDED.quote_version,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`,[orderId,next,JSON.stringify(document),actor.actorId,quote.quote_id,quote.confirmed_version]);
       return this.read(actor,orderId,db);
     });
   }
@@ -173,15 +212,16 @@ export class DigitalBudgetService {
       const row = (await db.query("SELECT * FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0] ?? conflict("请先在本单预算页保存预算草稿，再由本单跟单核对并最终发布；草稿保存本身不会发起外发");
       if (row.version !== expectedVersion) conflict("预算已更新，本次未发布；请本单跟单在预算页重新读取最新草稿，核对后再发布");
       if (row.status === "published") return this.read(actor, orderId, db);
-      const errors = budgetPublishErrors(row.document);
+      const document=budgetWithIePrice(row.document,await readBudgetIeAdoption(db,orderId,row));
+      const errors = budgetPublishErrors(document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", `${errors.join("；")}；请本单设计师或跟单在预算页逐项补齐后重新发布`, 400);
-      await this.bindFiles(db, actor, orderId, row.document);
-      const comparison=await readBudgetQuoteComparison(db,orderId,row);
+      await this.bindFiles(db, actor, orderId, document);
+      const comparison=await readBudgetQuoteComparison(db,orderId,{...row,document});
       if(comparison.policy==='quote_v1'){
         if(sourceQuoteVersion!==undefined&&sourceQuoteVersion!==comparison.quoteVersion||comparison.state!=='within_limit')throw new ApplicationError(comparison.state==='exceeds'?'BUDGET_TOTAL_EXCEEDS_QUOTE':'BUDGET_QUOTE_BASIS_CONFLICT',comparison.reason,409);
-        await db.query(`INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by,quote_id,quote_version,budget_comparable_total,confirmed_quote_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[orderId,row.version,JSON.stringify(row.document),JSON.stringify(calculateBudget(row.document)),actor.actorId,comparison.quoteId,comparison.quoteVersion,comparison.budgetComparableTotal,comparison.confirmedQuoteTotal]);
-      }else await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(row.document), JSON.stringify(calculateBudget(row.document)), actor.actorId]);
-      await db.query("UPDATE digital_budget_documents SET status='published',published_at=$3,updated_by=$2 WHERE production_order_id=$1", [orderId, actor.actorId,businessNow().toISOString()]);
+        await db.query(`INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by,quote_id,quote_version,budget_comparable_total,confirmed_quote_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[orderId,row.version,JSON.stringify(document),JSON.stringify(calculateBudget(document)),actor.actorId,comparison.quoteId,comparison.quoteVersion,comparison.budgetComparableTotal,comparison.confirmedQuoteTotal]);
+      }else await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(document), JSON.stringify(calculateBudget(document)), actor.actorId]);
+      await db.query("UPDATE digital_budget_documents SET status='published',published_at=$3,updated_by=$2,document=$4 WHERE production_order_id=$1", [orderId, actor.actorId,businessNow().toISOString(),JSON.stringify(document)]);
       await db.query("INSERT INTO digital_budget_preparations(production_order_id,budget_version) VALUES($1,$2) ON CONFLICT(production_order_id) DO UPDATE SET budget_version=EXCLUDED.budget_version", [orderId, row.version]);
       const preparation = (await db.query("SELECT task_id FROM digital_budget_preparations WHERE production_order_id=$1", [orderId])).rows[0];
       if (!preparation.task_id) {

@@ -50,6 +50,8 @@ import {AuxiliaryCatalogService} from '../../apps/api/src/access/auxiliary-catal
 import {registerAuxiliaryCatalogRoutes} from '../../apps/api/src/access/auxiliary-catalog-routes.js';
 import {registerAccessRoutes} from '../../apps/api/src/access/routes.js';
 import {registerSourcingRoutes} from '../../apps/api/src/sourcing/sourcing-routes.js';
+import {SourcingProductionService} from '../../apps/api/src/sourcing/sourcing-production-service.js';
+import {SourcingContractReturnService} from '../../apps/api/src/sourcing/sourcing-contract-return-service.js';
 import {registerProcessConfigurationRoutes} from '../../apps/api/src/rework/process-configuration-routes.js';
 import {registerReworkRoutes} from '../../apps/api/src/rework/routes.js';
 import {ReworkBusinessDetailService} from '../../apps/api/src/rework/rework-business-detail-service.js';
@@ -68,7 +70,7 @@ import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string;unifiedIeDirectory?:boolean;originalCraftRework?:boolean;merchandiserWorkbench?:boolean}){
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean;auxiliaryCatalog?:boolean;accessCatalog?:boolean;workbenchNumberedCreation?:boolean;throughVersion?:string;unifiedIeDirectory?:boolean;sourcingFullDetail?:boolean;originalCraftRework?:boolean;merchandiserWorkbench?:boolean}){
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url,options?.throughVersion?{throughVersion:options.throughVersion}:undefined),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
@@ -81,7 +83,8 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   if(options?.accessCatalog)registerAccessRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:f.access});
   if(options?.unifiedIeDirectory){
    const authenticate=(token:string|undefined)=>auth.authenticate(token);
-   registerSourcingRoutes(app,{authenticate,root,service:f.sourcing,contracts:f.contracts});
+   registerSourcingRoutes(app,{authenticate,root,service:f.sourcing,contracts:f.contracts,
+    ...(options.sourcingFullDetail?{production:new SourcingProductionService(db),contractReturns:new SourcingContractReturnService(db)}:{})});
   }
   if(options?.unifiedIeDirectory||options?.originalCraftRework){
    const authenticate=(token:string|undefined)=>auth.authenticate(token);

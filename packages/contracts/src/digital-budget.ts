@@ -97,7 +97,9 @@ export function budgetPublishErrors(document: BudgetDocument): string[] {
 }
 export type BudgetSheet = {
   comparison?:BudgetQuoteComparison;
+  outsourcingIeBasis?:{unitPrice:string|null;reason:string|null;rowId?:string};
   canAdoptQuotation?:boolean;
+  linkedIeCorrection?:{sourcingCaseId:string;budgetVersion:number;orderVersion:number};
   metadata?:JourneyDocumentMetadata;
   versions?:number[];
   productionOrderId: string; version: number; status: "draft" | "published";
