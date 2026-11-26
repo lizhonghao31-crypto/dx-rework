@@ -18,6 +18,10 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
  if(!existing&&!await acceptsNewOrderTime(db))return work();
  const time=resource?await new ContextBusinessClock(database,db).read(resource):observedBusinessTime(businessNow);
  const state=await loadOrderTimeOperation(database,db,actor,operation,time);
+ // The instruction command has already checked and locked its original
+ // business prerequisites. An unknown forecast grants no time admission;
+ // original task synchronization still runs on the same transaction.
+ if(operation.kind==='instruction_publish'&&state.check.feasibility==='unknown')return work();
  if(state.check.feasibility==='unknown'&&!state.check.publicationMayProceedWithUnconfirmedFabric)
   throw new ApplicationError('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间',409);
  if(state.check.feasibility==='insufficient')throw new ApplicationError('ORDER_TIME_REQUEST_REQUIRED','按本单实际流程计算，现有时间不足，请提交本单时效申请',409);

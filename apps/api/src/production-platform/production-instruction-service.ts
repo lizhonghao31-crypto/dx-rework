@@ -103,25 +103,34 @@ export class ProductionInstructionService {
       const state = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [id])).rows[0]?.state;
       if (!rejectingDate && state && state !== "active") fail("母单已暂停或取消");
       if (!rejectingDate && await this.cutStarted(db, id)) fail("已经开裁，不能实质修改制单；编号请从母单补齐");
-      const result = action==='publish'?await automaticOrderTime(this.database,db,actor,{kind:'instruction_publish',orderId:id,input:input as {expectedVersion:number;orderVersion:number;expectedReadinessRevision?:string}},()=>work(db,order)):await work(db,order);
+      const result = await work(db,order);
       await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, command, key, hash, JSON.stringify(result)]);
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_instruction',$5,$6)", [randomUUID(), actor.requestId, actor.actorId, action, id, JSON.stringify({ action, version: (result as InstructionSheet).version })]);
       if(!this.transactionClient)await db.query("COMMIT"); return result;
     } catch (error) { if(!this.transactionClient)await db.query("ROLLBACK"); throw error; } finally { if(!this.transactionClient)db.release(); }
   }
-  private async bindImages(db: PoolClient, actor: TrustedActorContext, order: DigitalOrder, document: InstructionDocument) {
+  private async lockImageBindings(db: PoolClient, actor: TrustedActorContext, order: DigitalOrder, document: InstructionDocument) {
     const source = order.sourceId ? await developmentDocumentRow(db, order.sourceId) : null;
     const permitted = source?.status === "published" ? (source.document as DevelopmentDocument).files.filter(file => ["款图", "局部图", "工艺开发板"].includes(file.kind)).map(file => file.attachmentId) : [];
-    for (const image of [...document.images].sort((a,b) => a.attachmentId.localeCompare(b.attachmentId))) {
-      const row = (await db.query("SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE", [image.attachmentId])).rows[0];
+    const bindings: {attachmentId:string;claim:boolean}[]=[];
+    for (const attachmentId of [...new Set(document.images.map(image=>image.attachmentId))].sort((a,b)=>a.localeCompare(b))) {
+      const row = (await db.query("SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE", [attachmentId])).rows[0];
       if (!row || row.status !== "ready" || !["image/jpeg", "image/png", "image/webp"].includes(row.mime_type)) fail("制单图片须为已上传完成的 JPG、PNG 或 WebP");
-      const bound = (await db.query("SELECT 1 FROM digital_instruction_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2", [order.productionOrderId, image.attachmentId])).rowCount;
-      if (!bound && !(row.entity_type === "digital_development" && row.entity_id === order.sourceId && permitted.includes(image.attachmentId))) {
-        if (row.entity_type || row.uploaded_by !== actor.actorId) digitalForbidden();
-        await db.query("UPDATE attachments SET entity_type='digital_instruction',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1", [image.attachmentId, order.productionOrderId]);
-      }
-      await db.query("INSERT INTO digital_instruction_attachment_bindings(production_order_id,attachment_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [order.productionOrderId, image.attachmentId]);
+      const bound = (await db.query("SELECT 1 FROM digital_instruction_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2", [order.productionOrderId, attachmentId])).rowCount;
+      const claim=!bound&&!(row.entity_type === "digital_development" && row.entity_id === order.sourceId && permitted.includes(attachmentId));
+      if(claim&&(row.entity_type||row.uploaded_by!==actor.actorId))digitalForbidden();
+      bindings.push({attachmentId,claim});
     }
+    return async()=>{
+      for(const {attachmentId,claim} of bindings){
+        if(claim)await db.query("UPDATE attachments SET entity_type='digital_instruction',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[attachmentId,order.productionOrderId]);
+        await db.query("INSERT INTO digital_instruction_attachment_bindings(production_order_id,attachment_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[order.productionOrderId,attachmentId]);
+      }
+    };
+  }
+  private async bindImages(db: PoolClient, actor: TrustedActorContext, order: DigitalOrder, document: InstructionDocument) {
+    const bind=await this.lockImageBindings(db,actor,order,document);
+    await bind();
   }
   async save(actor: TrustedActorContext, id: string, input: { expectedVersion: number; orderVersion: number; document: InstructionDocument;sourceRound?:number|null|undefined }, key: string) {
     return this.command(actor,id,"save",key,input,async(db,order) => {
@@ -179,15 +188,20 @@ export class ProductionInstructionService {
        }
       }
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
-      await this.bindImages(db,actor,order,current.document);
-      await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId,businessNow().toISOString()]);
-      await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
-      if(readiness.adoption)await db.query('INSERT INTO digital_instruction_preparation_bases(production_order_id,instruction_version,readiness_revision,technical_revision,basis_json) VALUES($1,$2,$3,$4,$5)',[id,current.version,readiness.revision,readiness.technical!.revision,JSON.stringify({artifact:readiness.technical!.artifactRef,review:readiness.technical!.reviewRef,comment:readiness.technical!.finalCommentRef,...(warehouseDemand?{warehouseDemand}:{})})]);
-      await recordInstructionWork(db,actor.actorId,id,'published',current.version,{technicalRevision:readiness.technical?.revision??null});
-      await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
-      await new BulkPreparationService(this.database).sync(db,actor,id);
-      if(order.sourceId&&(current.document.craftSteps?.some(step=>step.craftKind==='special')||previous?.craftSteps?.some(step=>step.craftKind==='special')||(await developmentDocumentRow(db,order.sourceId))?.document?.craftSteps?.some((step:{craftKind:string})=>step.craftKind==='special')))await assembleQuotation(db,order.sourceId,actor.actorId);
-      return this.read(actor,id,db);
+      const bind=await this.lockImageBindings(db,actor,order,current.document);
+      const operation={kind:'instruction_publish' as const,orderId:id,input:{expectedVersion:input.expectedVersion,orderVersion:input.orderVersion,
+        ...(input.expectedReadinessRevision!==undefined?{expectedReadinessRevision:input.expectedReadinessRevision}:{})}};
+      return automaticOrderTime(this.database,db,actor,operation,async()=>{
+        await bind();
+        await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId,businessNow().toISOString()]);
+        await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
+        if(readiness.adoption)await db.query('INSERT INTO digital_instruction_preparation_bases(production_order_id,instruction_version,readiness_revision,technical_revision,basis_json) VALUES($1,$2,$3,$4,$5)',[id,current.version,readiness.revision,readiness.technical!.revision,JSON.stringify({artifact:readiness.technical!.artifactRef,review:readiness.technical!.reviewRef,comment:readiness.technical!.finalCommentRef,...(warehouseDemand?{warehouseDemand}:{})})]);
+        await recordInstructionWork(db,actor.actorId,id,'published',current.version,{technicalRevision:readiness.technical?.revision??null});
+        await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
+        await new BulkPreparationService(this.database).sync(db,actor,id);
+        if(order.sourceId&&(current.document.craftSteps?.some(step=>step.craftKind==='special')||previous?.craftSteps?.some(step=>step.craftKind==='special')||(await developmentDocumentRow(db,order.sourceId))?.document?.craftSteps?.some((step:{craftKind:string})=>step.craftKind==='special')))await assembleQuotation(db,order.sourceId,actor.actorId);
+        return this.read(actor,id,db);
+      });
     });
   }
   async requestDate(actor:TrustedActorContext,id:string,input:InstructionDateRequest,key:string){

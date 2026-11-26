@@ -309,6 +309,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
    try{await validateSpecialCraftChoices(client,row.document.craftSteps,[...(row.previouslyPublished?.craftSteps??[]),...(source?.document.craftSteps??[])],'bulk',undefined,false);}
    catch(error){if(error instanceof ApplicationError&&error.statusCode===409)return;throw error;}
   }
+  let forecastUnknown=false;
   if(typedTime||row.existingPlan){
    const scope={kind:'order' as const,id:row.motherId};
    const {time}=await new ContextBusinessClock(database,client).readObservation(scope,{now:()=>new Date(asOf.get(row.id)!),mode:'live'});
@@ -317,7 +318,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
     expectedVersion:row.version,orderVersion:row.orderVersion,...(expectedReadinessRevision?{expectedReadinessRevision}:{})}};
    try{
     const check=await loadOrderTimeOperation(database,client,actor,operation,time,{},[],[],'cockpit-instruction-read');
-    if(check.check.feasibility==='unknown'){unavailable.add(row.motherId);return;}
+    forecastUnknown=check.check.feasibility==='unknown';
     if(check.check.feasibility==='insufficient')return;
    }catch(error){
     if(!(error instanceof ApplicationError)||![403,409,422].includes(error.statusCode))throw error;
@@ -326,7 +327,7 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
   }
   items.set(row.id,[{orderId:row.id,category:'instruction_publish',evidenceId:`instruction:${row.motherId}:v${row.version}`,
    missingObject:'当前大货制单版本尚未发布',handlerRole:'order_merchandiser',handlerId:row.primaryId,
-   originalRoute:`/ui/digital-production?instruction=${row.motherId}`,reason:'当前制单草稿已具备原发布条件',asOf:asOf.get(row.id)!}]);
+   originalRoute:`/ui/digital-production?instruction=${row.motherId}`,reason:forecastUnknown?'当前制单草稿已具备原发布条件，时效待核':'当前制单草稿已具备原发布条件',asOf:asOf.get(row.id)!}]);
  });
  return {items,unavailable};
 }
