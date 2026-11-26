@@ -174,7 +174,9 @@ export class DigitalBudgetService {
   }
   async save(actor: TrustedActorContext, orderId: string, input: { expectedVersion: number; document: BudgetDocument }, key: string) {
     return this.command(actor, orderId, "save", key, input, async db => {
-      const row = (await db.query("SELECT version,quote_id,quote_version FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0];
+      // Older budget records exist before quotation references were introduced.
+      const row = (await db.query(`SELECT version,to_jsonb(budget)->>'quote_id' AS quote_id,
+        (to_jsonb(budget)->>'quote_version')::int AS quote_version FROM digital_budget_documents budget WHERE production_order_id=$1`, [orderId])).rows[0];
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("预算已更新，本次未覆盖；请本单设计师或跟单在预算页重新读取最新版本，核对后再保存");
       const document=budgetWithIePrice(input.document,await readBudgetIeAdoption(db,orderId,row));
       await this.bindFiles(db, actor, orderId, document);
