@@ -18,11 +18,14 @@ def permission_query(entries, requirements):
             "NULL" if version is None else "'{}'".format(version), kind, name, required, owner, acl, access, ok, tail, pending))
     add(None, 'schema', 'public', 'CREATE', "has_schema_privilege(current_user,'public','CREATE')")
     future_tables = {}
+    future_views = {}
     for row in entries:
         check = requirements.get(row['version'], {})
         if check.get('checksum') == row['checksum']:
             for name in check['creates']:
                 future_tables[name] = row['version']
+            for name in check.get('createsViews', []):
+                future_views[name] = row['version']
     for row in entries:
         version = row['version']
         checks = requirements.get(version)
@@ -30,10 +33,16 @@ def permission_query(entries, requirements):
             add(version, 'inventory', version, 'CHECKSUM_BOUND_INVENTORY', 'false')
             continue
         def table(name, required):
-            future = "NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{}')".format(future_tables[name]) if name in future_tables else 'false'
+            creator = future_tables.get(name)
+            view_creator = future_views.get(name)
+            if view_creator is not None and view_creator < version:
+                creator = view_creator
+            future = "NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{}')".format(creator) if creator else 'false'
             allowed = "pg_has_role(current_user,c.relowner,'USAGE')" if required == 'OWNER' else "has_table_privilege(current_user,c.oid,'{}')".format(required)
+            if view_creator is not None:
+                allowed = "c.relkind='v' AND (" + allowed + ")"
             access = "jsonb_build_object(" + ','.join("'{0}',CASE WHEN c.oid IS NULL THEN NULL ELSE has_table_privilege({1},c.oid,'{0}') END".format(priv, app) for priv in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) + ")"
-            add(version, 'table', name, required, "CASE WHEN c.oid IS NULL THEN {} ELSE {} END".format(future, allowed),
+            add(version, 'view' if view_creator is not None else 'table', name, required, "CASE WHEN c.oid IS NULL THEN {} ELSE {} END".format(future, allowed),
                 'pg_get_userbyid(c.relowner)', 'c.relacl::text', access,
                 "FROM (SELECT to_regclass('public.{}') AS oid) x LEFT JOIN pg_class c ON c.oid=x.oid".format(name))
         for name in sorted(set(checks['tables'] + ['schema_migrations'])):
@@ -48,6 +57,8 @@ def permission_query(entries, requirements):
                     "FROM (SELECT bool_and({}) allowed, string_agg(pg_get_userbyid(p.proowner),',') owners, string_agg(p.proacl::text,',') acls, jsonb_object_agg(p.oid::regprocedure::text,has_function_privilege({},p.oid,'EXECUTE')) application FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='{}') f".format(allowed, app, name))
         for name in checks['creates']:
             add(version, 'new_table', name, 'ABSENT_BEFORE_MIGRATION', "to_regclass('public.{}') IS NULL".format(name))
+        for name in checks.get('createsViews', []):
+            add(version, 'new_view', name, 'ABSENT_BEFORE_MIGRATION', "to_regclass('public.{}') IS NULL".format(name))
         for seq in checks['sequences']:
             add(version, 'new_sequence', seq['name'], 'ABSENT_BEFORE_MIGRATION', "to_regclass('public.{}') IS NULL".format(seq['name']))
     return '\nUNION ALL\n'.join(rows)
@@ -80,6 +91,13 @@ def grant_sql(checks):
         result.append("GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.{} TO dx_rework_acceptance_app;".format(name))
         allowed = ' AND '.join("has_table_privilege('dx_rework_acceptance_app','public.{}','{}')".format(name, privilege) for privilege in ['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
         result.append("DO $$ BEGIN IF NOT ({}) THEN RAISE EXCEPTION 'New table application grant failed'; END IF; END $$;".format(allowed))
+    # The original view DDL owns its grants. Verify what it actually created;
+    # do not add to the existing table/sequence grant set or grant view DML.
+    for name in checks.get('createsViews', []):
+        result.append("DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid=to_regclass('public.{0}') "
+                      "AND relkind='v' AND relowner=current_user::regrole AND "
+                      "has_table_privilege('dx_rework_acceptance_app',oid,'SELECT')) THEN "
+                      "RAISE EXCEPTION 'Expected owner view and original SELECT grant were not created: {0}'; END IF; END $$;".format(name))
     for seq in checks['sequences']:
         result.append("DO $$ BEGIN IF pg_get_serial_sequence('public.{table}','{column}')::regclass IS DISTINCT FROM 'public.{name}'::regclass THEN RAISE EXCEPTION 'Sequence dependency differs from grant inventory'; END IF; END $$;".format(**seq))
         result.append("GRANT SELECT ON SEQUENCE public.{} TO dx_rework_acceptance_app;".format(seq['name']))
@@ -134,6 +152,10 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
         for key in ['tables', 'functions', 'references', 'insert', 'update', 'creates', 'execute']:
             if not isinstance(check.get(key), list) or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in check[key]):
                 raise ValueError('Invalid permission inventory identifiers')
+        views = check.get('createsViews', [])
+        if (not isinstance(views, list) or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in views)
+                or len(set(views)) != len(views) or set(views).intersection(check['creates'])):
+            raise ValueError('Invalid view creation inventory')
         if not isinstance(check.get('sequences'), list):
             raise ValueError('Sequence inventory is required, including an explicit empty list')
         for seq in check['sequences']:

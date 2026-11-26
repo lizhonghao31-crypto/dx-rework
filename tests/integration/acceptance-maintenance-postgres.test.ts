@@ -41,7 +41,7 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    const preflight=async()=>{
     await client.query('BEGIN READ ONLY');
     try {
-     const rows=(await client.query(diagnosticQuery.replaceAll('public',schema))).rows;
+     const rows=(await client.query(diagnosticQuery.replace(/\bpublic\b/g,schema))).rows;
      const failed=rows.filter(row=>!row.ok);
      if(failed.length)throw Error(JSON.stringify(failed));
     }
@@ -66,6 +66,24 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance_app`);
    await expect(preflight()).rejects.toThrow('guard_cutting_record_creation');
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance`);
+   // Under the unchanged earlier history, the view is absent but the
+   // checksum-bound 0296 creation precedes its consumers. Once it exists,
+   // 0303 must still enforce its real owner before replacing the view.
+   expect((await client.query("SELECT to_regclass('digital_development_source_lifecycle') AS view")).rows[0]?.view).toBeNull();
+   const firstPublication='0296_development_first_publication';
+   for(const next of pending.filter(row=>row.version<=firstPublication)){
+    const migration=catalog.find(entry=>entry.version===next.version)!;
+    await client.query('BEGIN');await client.query(migration.sql);
+    await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[next.version,next.checksum]);await client.query('COMMIT');
+   }
+   await expect(preflight()).resolves.toBeUndefined();
+   await client.query('ALTER VIEW digital_development_source_lifecycle RENAME TO relocated_lifecycle_fixture');
+   await expect(preflight()).rejects.toThrow('digital_development_source_lifecycle');
+   await client.query('ALTER VIEW relocated_lifecycle_fixture RENAME TO digital_development_source_lifecycle');
+   await admin.query(`ALTER VIEW ${schema}.digital_development_source_lifecycle OWNER TO dx_rework_acceptance_app`);
+   await expect(preflight()).rejects.toThrow('digital_development_source_lifecycle');
+   await admin.query(`ALTER VIEW ${schema}.digital_development_source_lifecycle OWNER TO dx_rework_acceptance`);
+   await expect(preflight()).resolves.toBeUndefined();
    const upgraded=await applyMigrations(target.toString());
    expect(upgraded.currentVersion).toBe(catalog.at(-1)!.version);
    expect((await applyMigrations(target.toString())).applied).toEqual([]);

@@ -2,67 +2,90 @@
   "version": 1,
   "base": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
   "risk": "full",
-  "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
+  "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r1-evidence/review-fix/pg.sh",
+      "command": "bash /workspace/scratch/r1-evidence/maintenance-fix/pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
-      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
-      "context": "Actual corrected R1 business tree with batched number resolution, real PostgreSQL and Chromium and simultaneous original plus structured reports.",
-      "startedAt": "2026-11-26T05:41:56.795813+00:00",
-      "endedAt": "2026-11-26T05:43:31.222054+00:00",
-      "log": "/workspace/scratch/r1-evidence/review-fix/native.log",
-      "logSha256": "ff74ff7eb5728c4e17b481ff794aa06b4cb0f8dd5f959f2cf0fce37f8e0d9cf2",
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Actual R1 candidate with corrected historical maintenance preflight on original unmodified migrations; original business PG and browser regressions.",
+      "startedAt": "2026-11-26T05:59:09.646593+00:00",
+      "endedAt": "2026-11-26T06:00:56.900256+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/native.log",
+      "logSha256": "ec658395f6fab5aac515a0840b1454da5b8bf1f1258c9b06d458272b582c14af",
       "passed": 5,
       "failed": 0,
       "skipped": 86,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "785d4a1f210fa0626e0e3d6b73d067627d988e04f5546262e3a0b8a5a2c79a9d"
+          "sha256": "e8d8f7c1a6f9a17955e9b35c4810bcd1baabd3aac6f1182d96ed8321cba55338"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/.bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/review-fix/unit.json tests/unit/config.test.ts tests/unit/digital-detail-route.test.ts tests/unit/warehouse-craft-movement.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/warehouse-craft-factory-basis.test.ts tests/unit/warehouse-issued-order-number.test.ts",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/.bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/maintenance-fix/unit.json tests/unit/config.test.ts tests/unit/digital-detail-route.test.ts tests/unit/warehouse-craft-movement.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/warehouse-craft-factory-basis.test.ts tests/unit/warehouse-issued-order-number.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
-      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
-      "context": "Config, authorization, warehouse custody and one-query assertions for representative 1/15/50 revision counts.",
-      "startedAt": "2026-11-26T05:41:56.801371+00:00",
-      "endedAt": "2026-11-26T05:42:00.019901+00:00",
-      "log": "/workspace/scratch/r1-evidence/review-fix/unit.log",
-      "logSha256": "5ae85e2f12f7c4779b703c9537b79483c0df994cf32b3679d1a1f8329ae4fb68",
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Actual R1 candidate with startup, role scope, rework, and 1/15/50 one-query regression evidence.",
+      "startedAt": "2026-11-26T05:59:09.659108+00:00",
+      "endedAt": "2026-11-26T05:59:12.745177+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/unit.log",
+      "logSha256": "7632a9e0111312aaab133a9cdcc812e65882be131b50b68106f7e71a5b8229d9",
       "passed": 82,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2bd2551b1c4e798a4de3a0e43362facfde37ee4d8c3adf34c40d240f70d88bbf"
+          "sha256": "44f386e8c8ae57056a8219f522b461914800688e75d98392620ad1cd8d824464"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash -c 'export PATH=/workspace/.dx-cloud/toolchain/node_modules/.bin:$PATH\nset -e\nnpm run lint\nnpm run typecheck\nnpm run build --workspaces --if-present\nnpm run secret:scan\nbash -n scripts/deploy/lib.sh\ngit diff --check'",
+      "command": "bash -c '. /workspace/.dx-cloud/activate.sh\nset -e\nnpm run lint\nnpm run typecheck\nnpm run build --workspaces --if-present\nnpm run db:migrate:lint\nnpm run secret:scan\nbash -n scripts/deploy/lib.sh\ngit diff --check'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
-      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
-      "context": "Exact corrected R1 version, Node 22, existing lint/type/build/bash and scanner rules.",
-      "startedAt": "2026-11-26T05:41:56.797035+00:00",
-      "endedAt": "2026-11-26T05:43:34.329261+00:00",
-      "log": "/workspace/scratch/r1-evidence/review-fix/static.log",
-      "logSha256": "e641dd534e79d35029a5f078e99c754c00093d301951731c09aa359504813a8c"
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Current R1 on PG16 isolated CI, checking unchanged migration checksums and safe official command syntax in addition to lint and TS/build.",
+      "startedAt": "2026-11-26T05:59:09.636572+00:00",
+      "endedAt": "2026-11-26T06:01:00.374203+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/static.log",
+      "logSha256": "9550c9beb823d8ee920bbd8a99036100c63d11f6791f0724c5299cd6ccfbc896"
+    },
+    {
+      "id": "maintenance",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/maintenance-fix/maintenance.json tests/integration/acceptance-maintenance-postgres.test.ts tests/unit/acceptance-maintenance-generator.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "da3f931a179e440117a5a116660de431b161f7a1",
+      "sourceFingerprint": "6640bed5b5ccc75f222cf07b8f2fc0e7016db1dbb667551a6f00dff03f5dd398",
+      "context": "Release baseline reproduced the genuine old-history read-only gate error on PostgreSQL 16. Candidate keeps relation/owner checks and exercises wrong owner and absence after 0296.",
+      "startedAt": "2026-11-26T05:58:44.613270+00:00",
+      "endedAt": "2026-11-26T05:58:50.070819+00:00",
+      "log": "/workspace/scratch/r1-evidence/maintenance-fix/maintenance.log",
+      "logSha256": "fd168cbf7187bb258fa3d2a55ce8ecae3b978d2cab5f7101a989e61543a91ce2",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3891c97957972b200f2d4c585d11bad98a9930b3c8a4b198db4a6f19cc049c4c"
+        }
+      ]
     }
   ],
   "rules": [
@@ -163,6 +186,34 @@
       "checks": [
         "native",
         "unit",
+        "static"
+      ]
+    },
+    {
+      "rule": "现有 Acceptance 安装新版启动接线工具时，旧迁移前缀的维护预检正确区分尚未创建及不合法缺失的生命周期视图。",
+      "source": "最终 Full 45763578990 的实际低权限故障，同一原始用例在发布分支 9cae2f68 复现；沿方案 §2.2 的正式配置与启用路径，保持原运维边界。",
+      "writes": [
+        "scripts/deploy/prepare-acceptance-migration.py#permission_query",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/unit/acceptance-maintenance-generator.test.ts"
+      ],
+      "reads": [
+        "apps/api/migrations/0296_development_first_publication.sql",
+        "apps/api/migrations/0303_workbench_preorder_publication.sql",
+        "scripts/dx-acceptance.sh",
+        "scripts/deploy/update-acceptance-local.sh",
+        "docs/operations/acceptance-lab-runbook-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/unit/acceptance-maintenance-generator.test.ts"
+      ],
+      "initialization": "按未改动 SQL 字节及 manifest 登记 0296 的原视图创建。只有实际前序迁移未应用且随后应用该原 SQL 时，准许预检阶段缺此视图。原发布按钮开关仍默认关闭。",
+      "dateAndPermission": "已记账但缺视图、不是视图或真实所有者错误仍拒绝。执行后核原所有者及既有 SELECT，不加权限，不降表、函数、序列或数据库隔离保护。",
+      "expectation": "真低权限 PostgreSQL 升级从旧库通过，插入错误 owner 的原表及现有视图、已记账但缺视图仍被拒绝。初次 Full 失败原样保留。",
+      "checks": [
+        "maintenance",
         "static"
       ]
     }
