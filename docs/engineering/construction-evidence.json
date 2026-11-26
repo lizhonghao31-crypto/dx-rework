@@ -2,7 +2,7 @@
   "version": 1,
   "base": "a86a45fa31865731bcaf2c2358a05936495e016e",
   "risk": "full",
-  "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+  "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -146,11 +146,12 @@
     },
     {
       "rule": "返洗测试使用原下游收货条件，不放宽真实仓库收货门槛。仅修 Full 失效的测试夹具。",
-      "source": "旧准确 Full 45892354624 的 PostgreSQL job 140158973169 两个套件共三例失败；发布基座 a86a45fa 未改同例 409 复现。",
+      "source": "旧准确 Full 45892354624 的 PostgreSQL job 140158973169 两个套件共三例失败；发布基座 a86a45fa 未改同例 409 复现。下一轮 45896591239 仅余洗水导航相同的未补前置，发布基座实测复现。",
       "initialization": "仅在隔离测试的 after_receipt 支路，经原仓库发厂、工厂 QC、实际生产报告及回货建立准确原厂、裁单和收货对象。",
       "dateAndPermission": "用本场景原业务时钟及北京时间，不补产量、不改角色、商用配置、仓库门槛、正式时效或现场数据。",
       "writes": [
-        "tests/helpers/order-time-rewash-fixture.ts#failedFrameworkWashingFixture"
+        "tests/helpers/order-time-rewash-fixture.ts#nativeReturnedFactoryFixture",
+        "tests/integration/washing-window-navigation-browser-postgres.test.ts#nativeReturnedFactoryFixture"
       ],
       "reads": [
         "apps/api/src/receiving/native-receipt-admission.ts#admitNativeReceipt",
@@ -162,9 +163,10 @@
         "tests/integration/order-time-washing-rework-browser-postgres.test.ts"
       ],
       "newTests": [],
-      "expectation": "旧 409 发生在返洗以前的原收货。现同三例过真正收货后验证原浏览器和原返洗职责、读写和时间线，其余厂内及历史用例全部保留。",
+      "expectation": "旧 409 发生在返洗以前的原收货。现仍经真正收货验证原浏览器和原返洗职责、读写和时间线。导航按原两次收货、独立 QC、“四窗＋六窗”的身份与读回、不写、权限原断言。其余厂内及历史用例全部保留。",
       "checks": [
         "rewash",
+        "navigation",
         "static"
       ]
     }
@@ -173,89 +175,89 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
-      "context": "隔离 PostgreSQL、真实主跟单和原浏览器，已绿新版混合例不在这次定向重跑",
-      "startedAt": "2026-11-26T21:06:56.754445+00:00",
-      "endedAt": "2026-11-26T21:10:06.269723+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/native.log",
-      "logSha256": "c76a0454325192e2c31b19ddab9fa583ca33ff603cfe33d767e9cc40f9c4878d",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
+      "context": "隔离 PostgreSQL、真实主跟单和原浏览器，原有已绿新版混合例不在这次定向重跑",
+      "startedAt": "2026-11-26T21:55:01.625300+00:00",
+      "endedAt": "2026-11-26T21:58:44.764310+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/native.log",
+      "logSha256": "939e5f16ac5d66155636d4ce1c7339599d97530b0d691cf87cc619d12133fc2d",
       "passed": 24,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c1df9d5e972c7ba92cb6cbbcc6dd6045cd5ca21fd030e3ac90495d0ce9c782f7"
+          "sha256": "d5a073a8509b9326c27f6237c0f63e168c7ac4d838834d1a58d8c454030e990c"
         }
       ]
     },
     {
       "id": "inherited-native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/inherited-native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/inherited-native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
       "context": "继承原同批返工的正常启动和末步骤原发厂隔离 PostgreSQL",
-      "startedAt": "2026-11-26T21:06:56.757533+00:00",
-      "endedAt": "2026-11-26T21:08:52.043082+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/inherited-native.log",
-      "logSha256": "1722081f2cc5ecc03cecf8f6719069004ee082ad6488c496d7919159f7211360",
+      "startedAt": "2026-11-26T21:55:01.620034+00:00",
+      "endedAt": "2026-11-26T21:57:45.191034+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/inherited-native.log",
+      "logSha256": "5426124768bcee6ab72305dcb13ed933a327e05df676b061cb118b25db9cd777",
       "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "566fdd0db71f48d6e83cdcc430d90debc5b5afeb1a68da3cc5396fbde8be3ea6"
+          "sha256": "d9a9cfa062951b87c040507752bf0e71a8d4f7d77a37d131896fc7de997dda00"
         }
       ]
     },
     {
       "id": "canonical",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/canonical.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/canonical.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
-      "context": "原风险映射全文件及原共享浏览器预算和选测登记",
-      "startedAt": "2026-11-26T21:06:56.756210+00:00",
-      "endedAt": "2026-11-26T21:06:58.851316+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/canonical.log",
-      "logSha256": "287a87d0ef0e087a36248b4e703af8ae650286278a02a16abe634f42b8e64a52",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
+      "context": "原风险映射全文件及真浏览器预算，生产/测试范围没有增加其他映射",
+      "startedAt": "2026-11-26T21:55:01.621125+00:00",
+      "endedAt": "2026-11-26T21:55:03.991175+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/canonical.log",
+      "logSha256": "11ebf6545920c24209cd6192bc29077781353b2c4a27f68fd860d44b48740e34",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "46f5911d18e1147ef36963780a13e1486cdcb47ab306321ba525873f3b99f425"
+          "sha256": "b7b834194c2043b02c5a1723f05d7844c2f1a7bb38b0c0c7b0aff4b7aab454af"
         }
       ]
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/protocol.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/protocol.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
       "context": "原 Gate 协议完整便宜预检，不触发仓库 Light",
-      "startedAt": "2026-11-26T21:06:56.755425+00:00",
-      "endedAt": "2026-11-26T21:07:05.026413+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/protocol.log",
-      "logSha256": "366494195e2358512ddffc5cc51020efda1b82913a65dac7df3371af14ebfceb",
+      "startedAt": "2026-11-26T21:55:01.622894+00:00",
+      "endedAt": "2026-11-26T21:55:12.377954+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/protocol.log",
+      "logSha256": "f9b7a57f9fa2b1306f60bb7bb6cde3e6a835604b89b8c46a924ec6f8e5c3275e",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "366494195e2358512ddffc5cc51020efda1b82913a65dac7df3371af14ebfceb"
+          "sha256": "f9b7a57f9fa2b1306f60bb7bb6cde3e6a835604b89b8c46a924ec6f8e5c3275e"
         }
       ],
       "passed": 285,
@@ -265,37 +267,60 @@
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
       "context": "该提交类型、变更 lint、时间清单、迁移和秘密扫描",
-      "startedAt": "2026-11-26T21:06:56.754087+00:00",
-      "endedAt": "2026-11-26T21:08:00.022353+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/static.log",
+      "startedAt": "2026-11-26T21:55:01.628578+00:00",
+      "endedAt": "2026-11-26T21:56:16.579873+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/static.log",
       "logSha256": "b4ae7da76bd1da311aaa145e65a15fcbb5f91e41b0f5bc664c9a58d76b5d7ed7"
     },
     {
       "id": "rewash",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/rewash.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/rewash.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
-      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
-      "context": "隔离 PostgreSQL 和真实原浏览器回归现有收货后及厂内返洗，按原范围补真实发厂、工厂质检和发回",
-      "startedAt": "2026-11-26T21:06:56.754469+00:00",
-      "endedAt": "2026-11-26T21:08:34.091519+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/final-rewash/rewash.log",
-      "logSha256": "034dd1e0a253a7884bbc4551df6190932227aa6a3738bfcbc6fceb5c47abb376",
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
+      "context": "原 after_receipt 与厂内返洗 PostgreSQL 和真实既有浏览器",
+      "startedAt": "2026-11-26T21:55:01.629511+00:00",
+      "endedAt": "2026-11-26T21:57:05.804878+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/rewash.log",
+      "logSha256": "f1640de2b675ab7fa022816f13a51e4e6a8b7ae4c71b97d416dbc07bf9d9f954",
       "passed": 6,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6293b54066d1388fec093136c49072697384f02008ce17ec58b4830f0525fef8"
+          "sha256": "d33b882c21f5e1eb4d34246ce74bd474b81b893dbd873efa412bf88905b50999"
+        }
+      ]
+    },
+    {
+      "id": "navigation",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-navigation/navigation.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "d621de8c1ed9394f11d12e7b27a768f8697722aa",
+      "sourceFingerprint": "1c5a0b5728507fcba082a286e11a8aa4d01799e1effa89110c0730ecbbe928f8",
+      "context": "原洗水导航、确切四窗六窗、原 SaaS 接受角色和错误对象，不写业务",
+      "startedAt": "2026-11-26T21:55:01.624856+00:00",
+      "endedAt": "2026-11-26T21:58:10.185925+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-navigation/navigation.log",
+      "logSha256": "30b4d52a7944113e1238c8fcd792a33a36ef13fc52937c2c2920c0166b6f5430",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d712b88d07e5b9817c5dc3ccdfa4d07e08497656a5d62170e0bd9571e49c3daf"
         }
       ]
     }
@@ -475,6 +500,17 @@
       "baselineLog": "/workspace/scratch/m02-01-evidence/legacy-final/rewash-base.log",
       "baselineLogSha256": "c81fc4454d91728582a180ee82df6a12a6b22d8d7ab4201614fe7c2cfaece075",
       "note": "基座定向一例真实原收货相同 409；没有改变任何生产文件或旧返洗断言。"
+    },
+    "washingWindowNavigationCheck": {
+      "oldFull": 45896591239,
+      "oldPostgresJob": 140173397471,
+      "passed": 605,
+      "failed": 1,
+      "skipped": 2,
+      "baselineHead": "a86a45fa31865731bcaf2c2358a05936495e016e",
+      "baselineLog": "/workspace/scratch/m02-01-evidence/final-rewash/navigation-base.log",
+      "baselineLogSha256": "4b2ce18f243c16cc488db2d80a4861b03a5c33ae02b1361012040bb1777d95f8",
+      "note": "后纳入的旧导航夹具也跳过原发厂和发回。仅复用已实测的原流程夹具，原两次收货与全部窗口/权限断言不变；该补充未增加原风险映射套件。"
     }
   }
 }
