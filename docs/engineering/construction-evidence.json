@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
+  "base": "9ae90510626ef70398529d647b16d69d89193cd4",
   "risk": "quick",
-  "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+  "sourceFingerprint": "acc691d9def9d6f625dcf521b12b2d4744515b431ce5342f5650122f5dcbabdb",
   "rules": [
     {
       "rule": "仓库中心 → 待收料的状态列按原投料、有效实收及采购余额区分五态；已知零显示实收为零，缺少可信数量或非零所需余额时显示实收待核。",
@@ -34,7 +34,8 @@
       "checks": [
         "status-and-balance",
         "warehouse-browser-replay",
-        "g3-web-static"
+        "g3-web-static",
+        "g3-hosted-status-4035a45"
       ]
     }
   ],
@@ -59,8 +60,28 @@
           "sha256": "47dd20cfd66229d2b4e1af4eeaadd77a90127a8401457ecb8d90e22d33fc5937"
         }
       ],
-      "context": "Node 22.22.2, npm 10.9.9, Vitest 4.1.10 非 DB worker 上限 1（scripts/test-execution-config.mjs），本次两个文件由同一个 worker 顺序执行；base 工作树带本记录 sourceFingerprint 的候选差量；无 DB 和生产连接。原 PG 用例只核消费者，未重复运行。",
-      "log": "/tmp/dx-g3-evidence/unit.log"
+      "context": "Node 22.22.2, npm 10.9.9, Vitest 4.1.10 非 DB worker 上限 1（scripts/test-execution-config.mjs），本次两个文件由同一个 worker 顺序执行；base 工作树带本记录 sourceFingerprint 的候选差量；无 DB 和生产连接。原 PG 用例只核消费者，未重复运行。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/unit.log",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/warehouse-receipt-status.test.ts",
+        "apps/api/src/acceptance-clock",
+        "apps/api/src/access",
+        "apps/api/src/auth",
+        "apps/api/src/platform",
+        "apps/api/src/production-platform",
+        "apps/api/src/tools",
+        "tests/unit/warehouse-material-balance.test.ts"
+      ],
+      "inputFingerprint": "e4b948319355933653e2c0aec639a97c6fed94accc8dfb6c74e488e53b7d7cee"
     },
     {
       "id": "warehouse-browser-replay",
@@ -76,8 +97,17 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "context": "Node 22.22.2、Chromium 151.0.7922.173，1 个浏览器依序回放固定 base 与具备本记录 sourceFingerprint 的候选。实际仓库 URL、受控数据与仓管鉴权响应，两版各 7 次开发态收料 GET（含 StrictMode 启动重复），均 0 次 API 写。现场 3b 未验。",
-      "log": "/tmp/dx-g3-evidence/browser.log"
+      "context": "Node 22.22.2、Chromium 151.0.7922.173，1 个浏览器依序回放固定 base 与具备本记录 sourceFingerprint 的候选。实际仓库 URL、受控数据与仓管鉴权响应，两版各 7 次开发态收料 GET（含 StrictMode 启动重复），均 0 次 API 写。现场 3b 未验。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/browser.log",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages"
+      ],
+      "inputFingerprint": "60691fdd29507ad36f95eab5ee91bd8c490a74c22cede8b5a2338203b312e9df"
     },
     {
       "id": "g3-web-static",
@@ -90,8 +120,55 @@
       "endedAt": "2026-11-26T14:52:09Z",
       "logSha256": "4f3fc6531af4a2d56185851cc34d846e1ce8784dc5eb726ec437bc3533ee29fa",
       "kind": "command",
-      "context": "Node 22.22.2、npm 10.9.9、锁定依赖和准确 base 工作树上的候选源指纹；两份直接受影响源文件和 Web 工作空间。",
-      "log": "/tmp/dx-g3-evidence/static.log"
+      "context": "Node 22.22.2、npm 10.9.9、锁定依赖和准确 base 工作树上的候选源指纹；两份直接受影响源文件和 Web 工作空间。 合并 G9 前后的验证输入逐字节相同，原执行时间、SHA 与结果维持。",
+      "log": "/tmp/dx-g3-evidence/static.log",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "eslint.config.js",
+        "tests/unit/warehouse-receipt-status.test.ts"
+      ],
+      "inputFingerprint": "d6cc899dd86e7757608415390110e5e48fb82c7712c0c216a89799cbb56e6d58"
+    },
+    {
+      "id": "g3-hosted-status-4035a45",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/warehouse-receipt-status.test.ts --reporter=verbose --reporter=json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "4035a45ab2dd07bb1b9ea95d4dc17cd4afe31cfb",
+      "sourceFingerprint": "f6c365ec954ad389e0578775864907fbc534646c4877d3099c9fabb6b4cc6c60",
+      "inputPaths": [
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "apps/web",
+        "packages",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/warehouse-receipt-status.test.ts"
+      ],
+      "inputFingerprint": "4281b76c04352bacb115c741a7c530f15990a6a87e8155868f54e4358a8af4b5",
+      "startedAt": "2026-11-26T15:20:48Z",
+      "endedAt": "2026-11-26T15:20:50Z",
+      "log": "/tmp/dx-g3-evidence/hosted-45848055440/raw/vitest.log",
+      "logSha256": "4ff3b1128da5bc6a88ec1efb7497d0f622466be134385a48d6db9c4652ba5dfd",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a25211d98be01a73ba7faa8c5053c3cbd811e491026489e3a0efb30ebcfc7d73"
+        }
+      ],
+      "context": "范围：单文件，旧 G3 准确受测 Head。GitHub run 45848055440 / job 140006788325 / attempt 1；证据分支触发 f6c61cc9fbbfa7b99bf42882053ba5ec2a866f3a。GitHub 产物 15132880052 与报告、日志摘要一致；新候选沿用同一测试输入，不将原运行表述为新 Head 的结果。"
     }
   ]
 }
