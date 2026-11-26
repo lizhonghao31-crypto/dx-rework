@@ -1,4 +1,6 @@
 import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
+import {developmentLifecycleAvailable} from '../../apps/api/src/production-platform/development-source-lifecycle.js';
+import type {Pool,PoolClient} from 'pg';
 import {readWarehouseFactoryDispatchScopes} from '../../apps/api/src/production-platform/warehouse-factory-dispatch-evidence.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {orderTimeCreated} from '../../apps/api/src/production-platform/order-time-created.js';
@@ -83,6 +85,13 @@ import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import type {PreparationMaterialKind,PreparationResource,ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+async function originalWarehouseReadiness(db:Pool){
+ const module=process.env.G4_BASELINE_READINESS_MODULE;
+ if(!module)return null;
+ const original=await import(module) as {ProductionReadinessService:typeof ProductionReadinessService};
+ return new original.ProductionReadinessService(db);
+}
+
 (url?describe:describe.skip)('production preparation native lifecycle (TEST_DATABASE_URL isolated only)',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,service:ProductionReadinessService,instruction:ProductionInstructionService,bulk:BulkPreparationService;
  beforeAll(async()=>{f=await businessAnchorFixture(url!);identity=new DigitalProductionIdentityService(f.db,true);forms=new DigitalDevelopmentService(f.db,true);service=new ProductionReadinessService(f.db);instruction=new ProductionInstructionService(f.db,true);bulk=new BulkPreparationService(f.db);});
@@ -111,6 +120,108 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return service.record(kind==='material_investment'?p.primary:p.warehouse,resource,{kind,scopeRef:'whole',expectedVersion:prior?.version??0,state,occurredAt:state==='unknown'?null:businessNow().toISOString(),note:'TEST actual native material record',quantities:kind==='material_investment'?[{lineId:null,materialId:p.document.materials[0]!.materialId,name:'TEST棉布',quantity:100,unit:'米'}]:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
  };
  const order=async(p:Awaited<ReturnType<typeof setup>>)=>identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:p.style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:p.primary.actorId,lines:[{formalPoNo:`TEST-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),p.sourceId);
+ it('G4 reads the same authorized and fingerprinted receipt scopes in one batch at 1, 15 and 50 resources',async()=>{
+  // The 50 assigned orders must never enter other cases' warehouse scopes.
+  const f=await businessAnchorFixture(url!),started='2027-04-25T04:00:00.000Z';
+  const service=new ProductionReadinessService(f.db),identity=new DigitalProductionIdentityService(f.db,true),
+   instruction=new ProductionInstructionService(f.db,true),warehouse=f.people.warehouse!;
+  const authorized:PreparationResource[]=[],samples:Array<{scopes:number;listSql:number;originalSql:number|null;boundScopes:PreparationResource[]}>=[],
+   originals=new Map<PoolClient,PoolClient['query']>();
+  let active:Array<{sql:string;parameters:unknown[]}>|undefined;
+  const instrument=(client:PoolClient)=>{
+   if(originals.has(client))return;
+   const original=client.query;
+   originals.set(client,original);
+   client.query=function(this:PoolClient,...args:unknown[]){
+    if(active&&typeof args[0]==='string')active.push({sql:args[0],parameters:Array.isArray(args[1])?structuredClone(args[1]):[]});
+    return Reflect.apply(original,this,args);
+   } as PoolClient['query'];
+  };
+  const measure=async<T,>(read:()=>Promise<T>)=>{
+   const calls:NonNullable<typeof active>=[];
+   active=calls;
+   try{return {value:await read(),calls};}
+   finally{active=undefined;}
+  };
+  f.db.on('acquire',instrument);
+  try{
+   const scene=await f.scene(started),baseline=await originalWarehouseReadiness(f.db);
+   await f.runtime.run(scene,f.root,async()=>{
+    const query={status:'open' as const,page:1,search:''};
+    const merch=f.people.merchandiser!;
+    for(let size=1;size<=50;size++){
+     const style='TEST-G4-SCOPE-'+randomUUID();
+     const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+      designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:merch.actorId,requiresColorMatching:false,
+      productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-08-15',
+       sizes:[{size:'M',quantity:2}]}]}),randomUUID());
+     const resource={kind:'order' as const,id:order.productionOrderId},materialId=randomUUID(),name='TEST G4 native fabric';
+     authorized.push(resource);
+     const currentInstruction=await instruction.read(merch,resource.id);
+     const saved=await instruction.save(merch,resource.id,{expectedVersion:currentInstruction.version,orderVersion:currentInstruction.currentOrderVersion,
+      document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+       fabrics:[{id:materialId,name,part:'本身',colors:{},remarks:''}]}},randomUUID());
+     const common={scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+     await service.record(f.root,resource,{...common,kind:'design_handover',note:'TEST original material scope',quantities:[],
+      orderInstructionVersion:saved.version,recipientId:merch.actorId},randomUUID());
+     await service.assign(f.root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,
+      colorConfirmationRole:null,reason:'TEST original warehouse assignment'},randomUUID());
+     const physical={lineId:null,materialId,name,unit:'米'};
+     await service.record(merch,resource,{...common,kind:'material_investment',note:'TEST actual investment',
+      quantities:[{...physical,quantity:100}]},randomUUID());
+     const legacy=await service.record(warehouse,resource,{...common,kind:'fabric_receipt',state:'partial',
+      note:'TEST original warehouse receipt evidence',quantities:[{...physical,quantity:20}]},randomUUID());
+     if(size===1){
+      const fact=legacy.facts.find(row=>row.kind==='fabric_receipt')!;
+      const stored=await f.db.query<{basis:string}>("SELECT body->>'materialBasis' AS basis FROM digital_preparation_material_versions WHERE record_id=$1 AND version=$2",[fact.recordId,fact.version]);
+      expect(stored.rows[0]?.basis).toMatch(/^[a-f0-9]{64}$/);
+      expect(fact).toMatchObject({valid:true,invalidReasons:[]});
+      const detail=await service.warehouseReceiptWork(warehouse,resource);
+      expect(detail).toMatchObject([{materialId,lineId:null,received:{quantity:'20',unit:'米'},
+       balance:{procurementRemaining:'80',excessReceived:'0'}}]);
+      if(baseline){
+       const oldHistory=await baseline.read(warehouse,resource);
+       expect(oldHistory.history.find(row=>row.recordId===fact.recordId&&row.version===fact.version))
+        .toEqual(legacy.history.find(row=>row.recordId===fact.recordId&&row.version===fact.version));
+       const before=await measure(()=>baseline.warehouseReceiptWork(warehouse,resource));
+       expect(await measure(()=>service.warehouseReceiptWork(warehouse,resource))).toEqual(before);
+      }
+     }
+     if(![1,15,50].includes(size))continue;
+     // Give both list readers the same connection-local schema-probe state.
+     const client=await f.db.connect();
+     try{expect(await developmentLifecycleAvailable(client)).toBe(true);}
+     finally{client.release();}
+     const current=await measure(()=>service.warehouseReceipts(warehouse,query));
+     expect(current.value.total).toBe(size);
+     expect(current.value.items).toHaveLength(Math.min(size,15));
+     expect(current.value.items.every(item=>item.received?.quantity==='20'&&item.balance.procurementRemaining==='80')).toBe(true);
+     expect(new Set(current.value.items.map(item=>item.id)).size).toBe(current.value.items.length);
+     const expected=authorized.slice().sort((left,right)=>left.id.localeCompare(right.id));
+     const contextBatches=current.calls.filter(call=>call.sql.includes('WITH requested AS(SELECT * FROM jsonb_to_recordset'));
+     const historyBatches=current.calls.filter(call=>call.sql.includes('JOIN digital_preparation_material_versions m'));
+     expect(contextBatches).toHaveLength(1);
+     expect(historyBatches).toHaveLength(1);
+     for(const bind of [...contextBatches,...historyBatches]){
+      const scopes=JSON.parse(String(bind.parameters[0])) as PreparationResource[];
+      expect(scopes.sort((left,right)=>left.id.localeCompare(right.id))).toEqual(expected);
+     }
+     const before=baseline?await measure(()=>baseline.warehouseReceipts(warehouse,query)):null;
+     if(before)expect(current).toEqual(before);
+     samples.push({scopes:size,listSql:current.calls.length,originalSql:before?.calls.length??null,boundScopes:expected});
+    }
+    expect(new Set(samples.map(sample=>sample.listSql)).size).toBe(1);
+    await expect(service.warehouseReceipts(f.people.merchandiser!,query)).rejects.toMatchObject({statusCode:403});
+    await expect(service.warehouseReceiptWork(f.people.merchandiser!,authorized[0]!)).rejects.toMatchObject({statusCode:403});
+   });
+   if(process.env.G4_PG_EVIDENCE)await writeFile(process.env.G4_PG_EVIDENCE,JSON.stringify({asOf:started,samples},null,2)+'\n');
+   console.log('G4_RECEIPT_SCOPE_SQL '+JSON.stringify(samples.map(({scopes,listSql,originalSql,boundScopes})=>({scopes,listSql,originalSql,bound:boundScopes.length}))));
+  }finally{
+   f.db.off('acquire',instrument);
+   for(const [client,query] of originals)client.query=query;
+   await f.dispose();
+  }
+ },testExecutionConfig.correctnessTimeoutMs);
  it('X2 does not hand over a saved numbered preorder until it is effectively published',async()=>{
   const designer=f.people['sample-designer']!,primary=f.people.merchandiser!;
   const current=await identity.orderNumberSettings(f.root);
@@ -2089,6 +2200,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('Acceptance H1 projects an exact PO receipt and the shared positive control without mixing original snapshots',async()=>{
   const {h,merch,root,scene,started,orderId}=await directMaterialOrder(2);
   const resource={kind:'order' as const,id:orderId},receipts=new ProductionReadinessService(h.db);
+  const baseline=await originalWarehouseReadiness(h.db);
   const instructions=new ProductionInstructionService(h.db,true),warehouse=h.f.people.warehouse!;
   const perPO=randomUUID(),shared=randomUUID();
   await h.f.runtime.run(scene,root,async()=>{
@@ -2105,16 +2217,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     {materialId:shared,lineId:null,name:'TEST H1 共享料',quantity:60,unit:'米'}]},randomUUID());
    await receipts.assign(root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,colorConfirmationRole:null,
     reason:'TEST 原收料任务指派'},randomUUID());
-   const old=(expectedVersion:number,quantities:Array<typeof purchase>)=>receipts.record(warehouse,resource,
-    {...common,expectedVersion,kind:'fabric_receipt',note:'TEST 同一资源原整单快照',quantities},randomUUID());
-   await old(0,[{...purchase,lineId:b!.lineId,quantity:3}]);
+   const old=(expectedVersion:number,quantities:Array<typeof purchase>,evidenceIds:string[]=[])=>receipts.record(warehouse,resource,
+    {...common,expectedVersion,kind:'fabric_receipt',note:'TEST 同一资源原整单快照',quantities,evidenceIds},randomUUID());
+   const legacy=await old(0,[{...purchase,lineId:b!.lineId,quantity:3}]);
+   const oldFact=legacy.facts.find(row=>row.kind==='fabric_receipt')!;
+   const basis=await h.db.query<{basis:string}>("SELECT body->>'materialBasis' AS basis FROM digital_preparation_material_versions WHERE record_id=$1 AND version=$2",
+    [oldFact.recordId,oldFact.version]);
+   expect(basis.rows[0]?.basis).toBe('894b07e47265b992480c93bf95dfca82f077e27b1e78fef705c81545d26e6fa5');
    const work=()=>receipts.warehouseReceiptWork(warehouse,resource);
+   const compareOriginal=async()=>{
+    if(!baseline)return;
+    const query={search:'TEST H1',status:'open' as const,page:1};
+    expect(await receipts.warehouseReceipts(warehouse,query)).toEqual(await baseline.warehouseReceipts(warehouse,query));
+    expect(await work()).toEqual(await baseline.warehouseReceiptWork(warehouse,resource));
+    expect((await receipts.read(warehouse,resource)).history).toEqual((await baseline.read(warehouse,resource)).history);
+   };
    const native=await work();
-   const recordBatch=(item:typeof native[number],quantity:string,expectedReceiptVersion=0,replaces?:{recordId:string;version:number})=>
+   const recordBatch=(item:typeof native[number],quantity:string,expectedReceiptVersion=0,replaces?:{recordId:string;version:number},
+    physical:{supplierId:string|null;unit:string}={supplierId:item.basis.supplierId,unit:item.basis.unit})=>
     receipts.recordWarehouseReceiptBatch(warehouse,resource,{kind:item.kind,scopeRef:item.scopeRef,lineId:item.lineId,materialId:item.materialId,
-     supplierId:item.basis.supplierId,unit:'米',investment:item.purchase.original,materialFingerprint:item.basis.adoptedRef,quantity,
+     ...physical,investment:item.purchase.original,materialFingerprint:item.basis.adoptedRef,quantity,
      expectedReceiptVersion,occurredAt:started,note:'TEST 原仓库实际批次',...(replaces?{replaces}:{})},randomUUID());
    const exact= native.find(row=>row.materialId===perPO)!,commonTask=native.find(row=>row.materialId===shared)!;
+   await expect(recordBatch(exact,'20',0,undefined,{supplierId:randomUUID(),unit:'米'})).rejects.toMatchObject({statusCode:409});
+   await expect(recordBatch(exact,'20',0,undefined,{supplierId:exact.basis.supplierId,unit:'码'})).rejects.toMatchObject({statusCode:409});
    await recordBatch(exact,'20');
    await recordBatch(commonTask,'10');
    const found=(await work()).find(row=>row.materialId===perPO)!;
@@ -2131,9 +2257,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(poA.items.find(row=>row.materialId===perPO)).toMatchObject({received:{quantity:'20',unit:'米'},balance:{procurementRemaining:'40'}});
    expect(poB.items[0]).toMatchObject({received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
    expect((await work()).find(row=>row.materialId===shared)).toMatchObject({lineId:null,received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
-   const oldOverlap=await old(1,[{...purchase,quantity:22}]);
+   await compareOriginal();
+   const oldProof=await h.f.image(warehouse);
+   const oldOverlap=await old(1,[{...purchase,quantity:22}],[oldProof]);
    expect((await work()).find(row=>row.materialId===perPO)).toMatchObject({received:null,balance:{procurementRemaining:null},
     activeBatches:[{quantity:{quantity:'20'}}]});
+   await compareOriginal();
+   await h.db.query("UPDATE attachments SET status='rejected',ready_at=NULL,rejection_reason='TEST original receipt proof unavailable' WHERE attachment_id=$1",[oldProof]);
+   const invalid=(await receipts.read(warehouse,resource)).history.find(row=>row.recordId===oldFact.recordId&&row.version===2);
+   expect(invalid).toMatchObject({valid:false,invalidReasons:['原凭证已失效或尚未完成上传']});
+   expect((await work()).find(row=>row.materialId===perPO)?.received).toEqual({quantity:'20',unit:'米'});
+   await compareOriginal();
    const oldMarker=await old(2,[]);
    expect(oldMarker.history.find(row=>row.kind==='fabric_receipt'&&row.scopeRef==='whole'&&row.version===2)?.quantities)
     .toEqual(oldOverlap.facts.find(row=>row.kind==='fabric_receipt')?.quantities);
@@ -2141,6 +2275,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await work()).find(row=>row.materialId===perPO)).toMatchObject({received:{quantity:'18',unit:'米'},balance:{procurementRemaining:'42'},
     activeBatches:[{ref:{recordId:found.activeBatches[0]!.ref.recordId,version:2}}]});
    expect((await work()).find(row=>row.materialId===shared)).toMatchObject({received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
+   expect((await receipts.read(warehouse,resource)).history.find(row=>row.warehouseReceipt?.replaces?.recordId===found.activeBatches[0]!.ref.recordId)?.warehouseReceipt)
+    .toMatchObject({replaces:found.activeBatches[0]!.ref,quantity:'18',lineId:a!.lineId});
+   await compareOriginal();
   });
  });
  it('adopts the first material cutoff for the same formal handover only after supplying its missing lead time',async()=>{

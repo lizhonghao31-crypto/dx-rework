@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { currentWarehouseReceiptQuantity, warehouseMaterialBalance, warehouseReceiptBatches, scopedWarehouseReceiptQuantity, warehouseReceiptTaskBasis, type WarehouseReceiptBasis, type WarehouseReceiptMovement } from '../../apps/api/src/production-platform/warehouse-material-balance.js';
-import {preparationHash,preparationInvestmentScope,warehouseReceiptMaterialCurrent} from '../../apps/api/src/production-platform/preparation-material-repository.js';
+import {legacyPreparationMaterialFingerprint,preparationHash,preparationInvestmentScope,warehouseReceiptMaterialCurrent} from '../../apps/api/src/production-platform/preparation-material-repository.js';
 
 const metres = (quantity: string) => ({ quantity, unit: '米' });
 const original = {
@@ -32,6 +32,50 @@ describe('warehouse material balances for one verified basis', () => {
     expect(warehouseMaterialBalance({ ...original, received: metres('530.001'), dispatchRequired: metres('0.3'), dispatched: metres('0.2') }))
       .toMatchObject({ procurementRemaining: '0', excessReceived: '10.001', dispatchRemaining: '0.1' });
   });
+});
+
+describe('G4 original legacy material fingerprint bytes',()=>{
+ const materials=[
+  {"category":"配布","materialId":"z-lining","name":"LineN","color":"蓝","specification":"soft","width":"150.00","weight":"","composition":"混紡","supplier":"original"},
+  {"category":"辅料","materialId":"z-thread","name":"Thread","color":"白","specification":"2m","width":"","weight":"","composition":"nylon"},
+  {"category":"主布","materialId":"a-fabric","name":"FABRIC","color":"黑","specification":"heavy","width":"151","weight":"200","composition":"棉"},
+  {"category":"辅料","materialId":"a-button","name":"Button","color":"黄","specification":"15mm","width":"","weight":"","composition":"RESIN"},
+ ] as const;
+ const accessories=[
+  {"id":"00000000-0000-4000-8000-000000000002","group":"包装","garmentColors":"","materialColor":"白","name":"Bag","category":"","part":"","specification":"B","consumption":"1","remarks":""},
+  {"id":"00000000-0000-4000-8000-000000000001","group":"车缝","garmentColors":"","materialColor":"黑","name":"Button","category":"","part":"门襟","specification":"A","consumption":"2","remarks":""},
+ ] as const;
+ const originalFabric='9f85de0e18137d68a64cacffa2ca5996373f5589e952d05e89291198922e98f3';
+ const originalAccessories='33e8edc317aade79e2b8320ac2d6436b3a8a2136a2d282f7fa7b3a375821668f';
+ const emptyBasis='894b07e47265b992480c93bf95dfca82f077e27b1e78fef705c81545d26e6fa5';
+ // Serialized values and digests captured through both old call sites at the release base.
+ it('retains the exact legacy JSON bytes for fabric and accessories, independent of material order',()=>{
+  const fabric="{\"materials\":[[\"a-fabric\",\"FABRIC\",\"黑\",\"heavy\",\"151\",\"200\",\"棉\"],[\"z-lining\",\"LineN\",\"蓝\",\"soft\",\"150.00\",\"\",\"混紡\"]],\"accessories\":null}";
+  const accessoryBasis="{\"materials\":[[\"a-button\",\"Button\",\"黄\",\"15mm\",\"\",\"\",\"RESIN\"],[\"z-thread\",\"Thread\",\"白\",\"2m\",\"\",\"\",\"nylon\"]],\"accessories\":[{\"id\":\"00000000-0000-4000-8000-000000000002\",\"group\":\"包装\",\"garmentColors\":\"\",\"materialColor\":\"白\",\"name\":\"Bag\",\"category\":\"\",\"part\":\"\",\"specification\":\"B\",\"consumption\":\"1\",\"remarks\":\"\"},{\"id\":\"00000000-0000-4000-8000-000000000001\",\"group\":\"车缝\",\"garmentColors\":\"\",\"materialColor\":\"黑\",\"name\":\"Button\",\"category\":\"\",\"part\":\"门襟\",\"specification\":\"A\",\"consumption\":\"2\",\"remarks\":\"\"}]}";
+  expect(JSON.stringify(JSON.parse(fabric))).toBe(fabric);
+  expect(JSON.stringify(JSON.parse(accessoryBasis))).toBe(accessoryBasis);
+  expect(preparationHash(JSON.parse(fabric))).toBe(originalFabric);
+  expect(preparationHash(JSON.parse(accessoryBasis))).toBe(originalAccessories);
+  for(const order of [materials,[...materials].reverse()]){
+   expect(legacyPreparationMaterialFingerprint('fabric_receipt',order,accessories)).toBe(originalFabric);
+   expect(legacyPreparationMaterialFingerprint('accessories_ready',order,accessories)).toBe(originalAccessories);
+  }
+ });
+ it('changes only the legacy kind whose recorded material or instruction accessories changed',()=>{
+  const fabricChanged=materials.map(row=>row.materialId==='a-fabric'?{...row,specification:'HEAVY'}:row);
+  const accessoryChanged=materials.map(row=>row.materialId==='a-button'?{...row,specification:'16mm'}:row);
+  expect(legacyPreparationMaterialFingerprint('fabric_receipt',fabricChanged,accessories)).toBe('ad4ce34ece0e19a162b50e560da5ef146863ada125ad016e3d100ba88e7aa216');
+  expect(legacyPreparationMaterialFingerprint('accessories_ready',fabricChanged,accessories)).toBe(originalAccessories);
+  expect(legacyPreparationMaterialFingerprint('fabric_receipt',accessoryChanged,accessories)).toBe(originalFabric);
+  expect(legacyPreparationMaterialFingerprint('accessories_ready',accessoryChanged,accessories)).toBe('c7214de2d2d3ea8ca6d5a338f3cf96b04959c645f2d85e75d34c3196d1682d55');
+  expect(legacyPreparationMaterialFingerprint('accessories_ready',materials,[...accessories].reverse())).toBe('569620fb78ebfb3d130cb18b4ad4c32d17a1481d8d03bc27fd095f70a6ab170b');
+  expect(legacyPreparationMaterialFingerprint('fabric_receipt',materials.map(row=>({...row,supplier:'changed'})),accessories)).toBe(originalFabric);
+ });
+ it('preserves explicit empty accessories and missing documents as distinct legacy inputs',()=>{
+  expect(legacyPreparationMaterialFingerprint('fabric_receipt',[],[])).toBe(emptyBasis);
+  expect(legacyPreparationMaterialFingerprint('accessories_ready',null,undefined)).toBe(emptyBasis);
+  expect(legacyPreparationMaterialFingerprint('accessories_ready',[],[])).toBe('c6410239b0da467a82301d2755cc094476b505f394b1a541dd29ee6e56278bda');
+ });
 });
 
 describe('original current authorized material receipt', () => {
