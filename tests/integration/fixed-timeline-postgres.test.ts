@@ -60,6 +60,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await applyOrderMerchandiserFixture(f.db,true);
   await f.db.query(await readFile(new URL('../../apps/api/migrations/0281_fixed_timeline_adoptions.sql',import.meta.url),'utf8'));
   await f.db.query(await readFile(new URL('../../apps/api/migrations/0282_journey_fixed_progress_selectors.sql',import.meta.url),'utf8'));
+  // The old timeline schema is intentional, but its terminal-dispatch cases
+  // still use the current original approval and contract generation service.
+  await f.db.query(await readFile(new URL('../../apps/api/migrations/0316_sourcing_contract_generation_attempts.sql',import.meta.url),'utf8'));
   expect((await f.db.query("SELECT current_setting('is_superuser') AS superuser")).rows[0].superuser).toBe('off');
   scene=await f.scene('2026-11-09T08:00:00.000Z');
  });
@@ -303,6 +306,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   let ready:Awaited<ReturnType<typeof f.bulkReady>>;
   try{ready=await f.bulkReady('印绣花',undefined,1,f.sourcing,{quantity:100,craftSteps:sequence.map((craftKind,index)=>({craftKind,sequence:index+1}))});}
   finally{configureTimelineAdoption(f.db,'legacy');}
+  expect((await f.contracts.getCurrent(f.root,ready!.caseId)).item?.status).toBe('ready');
   const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready!.caseId])).rows;
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
   for(const cut of cuts)await ready!.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await f.image(cutter)]},randomUUID());
