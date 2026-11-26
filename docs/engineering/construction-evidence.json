@@ -2,7 +2,7 @@
   "version": 1,
   "base": "eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
   "risk": "full",
-  "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+  "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
   "rules": [
     {
       "rule": "客户评语按原评语与图片发起、继续或查看来回版本；内部复版和客户真实独立复版真实发布最新表单，审核等待不创建半套任务",
@@ -33,11 +33,10 @@
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/development-technical-postgres.test.ts"
       ],
-      "expectation": "实际原浏览器编辑未保存的 B 并直接发成独立有效结果，首发会回正式任务。真实短交期原审批沿同一独立原来源，结果只写一次，父源保持。",
+      "expectation": "评语区与原编辑版单两条实际入口均把当前未保存表单直接发布成独立有效结果，无第二次手工发布。真实短交期原审批沿同一已冻结依据，结果只写一次，父源保持。",
       "checks": [
         "native",
         "quote",
-        "mapped-other",
         "non-db",
         "static",
         "protocol"
@@ -75,7 +74,6 @@
       "checks": [
         "native",
         "quote",
-        "mapped-other",
         "non-db",
         "static",
         "protocol"
@@ -86,107 +84,84 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/review-fix/native.sh",
+      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
-      "context": "真实普通设计师 Chromium 原评语链接、刷新恢复直接发布及原版 A4 客户评语打印；原短交期 PG",
-      "startedAt": "2026-11-26T09:44:53.780576+00:00",
-      "endedAt": "2026-11-26T09:48:10.694622+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/native.log",
-      "logSha256": "86859cf2f823e1f388966a68307a6d95e8488210cb6164bd48a7a5273185e6eb",
+      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
+      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
+      "context": "原评语区和原编辑版单两个正式直发入口，原回执恢复、原授权和 A4 历史正反例；原短交期隔离 PG",
+      "startedAt": "2026-11-26T10:01:11.642027+00:00",
+      "endedAt": "2026-11-26T10:04:26.745003+00:00",
+      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/native.log",
+      "logSha256": "c410b3740ec69221f7b20773284003768adc9d241311e2a7d0164cb3d830be19",
       "passed": 66,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c3abb6f839cdf736190d74a961b02340bba50e52c2eb3aaab32bdfb966eb90a1"
+          "sha256": "ca50030fe41161cf53cde35237372595a803ebd9d32b0d08a56cf371a2c1c697"
         }
       ]
     },
     {
       "id": "quote",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/review-fix/quote.sh",
+      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/quote.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
-      "context": "原技术评语与 R6 真实报价交叉 PG",
-      "startedAt": "2026-11-26T09:48:10.965072+00:00",
-      "endedAt": "2026-11-26T09:48:53.274395+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/quote.log",
-      "logSha256": "155bef68de508a59b761cc789379aa6175883f29fffae72daebc6d67978bc529",
+      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
+      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
+      "context": "原技术评语与 R6 真实报价交叉 PostgreSQL",
+      "startedAt": "2026-11-26T10:04:27.316517+00:00",
+      "endedAt": "2026-11-26T10:05:08.006470+00:00",
+      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/quote.log",
+      "logSha256": "0dffc842ba4cf76cfc6b4b29774e9182965a627fd67591b5eb735cadd26f1587",
       "passed": 45,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fae4a9dae5a6afa4ade57087680db678e329cb154b44d7e958c6ec0fde37e7e6"
-        }
-      ]
-    },
-    {
-      "id": "mapped-other",
-      "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/review-fix/mapped-other.sh",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
-      "context": "当前 release 差异映射余下八套真实 PostgreSQL 含原附件预览",
-      "startedAt": "2026-11-26T09:48:53.472386+00:00",
-      "endedAt": "2026-11-26T09:53:33.766272+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/mapped-other.log",
-      "logSha256": "f06253983db55b702084274435673dc7111a1ca02405c63658e4cbb1db2b8117",
-      "passed": 147,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "7097b7e6048aa3190b246f55628ce9dda952476504b543b2ad946f64a4f2620e"
+          "sha256": "9d12b20a696ffc20af9fd8d90f61e38ef35c858121898c4b4a53782da4bc8e1b"
         }
       ]
     },
     {
       "id": "non-db",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/review-fix/non-db.sh",
+      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/non-db.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
+      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
       "context": "原版单规则、原打印对与配置契约非数据库",
-      "startedAt": "2026-11-26T09:44:53.778047+00:00",
-      "endedAt": "2026-11-26T09:44:56.973891+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/non-db.log",
-      "logSha256": "12a1f594a04ffd1044ac3f272de4ff8c6b1d4a3296a453e1196649d05bfe55da",
+      "startedAt": "2026-11-26T10:01:11.639748+00:00",
+      "endedAt": "2026-11-26T10:01:15.330207+00:00",
+      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/non-db.log",
+      "logSha256": "bac848b9ef5a2447e80f74cd18384ddc16e85bd44478f8bc4fa53a69164f579f",
       "passed": 43,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f57f808a45bbbc215c2ddf65a73e411b1509240b6959cfecde0b8dd595cb0831"
+          "sha256": "0a43c943f59887168723fafaf1ba300c1205e77dcfc258c575e61677ae33e8ff"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r3-evidence/review-fix/static.sh eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
+      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/static.sh eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
+      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
       "context": "实际依赖和权限范围类型、迁移、时间与凭证静态检查",
-      "startedAt": "2026-11-26T09:44:53.780881+00:00",
-      "endedAt": "2026-11-26T09:45:42.475724+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/static.log",
+      "startedAt": "2026-11-26T10:01:11.643507+00:00",
+      "endedAt": "2026-11-26T10:01:58.588423+00:00",
+      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/static.log",
       "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
     },
     {
@@ -195,17 +170,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
-      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
+      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
       "context": "原治理门禁、实际时间与 release 机制协议测试",
-      "startedAt": "2026-11-26T09:44:57.351472+00:00",
-      "endedAt": "2026-11-26T09:45:03.107919+00:00",
-      "log": "/workspace/scratch/r3-evidence/review-fix/protocol.log",
-      "logSha256": "e77a570badadee5a9008f572ca580c56a86edf46cd88b5a7d315f00d6bfd6cdc",
+      "startedAt": "2026-11-26T10:01:15.653188+00:00",
+      "endedAt": "2026-11-26T10:01:21.603219+00:00",
+      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/protocol.log",
+      "logSha256": "330a0d8cdd318bbbf14a6484edce099162d973e67d43a10c28b1e7b87f473f95",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "e77a570badadee5a9008f572ca580c56a86edf46cd88b5a7d315f00d6bfd6cdc"
+          "sha256": "330a0d8cdd318bbbf14a6484edce099162d973e67d43a10c28b1e7b87f473f95"
         }
       ],
       "passed": 285,
