@@ -496,6 +496,7 @@ export class DigitalProductionIdentityService {
     });
   }
   async correctNumbers(actor: TrustedActorContext, id: string, lineId: string, input: DigitalNumberCorrection, key: string): Promise<DigitalOrder> {
+    let targets: Awaited<ReturnType<SourcingService['reviseDigitalNumbersWithClient']>> = [];
     const result=await this.command(actor, `numbers:${id}:${lineId}`, key, input, async client => {
       const order = await this.visibleOrder(client, actor, id, true);
       if (!isDigitalLeader(actor) && !(actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId) && !(actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId)) digitalForbidden();
@@ -513,11 +514,13 @@ export class DigitalProductionIdentityService {
       if (duplicate?.rowCount) fail("同一母单正式款号（PO）不能重复",400);
       await client.query("UPDATE digital_production_po_lines SET po_number=$3,formal_style_no=$4 WHERE production_order_id=$1 AND line_id=$2", [id, lineId, digitalFormalPoNo(input), digitalFormalPoNo(input)]);
       await client.query("UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1", [id]);
-      if(links.rowCount)await this.sourcing!.reviseDigitalNumbersWithClient(client,actor,id);
+      if(links.rowCount)targets=await this.sourcing!.reviseDigitalNumbersWithClient(client,actor,id);
       await this.audit(client, actor, "digital_numbers_corrected", id, line.rows[0], { lineId, ...input });
       return this.readWith(client, actor, id);
     });
-    await this.sourcing?.generateDigitalNumberContracts(actor,id);
+    // A borrowed transaction has not committed here. G1 resumes its prepared
+    // documents only if the actual owner commits.
+    if(!this.transactionClient&&targets.length)await this.sourcing?.generateDigitalNumberContracts(actor,targets);
     return result;
   }
 }
