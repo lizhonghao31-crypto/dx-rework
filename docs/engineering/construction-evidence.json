@@ -1,229 +1,246 @@
 {
   "version": 1,
-  "base": "b885466d2d0d73c703d6fba8b4866ff378ba406a",
+  "base": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
+  "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
   "risk": "full",
-  "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
   "rules": [
     {
-      "rule": "大货制单草稿可独立保存恢复。实际同一采购范围达到90%方可验布，原真实合格或有权批准且其它条件齐才正式发布",
-      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§6.2，A14/A15",
-      "initialization": "准确原采购数量、材料/批次、订正版本、实际日期与同单位。没有正式制单时仍可合法办理仓库原部分到货和验布，不因达到验布资格就跳制单或发料。",
-      "dateAndPermission": "原有权仓库、原验布报告/批准、原跟单正式发布，保持实际发生日期或原合法订正。不同批次、材料、单位、范围或未审批不代填。",
+      "rule": "G1 后监听恢复、每进程单任务和有界游标，租约过期按原身份及场景处理指定合同。",
+      "source": "2026-11-26 Eric 审核 G1–G9 施工与验收方案，G1 §1、§2、1a 和 §7。docs/requirements/sourcing-supplier-production-v1.0.md §8.1。",
       "writes": [
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/warehouse-fabric-inspection-eligibility.ts",
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
-        "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "apps/web/src/bulk-fabric-panel.tsx",
-        "packages/contracts/src/bulk-preparation.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/helpers/warehouse-original-issue-fixture.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/unit/warehouse-fabric-inspection-threshold.test.ts"
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing/sourcing-contract-recovery.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#resumePendingContracts",
+        "apps/api/src/sourcing/sourcing-contract-recovery-render.ts",
+        "apps/api/src/sourcing/sourcing-contract-render-child.ts",
+        "apps/api/src/sourcing/sourcing-contract-content.ts#hydrateContractContentImages",
+        "apps/api/src/sourcing/sourcing-contract-pdf.ts#normalizeSourcingContractSnapshotImages",
+        "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/acceptance-clock/runtime.ts",
+        "apps/api/src/sourcing/current-merchandiser.ts",
+        "apps/api/src/sourcing/sourcing-service.ts"
       ],
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
+        "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
       ],
-      "expectation": "原仓库三批累计450、467、468，采购应收520与真实技术生产需用500分开。前两次拒验，468仅允许验布且采购欠52。全程无整单到仓，质量尚未获准不发布，原有权批准及其它实际前置齐全后才正式发布。保原500应收下449/450的精确量边界用例。",
+      "initialization": "原 API listen 成功后才调度，旧实例排空后由配置显式打开。shutdown 停止领取并等待手头任务，原按文档与人工入口保留。",
+      "dateAndPermission": "数据库真实时间决定租约，业务就绪时间用原 Acceptance 场景或普通业务时钟。原账号能力、精确关联和场景身份缺失时记为待办理。",
+      "expectation": "持有首份 PDF 写入障碍时另一张单的原认证 GET 仍成功；扫描无重叠，跨页继续，丢场景身份时零领取。旧人工重试和 superseded PDF 留存。",
       "checks": [
-        "native",
-        "readiness",
-        "static",
-        "protocol"
+        "anchors",
+        "originals",
+        "unit",
+        "build",
+        "lint"
       ]
     },
     {
-      "rule": "实际发厂、工厂发回及准确 PO/裁单/生产厂原证据是新版成衣回货的共同写端前置，缺少时不能创建正式回货、质检或半套链接",
-      "source": "同一批准施工方案 §6.1，A16/A17/A18",
-      "initialization": "按原已记录准确数字化母单与实际 PO 身份、裁片/工厂、现存工厂执行来源。真实未选厂或未发厂、未有合法实际发回时不构造待收；原真正旧未接管路保留。",
-      "dateAndPermission": "由原仓管、工厂、原质检角色操作，原工厂发回实际上海业务日和仓库实际发出证据保真；先写后补假事实不允许，失败整个事务回滚。",
+      "rule": "G1 同文档只认持有有效凭证的获胜者，一次提交正式 PDF、首次就绪和工厂起钟。",
+      "source": "2026-11-26 Eric 审核施工单 G1 §3–§6、1b–1c，兼容原未领取文档和已生成 PDF。",
       "writes": [
-        "apps/api/src/production-platform/receiving-link-adapter.ts",
-        "apps/api/src/receiving/native-receipt-admission.ts",
-        "apps/api/src/receiving/receiving-service.ts",
-        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/order-closure-fixture.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "apps/api/migrations/0316_sourcing_contract_generation_attempts.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "apps/api/src/tools/attachments.ts#publishContractPdf",
+        "apps/api/src/tools/acceptance-storage.ts",
+        "apps/api/src/tools/storage.ts",
+        "apps/api/src/tools/aliyun-oss-v4-client.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#generateIfReady",
+        "tests/helpers/sourcing-contract-crash-worker.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts",
-        "apps/api/src/receiving/receiving-service.ts"
+        "apps/api/src/production-platform/contract-business-ready.ts",
+        "apps/api/src/production-platform/factory-batch-timing.ts",
+        "apps/api/src/tools/routes.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent"
       ],
       "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
+        "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/unit/sourcing-ssp05-contract-pdf.test.ts",
+        "tests/unit/aliyun-oss-v4-client.test.ts"
       ],
-      "expectation": "正常和旧入参未满足原实际发厂/发回均拒绝且不生成半套记录。实际同范围到仓280再220并保持原差异和真实待办；旧待核的实数为正仍拦，原入口更正为零保历史不拦其后合法原批次。",
+      "initialization": "迁移新增可空凭证与私有暂存登记，保留既有文档/附件。不回填历史。获胜登记、绑定和真实业务事实共享事务。",
+      "dateAndPermission": "正式下载仍经原绑定授权。旧凭证不再写；业务事实失败一并撤回。仅对已写、本次归属且无正式引用的对象做限定清理。",
+      "expectation": "接手后未提交时放行旧成功及失败，最终真实下载 SHA、正式附件、待办和首次就绪均只由获胜执行者决定。两个独立子进程硬停和实际数据库 COMMIT 已执行丢回执均核对原文档。",
       "checks": [
-        "native",
-        "readiness",
-        "static",
-        "protocol"
+        "anchors",
+        "originals",
+        "preflight",
+        "unit",
+        "build",
+        "lint"
       ]
     },
     {
-      "rule": "既有历史原提前回货保留而标待核，不冒充有效实收、装箱、质检或放行。正常原准确批次以同一资格在各业务读端取数",
-      "source": "同一批准施工方案 §6.1，A16–A18；F2 原测试异常仅只读",
-      "initialization": "只用原已授权准确原单、批次、当前数量版、PO、原裁单、原生产记录和工厂实际证据。原显示继续有审计记录，不删除修复伪造历史。",
-      "dateAndPermission": "保留原角色及原读权限，PMC 只能读不能写；不把旧数量登记视作已放行，实际合格、复检、差异和补录都看当前准确原数量版本。",
+      "rule": "G1 待办仍按当前业务文档处理，投影失败保留 PDF 并走原对账恢复。",
+      "source": "2026-11-26 Eric 审核施工单 G1 §6 与 1c；原合同回传版本、岗位资格和取消顺序。",
       "writes": [
-        "apps/api/src/production-platform/cockpit-receipt-service.ts",
-        "apps/api/src/production-platform/delivery-calendar-debt-summary.ts",
-        "apps/api/src/production-platform/delivery-calendar-facts.ts",
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-quality-coverage.ts",
-        "apps/api/src/production-platform/quality-center-garment-directory.ts",
-        "apps/api/src/production-platform/receiving-span.ts",
-        "apps/api/src/receiving/native-receipt-qualification.ts",
-        "apps/api/src/receiving/native-receiving-totals.ts",
-        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
-        "apps/api/src/receiving/receiving-board-query.ts",
-        "apps/api/src/receiving/receiving-quantity-query.ts",
-        "apps/api/src/receiving/receiving-service.ts",
-        "apps/api/src/sourcing/production-closure-service.ts",
-        "apps/web/src/cockpit-receipt-dialog.tsx",
-        "apps/web/src/order-board-page.tsx",
-        "apps/web/src/order-closure-panel.tsx",
-        "apps/web/src/production-closure-ui.tsx",
-        "apps/web/src/receiving-board-types.ts",
-        "packages/contracts/src/order-closure.ts",
-        "packages/contracts/src/production-closure.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/receiving-defective-quantity.test.ts"
+        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts#synchronize",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#synchronizeGeneratedContract",
+        "scripts/ci/full-gate-risk-map.mjs"
       ],
       "reads": [
-        "apps/api/src/production-platform/receiving-summary.ts",
-        "apps/api/src/production-platform/receiving-link-adapter.ts",
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/receiving/native-receiving-totals.ts"
+        "apps/api/src/sourcing/contract-return-clock.ts",
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
+        "apps/api/src/todos/projection-service.ts"
       ],
       "oldTests": [
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/unit/receiving-defective-quantity.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/contract-return-cycles-postgres.test.ts"
       ],
-      "expectation": "本地旧提前100更正为0后能合法收到300，原待核历史保留。与干净的300对照，座舱和结案实收均300，实际300合格并按原批次装箱后日历有效300，不混入原批次-100订正。合法订正计入实际数及次品，旧异常恢复正数只影响待核和写门，不改变有效合计或有效版本。现场F2不改。",
+      "initialization": "仍复用原当前批准版本和事务 SAVEPOINT。保留旧任务和合同历史，原 Root 对账入口具备准确同一文档校验。",
+      "dateAndPermission": "按原版、原授权与业务时钟投影；已就绪的有效 PDF 和延迟审计对应同一文档，无权操作原样拒绝。",
+      "expectation": "双跟单每版一份，历史 PDF 继续读，故障保 ready 且可从原对账入口恢复一份待办。Canonical Full 计划包含三组关键 PostgreSQL 套件。",
       "checks": [
-        "native",
-        "readiness",
-        "static",
-        "protocol"
+        "transfer",
+        "originals",
+        "preflight",
+        "anchors"
       ]
     }
   ],
   "checks": [
     {
-      "id": "native",
+      "id": "anchors",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/anchors.json tests/integration/business-anchors-clock-postgres.test.ts",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r5-evidence/review-fix/native.sh",
-      "status": "passed",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:06:37Z",
       "exitCode": 0,
-      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
-      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
-      "context": "实际仓管收发、历史独立、旧座舱次品口径、返工质检结案、交付日历及原角色 PG/Chromium",
-      "startedAt": "2026-11-26T12:01:22.762483+00:00",
-      "endedAt": "2026-11-26T12:09:09.518580+00:00",
-      "log": "/workspace/scratch/r5-evidence/review-fix/native.log",
-      "logSha256": "3351849b4759105ade336ce05ebb186ca20323825de80c9bb7e414002841e2a9",
-      "passed": 326,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。完整原时间事实夹具与 G1 本地回滚、两次硬停止、双写者和真实下载断点。",
+      "log": "/tmp/dx-g1-evidence/anchors.log",
+      "logSha256": "cb1f532d07ed35c9764f939e7de38ab2beaeb4d0f84a828ab538a9b22190f5ce",
+      "passed": 27,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e41a5995071dddd85f2dd99cc1f4064f924f9832413c8fbbd40ec8a30c3a794e"
+          "sha256": "4697aed4dc6e831ce3b94ad89f73f891af94bcc821a032fe73bf41b852da6f87"
         }
       ]
     },
     {
-      "id": "readiness",
+      "id": "originals",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g1-evidence/originals.json tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r5-evidence/review-fix/readiness.sh",
-      "status": "passed",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:56Z",
       "exitCode": 0,
-      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
-      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
-      "context": "原真实仓库三批累计450、467、468，采购520生产500，无整单到仓，草稿与验布和原发布独立",
-      "startedAt": "2026-11-26T12:01:22.768534+00:00",
-      "endedAt": "2026-11-26T12:03:58.973180+00:00",
-      "log": "/workspace/scratch/r5-evidence/review-fix/readiness.log",
-      "logSha256": "9b9178164d5be6a974c8c50e418f96f77b5baf10e940570f6b79b57943b16897",
-      "passed": 65,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。",
+      "log": "/tmp/dx-g1-evidence/originals.log",
+      "logSha256": "faacbd39b98f265ab763532e733237e539aeecdb74d79f6d3feaf097af08dcb2",
+      "passed": 12,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "eec160ba5be7071d9881c565cf794f0cd4ddc6a85f3ccb530496f0226a3938d4"
+          "sha256": "db0adcf9fb3155549a873c278ea05caf1f82b10e2ddb9500ce370e94f39f1320"
         }
       ]
     },
     {
-      "id": "static",
-      "kind": "command",
-      "command": "bash /workspace/scratch/r5-evidence/review-fix/static.sh b885466d2d0d73c703d6fba8b4866ff378ba406a",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
-      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
-      "context": "本候选类型、全部变更逻辑 lint、迁移 lint、时间清单、diff 及敏感扫描",
-      "startedAt": "2026-11-26T12:01:22.761151+00:00",
-      "endedAt": "2026-11-26T12:02:19.786356+00:00",
-      "log": "/workspace/scratch/r5-evidence/review-fix/static.log",
-      "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
-    },
-    {
-      "id": "protocol",
+      "id": "transfer",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/transfer.json tests/integration/sourcing-pr03-postgres.test.ts -t binds both authorized merchandisers|recovers missing transfer tasks explicitly|recovers an enrolled new transfer|keeps historical finance and signed PDFs|preserves 27 synthetic legacy orders|preserves the Root-edited delivery date",
       "kind": "tests",
-      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
-      "status": "passed",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:40Z",
       "exitCode": 0,
-      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
-      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
-      "context": "仓库固定 PR Gate、Evidence 与 Closeout 协议",
-      "startedAt": "2026-11-26T12:01:39.448636+00:00",
-      "endedAt": "2026-11-26T12:01:46.925165+00:00",
-      "log": "/workspace/scratch/r5-evidence/review-fix/protocol.log",
-      "logSha256": "d3320b68b95a437ae82bfe1bb4160833c7e497c9f7cc2bc54c8954a9481cda56",
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2；只定位相关六项，136 项因名称过滤没有运行。",
+      "log": "/tmp/dx-g1-evidence/transfer.log",
+      "logSha256": "ab03a7b077bcfa78d01dff59f8fbe7775aa69a72aa4b0aede0bc1a4adb0e5843",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 136,
       "resultReports": [
         {
-          "format": "node-tap",
-          "sha256": "d3320b68b95a437ae82bfe1bb4160833c7e497c9f7cc2bc54c8954a9481cda56"
+          "format": "vitest-json",
+          "sha256": "2cd0ab134e9102cbd5097b6adc351266c8ec68d9cf98b2a62725a76fb442f619"
         }
-      ],
+      ]
+    },
+    {
+      "id": "unit",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/tmp/dx-g1-evidence/unit.json tests/unit/sourcing-ssp05-contract-pdf.test.ts tests/unit/attachment-service-failures.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/business-time-write-contract.test.ts tests/integration/sourcing-routes.test.ts tests/integration/public-tools-routes.test.ts",
+      "kind": "tests",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:23Z",
+      "exitCode": 0,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10, nonDB canonical config maxWorkers=1; PDF, routes, attachment and time contracts.",
+      "log": "/tmp/dx-g1-evidence/unit.log",
+      "logSha256": "71dbac9f387e387808052dae7a945f8d2604249d5f116cd66de532f5899b5af5",
+      "passed": 70,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d5f918fb6d70cd21e1f372df92fa7738092b2cba335695660760162fcddec751"
+        }
+      ]
+    },
+    {
+      "id": "preflight",
+      "command": "npm run test:preflight",
+      "kind": "tests",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:18Z",
+      "exitCode": 0,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9, repository protocol worker cap 2; checksum-bound migration, time inventory and gate tests.",
+      "log": "/tmp/dx-g1-evidence/preflight.log",
+      "logSha256": "7769ae1a07646dc091ae3859368ea40213a8b4ceeebe66701b9d7fc1bb78e801",
       "passed": 285,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "build",
+      "command": "npm run build -w @dx-rework/api",
+      "kind": "command",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:28Z",
+      "exitCode": 0,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9; reused previously built workspace contracts/config/domain, API tsc build and original contract font copier.",
+      "log": "/tmp/dx-g1-evidence/build.log",
+      "logSha256": "c9493b47bf7234d5eb62cea780d266010c1a0374e8d89e98a877f46749bf8dc7"
+    },
+    {
+      "id": "lint",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/sourcing/sourcing-contract-content.ts apps/api/src/sourcing/sourcing-contract-history-scope.ts apps/api/src/sourcing/sourcing-contract-management-service.ts apps/api/src/sourcing/sourcing-contract-pdf.ts apps/api/src/sourcing/sourcing-contract-recovery-render.ts apps/api/src/sourcing/sourcing-contract-recovery.ts apps/api/src/sourcing/sourcing-contract-render-child.ts apps/api/src/sourcing/sourcing-contract-return-service.ts apps/api/src/sourcing/sourcing-contract-service.ts apps/api/src/sourcing/sourcing-transfer-contract-todos.ts apps/api/src/tools/acceptance-storage.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/server.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/helpers/sourcing-contract-crash-worker.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
+      "kind": "command",
+      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
+      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+      "startedAt": "2026-11-26T15:05:05Z",
+      "endedAt": "2026-11-26T15:05:09Z",
+      "exitCode": 0,
+      "status": "passed",
+      "context": "Node 22.22.2 / npm 10.9.9, direct ESLint on changed executable inputs and integration fixtures.",
+      "log": "/tmp/dx-g1-evidence/lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }
