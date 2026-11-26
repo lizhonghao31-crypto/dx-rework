@@ -7,8 +7,7 @@ import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
 import {bulkWashingWindowReference} from '@dx-rework/contracts/bulk-washing';
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
-import {admittedFrameworkProductionFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
-import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {admittedFrameworkProductionFixture,nativeReturnedFactoryFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
@@ -35,8 +34,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const flow=new FactoryFlowService(f.db),before=await flow.read(f.root,orderId);
     await flow.dispatch(f.root,orderId,{expectedRevision:before.revision,supplierId:f.supplierId,note:'TEST original factory scope'},randomUUID());
    }else{
-    const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},service=new ReceivingService(f.db);
-    const first=(await service.create(receiver,{cuttingOrderId:cut,documentQuantity:2,actualQuantity:1,attachmentIds:[await f.image(receiver)]},randomUUID())).value;
+    const {receiver,service,productionId}=await nativeReturnedFactoryFixture(f,{orderId,lineId,caseId:ready.caseId});
+    const first=(await service.create(receiver,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:2,actualQuantity:1,attachmentIds:[await f.image(receiver)]},randomUUID())).value;
     await service.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:first.receivingBatchId,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID());
     const receipts=await garmentQuality(f.db,orderId);expect(receipts).toHaveLength(2);
     for(const receipt of receipts)await new GarmentQualityService(f.db).record(f.root,orderId,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:1,occurredAt:'2026-11-17T08:00:00.000Z',problem:''},randomUUID());

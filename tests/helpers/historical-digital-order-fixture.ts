@@ -1,5 +1,6 @@
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
-import {observedBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {observedBusinessTime,registerAcceptanceCreated} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {enrollPreparation} from '../../apps/api/src/production-platform/preparation-material-repository.js';
 import {createHash,randomUUID} from "node:crypto";
 import type {Pool} from "pg";
 import {digitalFormalPoNo,type DigitalOrderInput} from "@dx-rework/contracts/digital-production";
@@ -9,7 +10,7 @@ import {DigitalPoDateRepository} from "../../apps/api/src/production-platform/po
 import {DigitalProductionIdentityService} from "../../apps/api/src/production-platform/identity-service.js";
 
 /** Seed genuine pre-rule records in an owned test schema. Never a production creation bypass. */
-export async function historicalDigitalOrder(database:Pool,actor:TrustedActorContext,input:DigitalOrderInput,options?:{slaBeforePreparation?:boolean}){
+export async function historicalDigitalOrder(database:Pool,actor:TrustedActorContext,input:DigitalOrderInput,options?:{slaBeforePreparation?:boolean;scenarioOwnedPreparation?:boolean}){
   const client=await database.connect();
   let id:string;
   try{
@@ -20,6 +21,15 @@ export async function historicalDigitalOrder(database:Pool,actor:TrustedActorCon
     const eventId=randomUUID();
     await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
       VALUES($1,$2,$3,'digital_order_created','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,id,JSON.stringify({...input,...(options?.slaBeforePreparation?{slaBusinessTime:observedBusinessTime()}:{})})]);
+    if(options?.scenarioOwnedPreparation){
+      await client.query('UPDATE digital_production_orders SET requires_color_matching=$2 WHERE production_order_id=$1',[id,input.requiresColorMatching??null]);
+      await registerAcceptanceCreated(client,{kind:'order',id},actor.actorId,eventId);
+      // This fixture variant has an actual recorded old business acceptance;
+      // only the first PO's customer date is absent, not the order's origin.
+      await client.query(`INSERT INTO digital_order_time_subjects(resource_kind,production_order_id,effective,created_by,created_business_time,creation_event_ref,production_route)
+        VALUES('order',$1,true,$2,$3,$4,$5)`,[id,actor.actorId,JSON.stringify(observedBusinessTime()),'audit_events:'+eventId,JSON.stringify(input.productionPlanning??null)]);
+      await enrollPreparation(client,{kind:'order',id},actor.actorId,eventId);
+    }
     for(const [position,line] of input.lines.entries()){
       const lineId=randomUUID();
       await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)

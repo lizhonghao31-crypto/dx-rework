@@ -3,6 +3,7 @@ import {useInstructionRecovery} from './use-instruction-recovery.js';
 import {instructionEnvelopeRequestBody,type InstructionRecoveryEnvelope} from './instruction-recovery-state.js';
 import {registerSessionInvalidator} from './auth-session.js';
 import {useOrderTimeApplication} from './order-time-application.js';
+import {instructionTimeInsufficient} from '@dx-rework/contracts/order-time-requests';
 import {PreparationWindows} from './production-readiness-panel.js';
 import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
@@ -52,11 +53,12 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const recovery=useInstructionRecovery(orderId),docRef=useRef(doc);docRef.current=doc;
   const [readRequired,setReadRequired]=useState(false);
   const timeApplication=useOrderTimeApplication(()=>setDirty(false));
+  const checkingPublication=useRef<symbol|null>(null),[publicationForecast,setPublicationForecast]=useState('');
   const submission=useRef(new SubmissionAttempt()),contextVersion=useRef(0);const [uncertain,setUncertain]=useState(false);
   useDigitalDetailNavigationGuard(dirty||uncertain, busy, writing, uncertain?"原提交结果尚未确认，离开不会撤销提交；原标识保留在本页恢复资料中，请勿另提。仍要离开？":"仍有未保存修改，确定返回？");
   const base = `orders/${orderId}/instruction`;
   useEffect(() => {
-    let live = true;previews.reset();writing.current=false;contextVersion.current++;recovery.mask();submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null);docRef.current=null; setError(""); setBusy(true);setReadRequired(false);
+    let live = true;previews.reset();writing.current=false;checkingPublication.current=null;contextVersion.current++;recovery.mask();submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null);docRef.current=null; setError("");setPublicationForecast(''); setBusy(true);setReadRequired(false);
     void (originalSnapshot?Promise.resolve(originalSnapshot):instructionRequest(base + (version ? `?version=${version}` : ""))).then(async value => {
       if(!live)return;const restored=await recovery.load(value,!embedded&&!version);if(!live)return;
       setSheet(value);setDoc(restored.document);docRef.current=restored.document;generation.current=restored.generation;setDirty(restored.dirty);setUncertain(restored.pending);setReceipt(restored.receipt??'');setSaveBlocked(false);setValidationMode(null);setSourceReviewOpen(false);operation.current=null;successfulUploads.current.clear();
@@ -93,7 +95,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     }catch(error){if(context===contextVersion.current){if(error instanceof DigitalRequestError&&[401,403,404].includes(error.status??0)){recovery.mask();setSheet(null);setDoc(null);docRef.current=null;}setError(error instanceof Error?error.message:'原提交回执尚未取得，原输入和标识保留');}return false;}
     finally{if(context===contextVersion.current){writing.current=false;setBusy(false);}}
   };
-  const act = async (path:string,method:string,body:unknown,recover=false,manualSave=false) => {
+  const act = async (path:string,method:string,body:unknown,recover=false,manualSave=false,onTimeRequired?:()=>void) => {
     if(originalSnapshot)return false;
     if(recover&&(recovery.savePending||recovery.decisionPending))return recoverCommand(recovery.savePending?'save':'decision');
     if(writing.current||uncertain&&!recover||!recover&&(readRequired||recovery.blocked||recovery.conflict||!recovery.ready))return false;
@@ -107,7 +109,9 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
       const value=await instructionRequest(base+path,method,submittedBody,originalKey,sheet??undefined);if(context!==contextVersion.current)return;
       if(envelope)try{await recovery.confirmed(envelope,value);}catch(error){throw new DigitalRequestError(error instanceof Error?error.message:'原提交回执尚未匹配',200,'INVALID_RESPONSE');}
       attempt.markConfirmed();if(path==='/source-review')recovery.clearSavedDraft(editGeneration);setUncertain(recovery.hasUnresolved);setSheet(value);recovery.observe(value);if(editGeneration===generation.current){setDoc(value.document);docRef.current=value.document;setDirty(false);previews.saved();}setSaveBlocked(false);setValidationMode(null);operation.current=null;setReceipt(instructionActionReceipt(path,method,value));
-    }catch(error){if(error instanceof DigitalRequestError&&!error.resultUnknown){if(envelope&&!recover)recovery.rejected(envelope);throw new SubmissionRequestError(error.message,error.code,error.status??500);}throw error;}};
+    }catch(error){if(error instanceof DigitalRequestError&&!error.resultUnknown){if(envelope&&!recover)recovery.rejected(envelope);
+      if(!recover&&context===contextVersion.current&&path==='/publish'&&error.status===409&&error.code==='ORDER_TIME_REQUEST_REQUIRED')onTimeRequired?.();
+      throw new SubmissionRequestError(error.message,error.code,error.status??500);}throw error;}};
     try{const result=recover?await attempt.retry():await attempt.run(execute);if(context!==contextVersion.current)return false;
       if(result.kind==='failure'){setError(result.failure.message+(result.uncertain?'；原制单结果待确认，请使用原内容核对，不要改后另提。':''));setUncertain(result.uncertain);setSaveBlocked(true);return false;}
       if(result.kind==='expired'){setError('原制单提交已超过安全恢复期限，请在原版本历史核对，不再重发。');return false;}return result.kind==='success';
@@ -186,13 +190,34 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const select = (key: "preshrink" | "secondaryCraft" | "unit", label: string, options: ReadonlyArray<{ value: string; label: string }>) => <label>{label}{readonly ? <span id={`instruction-${key}`} className="dx-doc-readonly">{options.find(option => option.value === doc[key])?.label ?? doc[key]}</span> : <select id={`instruction-${key}`} aria-label={label} aria-invalid={Boolean(issueText(`instruction-${key}`))} aria-describedby={issueText(`instruction-${key}`) ? `instruction-${key}-error` : undefined} disabled={inputDisabled} value={doc[key]} onChange={event => change({ [key]: event.target.value })}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>}{issueText(`instruction-${key}`) && <small className="dx-doc-field-error" id={`instruction-${key}-error`}>{issueText(`instruction-${key}`)}</small>}</label>;
   const focus = (next: InstructionTab, id: string) => { setTab(next); setFocusId(id); };
   const publish = () => {
-    if (readonly || writing.current||readRequired||recovery.blocked||recovery.conflict) return;
+    if (readonly || writing.current||checkingPublication.current||uncertain||readRequired||recovery.blocked||recovery.conflict) return;
     setValidationMode("publish");
     const validation = instructionIssues(doc, order, true);
     if (dirty) { setError("请先保存当前修改"); if (validation[0]) focus(validation[0].tab, validation[0].id); return; }
     if (validation.length) { setError("请核对发布所需资料"); focus(validation[0]!.tab, validation[0]!.id); return; }
     const input={ expectedVersion: sheet.version, orderVersion: order.version,...(sheet.readiness?{expectedReadinessRevision:sheet.readiness.revision}:{}) };
-    void (async()=>{try{if(await timeApplication.inspect({kind:'instruction_publish',orderId,input},Boolean(sheet.orderTimeEnabled)))await act('/publish','POST',input);}catch(reason){setError(reason instanceof Error?reason.message:'本单时间未核准，制单草稿保留');}})();
+    const proposal={kind:'instruction_publish' as const,orderId,input},turn=Symbol(),context=contextVersion.current,edit=generation.current;
+    checkingPublication.current=turn;setBusy(true);setError('');setPublicationForecast('');
+    const current=()=>checkingPublication.current===turn&&contextVersion.current===context&&generation.current===edit;
+    void (async()=>{
+      try{
+        if(sheet.orderTimeEnabled){
+          try{
+            const check=await timeApplication.readCheck(proposal);
+            if(!current())return;
+            if(check.feasibility==='unknown')setPublicationForecast([instructionTimeInsufficient(check)?'发布前预查：已证实有时效缺口，另有依据待核':'发布前预查：本单时效暂无法确认',...check.coverage].join('；'));
+          }catch(reason){if(current())setError('时效检查未返回，尚未提交；草稿保留。'+(reason instanceof Error?reason.message:''));return;}
+        }
+        if(!current())return;
+        let rejectedForTime=false;
+        const success=await act('/publish','POST',input,false,false,()=>{rejectedForTime=true;});
+        if(!success&&rejectedForTime&&current()){
+          setPublicationForecast('');
+          if(!await timeApplication.checkInstructionShortage(proposal,current)&&current())setError('发布未被接受，当前时效已变化；草稿保留，请重新核对后发布。');
+        }
+      }catch(reason){if(current())setError('制单草稿保留；请重新读取本单时效。'+(reason instanceof Error?reason.message:''));}
+      finally{if(checkingPublication.current===turn){checkingPublication.current=null;if(contextVersion.current===context)setBusy(false);}}
+    })();
   };
   const remove = async (message: string, nonempty: boolean, action: () => void) => {
     if (inputDisabled) return;
@@ -211,7 +236,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   };
   const printable = sheet.isPublishedSnapshot && !dirty && !busy;
   return <Surface><article className="dx-doc-instruction">
-    {timeApplication.dialog}
+    {publicationForecast&&<p role="status">{publicationForecast}</p>}{timeApplication.dialog}
     <div className="instruction-screen">
       <DocumentToolbar title="大货制单" status={status}>
         {!embedded&&!contained&&<Button type="button" disabled={busy} onClick={onClose}>返回</Button>}

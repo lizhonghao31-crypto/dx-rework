@@ -41,6 +41,7 @@ export const OrderTimeCheckResultSchema=z.object({
  plan:FrozenOrderTimePlanSchema,rows:OrderTimeRowsSchema,coverage:z.array(z.string()),
  feasibility:z.enum(['sufficient','insufficient','unknown','not_applicable']),availableMinutes:z.number().nullable(),requiredMinutes:z.number().nullable(),lateMinutes:z.number().nullable(),expectedEnd:z.string().nullable(),forecastQuality:z.enum(['conditional','lower_bound','unknown']),
  publicationMayProceedWithUnconfirmedFabric:z.literal(true).optional(),
+ instructionLegacyGaps:z.array(z.object({scopeRef:z.string().startsWith('po:'),date:z.iso.date(),earliestAt:z.iso.datetime(),lateMinutes:z.number().nonnegative()}).strict()).optional(),
  factoryCommitments:z.array(z.object({lineId:z.string(),label:z.string(),date:z.string(),version:z.number().int().nonnegative(),source:z.string(),plannedReceipt:z.string().nullable(),lateMinutes:z.number().nonnegative().nullable(),status:z.enum(['sufficient','insufficient','unknown'])}).strict()).optional(),
  washing:z.array(z.object({lineId:z.uuid(),label:z.string(),version:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema.nullable()}).strict()).optional(),
  rewashing:z.array(OrderTimeWashingReworkChoiceSchema).optional(),
@@ -48,6 +49,21 @@ export const OrderTimeCheckResultSchema=z.object({
  canRequest:z.boolean(),canApply:z.boolean(),sourceVersion:z.record(z.string(),z.unknown()),
 }).strict();
 export type OrderTimeCheckResult=z.infer<typeof OrderTimeCheckResultSchema>;
+/** A separately comparable PO gap already rules out automatic instruction
+ * publication, even while the aggregate still needs other inputs to adopt. */
+export function instructionConfirmedGaps(check:Pick<OrderTimeCheckResult,'framework'|'factoryCommitments'|'instructionLegacyGaps'>){
+ return {
+  legacy:check.instructionLegacyGaps??[],
+  milestones:check.framework?.milestones.filter(row=>row.scopeRef.startsWith('po:')&&row.status==='insufficient'&&row.target.at!==null&&row.lateMinutes!==null)??[],
+  factories:check.factoryCommitments?.filter(row=>row.status==='insufficient'&&row.plannedReceipt!==null&&row.lateMinutes!==null)??[],
+ };
+}
+export function instructionTimeInsufficient(check:Pick<OrderTimeCheckResult,'feasibility'|'framework'|'factoryCommitments'|'instructionLegacyGaps'>){
+ if(check.feasibility==='insufficient')return true;
+ if(check.feasibility!=='unknown')return false;
+ const {legacy,milestones,factories}=instructionConfirmedGaps(check);
+ return legacy.length+milestones.length+factories.length>0;
+}
 export const OrderTimeRequestReadSchema=z.object({requestId:z.string().uuid(),version:z.number().int().positive(),state:OrderTimeRequestStateSchema,operation:OrderTimeOperationSchema,requestedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict(),designerId:z.string().uuid(),reason:z.string(),returnReason:z.string().nullable(),appliedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict().nullable(),result:z.object({orderId:z.string().uuid().nullable(),lateMinutes:z.number().nullable()}).strict().nullable(),check:OrderTimeCheckResultSchema,canWithdraw:z.boolean()}).strict();
 export type OrderTimeRequestRead=z.infer<typeof OrderTimeRequestReadSchema>;
 
