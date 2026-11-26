@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "02ae70756e6902117d95b0e17109a50436a61e5a",
+  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
   "risk": "full",
-  "sourceFingerprint": "2987bc534408db980a669c0137c66af54ed55e826e960f76ca32ff0579a885e3",
+  "sourceFingerprint": "5b51fdb0f58a1e8126e931d532c25f969789f6c162060f641da20ccd16ccc6a1",
   "rules": [
     {
       "rule": "原大货产前准备组只有授权报价目的地时，桌面在原位置直达；其余组、手机入口及 AuthGate 沿用原规则。",
@@ -59,7 +59,20 @@
           "format": "vitest-json",
           "sha256": "62dca3e39d78f3e6a6c1fd86998fedb430da6d75fe9d96aecd7561640f225d1b"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "scripts",
+        "vitest.config.ts",
+        "tests/unit/finance-navigation-hierarchy.test.ts",
+        "tests/unit/platform-modules.test.ts"
+      ],
+      "inputFingerprint": "5fca9574eea314e19270afd6022746ad35a67bb53bd06b67bb3485a176eb67f0"
     },
     {
       "id": "g6-compiled-web",
@@ -73,7 +86,16 @@
       "startedAt": "2026-11-26T16:33:14Z",
       "endedAt": "2026-11-26T16:33:51Z",
       "log": "/tmp/dx-g6-evidence.UHEBPu/build.log",
-      "logSha256": "64ea7487cd202e17e43d1b2a34de07bddb2e27d1c227cb00a4e4fe12e9ccb511"
+      "logSha256": "64ea7487cd202e17e43d1b2a34de07bddb2e27d1c227cb00a4e4fe12e9ccb511",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c2f57cfb3a31ab1c050c403f7eb12dce11d2f164d799d810ca9863328ce33740"
     },
     {
       "id": "g6-compiled-browser",
@@ -87,7 +109,16 @@
       "startedAt": "2026-11-26T16:34:20Z",
       "endedAt": "2026-11-26T16:34:24Z",
       "log": "/tmp/dx-g6-evidence.UHEBPu/browser.log",
-      "logSha256": "ef3d0cb2108f6d3652f88aab2f104e57ca8a414f157600d928fd8015a9cf473a"
+      "logSha256": "ef3d0cb2108f6d3652f88aab2f104e57ca8a414f157600d928fd8015a9cf473a",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c2f57cfb3a31ab1c050c403f7eb12dce11d2f164d799d810ca9863328ce33740"
     }
   ]
 }
