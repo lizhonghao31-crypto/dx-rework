@@ -13,7 +13,7 @@ import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-pla
 import { registerSourcingRoutes } from "../../apps/api/src/sourcing/sourcing-routes.js";
 import { businessAnchorFixture } from "../helpers/business-anchor-fixture.js";
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL ?? process.env.TEST_DATABASE_URL;
 (databaseUrl ? describe : describe.skip)("G2 original digital PO and sourcing style revision replay", () => {
   type Fixture = Awaited<ReturnType<typeof businessAnchorFixture>>;
   type SeededOrder = Awaited<ReturnType<Fixture["bulkReady"]>>;

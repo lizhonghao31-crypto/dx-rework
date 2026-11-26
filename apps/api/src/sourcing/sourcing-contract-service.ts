@@ -175,10 +175,13 @@ export class SourcingContractService {
         if (options.stop?.()) break;
         const jobTimeout = AbortSignal.timeout(options.jobTimeoutMs ?? 240_000);
         const signal = options.signal ? AbortSignal.any([options.signal, jobTimeout]) : jobTimeout;
-        const result = await this.generateIfReady(identity.actor, candidate.case_id, candidate.document_id, {
+        const args = [identity.actor, candidate.case_id, candidate.document_id, {
           recoveryVersion: candidate.version, signal,
           ...(clock ? { clock } : {}), ...(options.report ? { report: options.report } : {}),
-        }, identity.numberCorrection);
+        }] as const;
+        const result = identity.numberCorrection
+          ? await this.generateIfReady(...args, true)
+          : await this.generateIfReady(...args);
         if (result.item?.status === "ready") ready++;
       } catch (error) {
         if (options.signal?.aborted) break;

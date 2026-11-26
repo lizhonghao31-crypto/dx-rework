@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
-  "sourceFingerprint": "47653bdc50e979137117a694e3d706a2d5fc6e5d83913a428e8496bc2f8f03cf",
+  "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
   "risk": "full",
   "rules": [
     {
@@ -86,14 +86,15 @@
       ],
       "oldTests": [
         "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
       ],
       "newTests": [
         "tests/integration/g2-number-style-replay-postgres.test.ts"
       ],
       "initialization": "不改 PO 写者，留待 G8。数字单回执仍存原表；外层自持事务不抢先生成，G1 只接真实提交文档。生产原唯一索引限制每母单仅一个外发子单，双 PO + 另一母单是可实际办理的对照。",
       "dateAndPermission": "签名原岗位按当前身份、母单归属和准备关联发布。设计师仅能内部完成本次原合同，公开 GET 权限不放开。按 G1 原归属和受控时钟，Root 权限由既有权威验证。",
-      "expectation": "真实 PATCH/POST 稳定回执，不生成 B；无变化、冲突、借用事务回退与提交边界。G1 续办准确设计师文档，公开合同请求仍 403；人工原入口仍可生成当前版；两个新真库文件映射至 Full。",
+      "expectation": "真实 PATCH/POST 稳定回执，不生成 B；无变化、冲突、借用事务回退与提交边界。G1 续办准确设计师文档，公开合同请求仍 403；人工原入口仍可生成当前版；两个新真库文件映射至 Full，并用仓库原分离时钟夹具配置。非数字合同沿原四参数函数契约。",
       "checks": [
         "replay",
         "compatibility",
@@ -105,47 +106,47 @@
   "checks": [
     {
       "id": "replay",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g2-evidence/post-g4/replay.json tests/integration/g2-contract-transfer-replay-postgres.test.ts tests/integration/g2-number-style-replay-postgres.test.ts",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.config.ts /tmp/dx-g2-evidence/hosted-repair/replay.json tests/integration/g2-contract-transfer-replay-postgres.test.ts tests/integration/g2-number-style-replay-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts -t G2 original|resumes pending work by document ID",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3b5f1ee7491a6a3c00abb54c8723a6a3d9172502",
-      "sourceFingerprint": "47653bdc50e979137117a694e3d706a2d5fc6e5d83913a428e8496bc2f8f03cf",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，串行 suites。 G2 原 HTTP / SQL 事实。原 G2 提交上的公共幂等八项及静态二十四项仍为原 Head 记录，不重复。",
-      "startedAt": "2026-11-26T16:44:40Z",
-      "endedAt": "2026-11-26T16:45:13Z",
-      "log": "/tmp/dx-g2-evidence/post-g4/replay.log",
-      "logSha256": "1fdf039a5aa902d50f6b1eeb6d8132718d2b57ed4c9262f4c2650ecc62a1e9a3",
-      "passed": 12,
+      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
+      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 G2 原 HTTP / SQL 事实和既有老板审批精准续办回归。原 G2 提交上的公共幂等八项及静态二十四项仍为原 Head 记录，不重复。",
+      "startedAt": "2026-11-26T16:57:35Z",
+      "endedAt": "2026-11-26T16:58:12Z",
+      "log": "/tmp/dx-g2-evidence/hosted-repair/replay.log",
+      "logSha256": "851f2b0c4c4df17508be3ef86c56bed8653773699e7464cdb24f87b32bdf38fa",
+      "passed": 13,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 6,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "df75534cfd824e4f8c9c5b06e665809c63251dc1eb97bcb1bc6c3b70e018f3a5"
+          "sha256": "897bec330c0aa740c2283bf4fdc2afb07f7254df6ae0d0e897b0d4204be272e9"
         }
       ]
     },
     {
       "id": "compatibility",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g2-evidence/post-g4/compatibility.json tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts -t keeps approval successful|applies transfer delivery|freezes increased-price delivery|rolls back a late transfer|binds both authorized merchandisers|G1 |bounded pages",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g2-evidence/hosted-repair/compatibility.json tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts -t keeps approval successful|applies transfer delivery|freezes increased-price delivery|rolls back a late transfer|binds both authorized merchandisers|G1 |bounded pages",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3b5f1ee7491a6a3c00abb54c8723a6a3d9172502",
-      "sourceFingerprint": "47653bdc50e979137117a694e3d706a2d5fc6e5d83913a428e8496bc2f8f03cf",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，串行 suites。 原 G1 竞态、外发合同和转厂定向历史用例，其他测试故意 name-filter。",
-      "startedAt": "2026-11-26T16:45:13Z",
-      "endedAt": "2026-11-26T16:45:45Z",
-      "log": "/tmp/dx-g2-evidence/post-g4/compatibility.log",
-      "logSha256": "82b214e18880c7437050dfc933598b72f9e1cbbd721605560b18b1f6047bf8cd",
+      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
+      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 原 G1 竞态、外发合同和转厂定向历史用例，其他测试故意 name-filter。",
+      "startedAt": "2026-11-26T16:58:12Z",
+      "endedAt": "2026-11-26T16:58:43Z",
+      "log": "/tmp/dx-g2-evidence/hosted-repair/compatibility.log",
+      "logSha256": "8608f2c84589a300a0333f46f1d85d329f1899b81edcdcd141cedb34e54fa7d2",
       "passed": 15,
       "failed": 0,
       "skipped": 156,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4a3c590aa4e804da257216e55d5b1308c5c82589276681532485369d95600541"
+          "sha256": "fda4f2f9930f069f27f29f554b0668261e660fc76cdf513b67343999305893ff"
         }
       ]
     },
@@ -155,12 +156,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3b5f1ee7491a6a3c00abb54c8723a6a3d9172502",
-      "sourceFingerprint": "47653bdc50e979137117a694e3d706a2d5fc6e5d83913a428e8496bc2f8f03cf",
+      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
+      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
       "context": "Node 22.22.2 / npm 10.9.9，API TypeScript。",
-      "startedAt": "2026-11-26T16:44:50Z",
-      "endedAt": "2026-11-26T16:45:05Z",
-      "log": "/tmp/dx-g2-evidence/post-g4/api-typecheck.log",
+      "startedAt": "2026-11-26T16:57:52Z",
+      "endedAt": "2026-11-26T16:58:07Z",
+      "log": "/tmp/dx-g2-evidence/hosted-repair/api-typecheck.log",
       "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
     },
     {
@@ -169,13 +170,13 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3b5f1ee7491a6a3c00abb54c8723a6a3d9172502",
-      "sourceFingerprint": "47653bdc50e979137117a694e3d706a2d5fc6e5d83913a428e8496bc2f8f03cf",
+      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
+      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
       "context": "Node 22.22.2，原仓库预检，涵盖风险与 Gate 配置。",
-      "startedAt": "2026-11-26T16:44:50Z",
-      "endedAt": "2026-11-26T16:44:51Z",
-      "log": "/tmp/dx-g2-evidence/post-g4/preflight.log",
-      "logSha256": "72923470503dff1a0e8f2a660874b6bc3a5c5b2465b2376def082bf3d5b39c28",
+      "startedAt": "2026-11-26T16:57:52Z",
+      "endedAt": "2026-11-26T16:57:53Z",
+      "log": "/tmp/dx-g2-evidence/hosted-repair/preflight.log",
+      "logSha256": "1d1afc861a355bf78a549db3c745d4c8eede29a7bb63a4a5e6b14839a4735938",
       "passed": 2,
       "failed": 0,
       "skipped": 0

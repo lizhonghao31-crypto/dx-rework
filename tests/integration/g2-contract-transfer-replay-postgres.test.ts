@@ -14,7 +14,7 @@ import { TodoService } from "../../apps/api/src/todos/service.js";
 import { businessAnchorFixture } from "../helpers/business-anchor-fixture.js";
 import { seenSourcingOwnerDecision } from "../helpers/sourcing-owner-approval-fixture.js";
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL ?? process.env.TEST_DATABASE_URL;
 const aliases = ["merchandiser","production-management","owner","warehouse"] as const;
 type Alias = typeof aliases[number];
 
