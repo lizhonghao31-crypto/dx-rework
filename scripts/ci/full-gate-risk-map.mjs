@@ -504,6 +504,11 @@ export const classifyFullGatePaths = (inputPaths) => {
     for(const suite of ['g2-contract-transfer-replay','g2-number-style-replay'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
     domains.add('sourcing-original-command-replay');
   }
+  if(paths.some(path=>['apps/api/src/production-platform/sourcing-po-style-revision.ts',
+    'tests/integration/g8-sourcing-po-style-revision-postgres.test.ts'].includes(path))){
+    for(const suite of ['g8-sourcing-po-style-revision','g2-number-style-replay','sourcing-pr03'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
+    domains.add('sourcing-po-style-writer');
+  }
   if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){
     for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
     domains.add('todo-read-split');

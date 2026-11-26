@@ -16,6 +16,7 @@ import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { validateBudgetSourcing, bindBudgetSourcing,readBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
 import {assertBudgetCraftBasis,readBudgetIeAdoption,readLinkedIeBudgetCorrection} from '../production-platform/quotation-budget-basis.js';
 import { resolveDigitalChild } from "../production-platform/child-link-repository.js";
+import { writeSourcingPoStyleRevision } from "../production-platform/sourcing-po-style-revision.js";
 import {readQuoteAnalysis} from "./sourcing-analysis.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -1052,7 +1053,8 @@ export class SourcingService {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await lockDigitalSourcingHandover(client,sourcingCaseId,actor,manager ? MANAGEMENT_DECISION_CAPABILITY : CASE_CREATE_CAPABILITY);
-      const source = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
+      const source = (await client.query<{created_by:string;generation:string|null}>(`SELECT source.created_by,to_jsonb(source)->>'workflow_generation' AS generation
+         FROM sourcing_cases source WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL FOR UPDATE`,[sourcingCaseId])).rows[0];
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && ((!manager && await effectiveSourcingMerchandiser(client,sourcingCaseId,source!.created_by) !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
@@ -1079,13 +1081,8 @@ export class SourcingService {
         });
         await client.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
           VALUES($1,$2,$3::jsonb,$4,$5,$6)`,[sourcingCaseId,(before.identityRevision ?? 0)+1,JSON.stringify(lines),actor.actorId,eventId,actor.requestId]);
-        if((await client.query("SELECT to_regclass('digital_production_child_lines') AS relation")).rows[0]?.relation){
-          const link=(await client.query("SELECT l.production_order_id FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.child_id=$1 AND s.workflow_generation='digital_production_v1'",[sourcingCaseId])).rows[0];
-          if(link){
-            for(const line of lines)await client.query("UPDATE digital_production_po_lines p SET po_number=$3,formal_style_no=$3,temporary_style_no=$4 FROM digital_production_child_lines l WHERE l.module='sourcing' AND l.child_id=$1 AND l.child_line_key=$2 AND p.line_id=l.line_id",[sourcingCaseId,String(line.position),line.styleNo,line.alternateStyleNo]);
-            await client.query('UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1',[link.production_order_id]);
-          }
-        }
+        await writeSourcingPoStyleRevision(client,{caseId:sourcingCaseId,workflowGeneration:source!.generation,
+          lines:lines.map((line,index)=>({...line,changed:line.styleNo!==previous[index]!.styleNo || line.alternateStyleNo!==previous[index]!.alternateStyleNo}))});
         if (before.approvalSnapshot) documentId=await this.contractService?.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor,true);
         return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
       });
