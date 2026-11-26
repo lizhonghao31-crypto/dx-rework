@@ -74,6 +74,7 @@
       "context": "Isolated native PostgreSQL 16 and real authenticated Chromium. Review regressions, actual publication, verifiable accessory and original window.",
       "startedAt": "2026-11-26T06:59:02.279827+00:00",
       "endedAt": "2026-11-26T06:59:36.778615+00:00",
+      "log": "/workspace/scratch/r2-evidence/native.log",
       "logSha256": "776dc6c83c6fc5ca14b0d695cdb8eb881c3cb4301bcb5da11087680d1a663472",
       "passed": 6,
       "failed": 0,
@@ -96,6 +97,7 @@
       "context": "Isolated native PostgreSQL 16. Full original per-order time approval and execution on the exact revised R2 source.",
       "startedAt": "2026-11-26T06:59:02.114641+00:00",
       "endedAt": "2026-11-26T06:59:45.031945+00:00",
+      "log": "/workspace/scratch/r2-evidence/order-time.log",
       "logSha256": "684ded98eb4809faf644e316e36c250587c8f9345218b5e834c2f84375b20b0c",
       "passed": 39,
       "failed": 0,
@@ -118,11 +120,12 @@
       "context": "Locked Node 22 and npm 10 workspace typecheck, touched-source lint and working tree secret check.",
       "startedAt": "2026-11-26T06:58:54.167875+00:00",
       "endedAt": "2026-11-26T06:59:40.942413+00:00",
+      "log": "/workspace/scratch/r2-evidence/static.log",
       "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
     },
     {
       "id": "protocol",
-      "kind": "command",
+      "kind": "tests",
       "command": "bash -lc 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
       "status": "passed",
       "exitCode": 0,
@@ -131,7 +134,17 @@
       "context": "Exact GitHub Light protocol tests checked locally. The known reviewed display-site signature is synchronized.",
       "startedAt": "2026-11-26T06:58:54.159716+00:00",
       "endedAt": "2026-11-26T06:58:59.018370+00:00",
-      "logSha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c"
+      "log": "/workspace/scratch/r2-evidence/protocol.log",
+      "logSha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c"
+        }
+      ],
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }
