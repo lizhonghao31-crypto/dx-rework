@@ -59,7 +59,8 @@
           "sha256": "47dd20cfd66229d2b4e1af4eeaadd77a90127a8401457ecb8d90e22d33fc5937"
         }
       ],
-      "context": "Node 22.22.2, npm 10.9.9, Vitest 4.1.10 默认非 DB worker 上限（scripts/test-execution-config.mjs），本次并行两个独立文件；base 工作树带本记录 sourceFingerprint 的候选差量；无 DB 和生产连接。原 PG 用例只核消费者，未重复运行。"
+      "context": "Node 22.22.2, npm 10.9.9, Vitest 4.1.10 非 DB worker 上限 1（scripts/test-execution-config.mjs），本次两个文件由同一个 worker 顺序执行；base 工作树带本记录 sourceFingerprint 的候选差量；无 DB 和生产连接。原 PG 用例只核消费者，未重复运行。",
+      "log": "/tmp/dx-g3-evidence/unit.log"
     },
     {
       "id": "warehouse-browser-replay",
@@ -75,7 +76,8 @@
       "passed": 1,
       "failed": 0,
       "skipped": 0,
-      "context": "Node 22.22.2、Chromium 151.0.7922.173，1 个浏览器依序回放固定 base 与具备本记录 sourceFingerprint 的候选。实际仓库 URL、受控数据与仓管鉴权响应，两版各 7 次开发态收料 GET（含 StrictMode 启动重复），均 0 次 API 写。现场 3b 未验。"
+      "context": "Node 22.22.2、Chromium 151.0.7922.173，1 个浏览器依序回放固定 base 与具备本记录 sourceFingerprint 的候选。实际仓库 URL、受控数据与仓管鉴权响应，两版各 7 次开发态收料 GET（含 StrictMode 启动重复），均 0 次 API 写。现场 3b 未验。",
+      "log": "/tmp/dx-g3-evidence/browser.log"
     },
     {
       "id": "g3-web-static",
@@ -88,7 +90,8 @@
       "endedAt": "2026-11-26T14:52:09Z",
       "logSha256": "4f3fc6531af4a2d56185851cc34d846e1ce8784dc5eb726ec437bc3533ee29fa",
       "kind": "command",
-      "context": "Node 22.22.2、npm 10.9.9、锁定依赖和准确 base 工作树上的候选源指纹；两份直接受影响源文件和 Web 工作空间。"
+      "context": "Node 22.22.2、npm 10.9.9、锁定依赖和准确 base 工作树上的候选源指纹；两份直接受影响源文件和 Web 工作空间。",
+      "log": "/tmp/dx-g3-evidence/static.log"
     }
   ]
 }
