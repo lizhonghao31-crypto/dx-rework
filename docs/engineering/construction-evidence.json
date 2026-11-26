@@ -2,7 +2,7 @@
   "version": 1,
   "base": "a86a45fa31865731bcaf2c2358a05936495e016e",
   "risk": "full",
-  "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+  "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -15,7 +15,8 @@
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts",
         "apps/api/src/production-platform/order-time-operation-state.ts#instructionConfirmedGaps",
         "tests/helpers/historical-digital-order-fixture.ts#scenarioOwnedPreparation",
-        "tests/integration/order-time-requests-browser-postgres.test.ts#ProductionClosureService"
+        "tests/integration/order-time-requests-browser-postgres.test.ts#ProductionClosureService",
+        "apps/api/src/production-platform/order-time-request-plan.ts#compareLegacyInstructionScopes"
       ],
       "reads": [
         "apps/api/src/production-platform/production-instruction-routes.ts#registerInstructionRoutes",
@@ -32,7 +33,7 @@
       "newTests": [
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 同单 A 明确资料未知而 B 在原 PO 可比目标下已证实不足，不写制单或正式时效。原申请可接续、未齐时仍不能采用，即使有原有晚期确认。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。",
+      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 同单 A 明确资料未知而 B 在原 PO 可比目标下已证实不足，不写制单或正式时效。原申请可接续、未齐时仍不能采用，即使有原有晚期确认。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。 旧无 framework 分支中，只有 B 原生工期和它自身目标可比才记不足；A 缺原日期不覆盖 B，真正共享路线缺口或 B 缺原用时/日历不生成不足。实际测 B 原交期 2027-03-03，精确最早 2027-03-04T20:00Z，1680 分钟，原入口拒绝后不写任何制单或时效计划。",
       "checks": [
         "native",
         "canonical",
@@ -65,7 +66,7 @@
       "newTests": [
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。 保持汇总未知和真实逐 PO 缺口两个维度，正式制单、预查重读、PMC 和原申请共享已核不足判定，现有正确性预算不变。",
+      "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。 保持汇总未知和真实逐 PO 缺口两个维度，正式制单、预查重读、PMC 和原申请共享已核不足判定，现有正确性预算不变。 无 framework 旧方案沿同一预查、原发布、PMC 与设计师申请读回；正式时效保持汇总未知，不修改管理端审批。",
       "checks": [
         "native",
         "canonical",
@@ -148,89 +149,89 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/frozen/native.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
-      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
-      "context": "准确基座与候选，隔离 PostgreSQL、原页面 Chromium、现有长正确性配置；原制单及双 PO 和原申请历程。",
-      "startedAt": "2026-11-26T20:33:23.864824+00:00",
-      "endedAt": "2026-11-26T20:36:12.906257+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/frozen/native.log",
-      "logSha256": "fc0a043249235cdba42a5e7c105f66b73348d512eef661cb841cf98ffa64635b",
-      "passed": 23,
+      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
+      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+      "context": "隔离 PostgreSQL 受限身份、原浏览器/跟单页面，补核旧制单、有/无正式计划、独立逐 PO 及原申请；已绿新版混合例不由这次定向重跑",
+      "startedAt": "2026-11-26T20:47:10.701589+00:00",
+      "endedAt": "2026-11-26T20:49:58.882173+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/legacy-final/native.log",
+      "logSha256": "e8278c62b2edad234db28c401d681b3fbf0c8a49b180701b1c7b3159d05201a7",
+      "passed": 24,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "360326df3be3e0aadfd40e94a1f628f924839440d19afb532c11449f6fb61e51"
+          "sha256": "18f92215ee2b84b07d32d7796b187be62e8fc595df825f3360c5b01cd47f2567"
         }
       ]
     },
     {
       "id": "inherited-native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/frozen/inherited-native.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/inherited-native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
-      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
-      "context": "准确基座与候选，继续核 #1125 正常启动同批返工和原合同/末工艺分批发厂完整套件。",
-      "startedAt": "2026-11-26T20:33:23.864414+00:00",
-      "endedAt": "2026-11-26T20:34:50.504802+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/frozen/inherited-native.log",
-      "logSha256": "79c278dd3ce3d35f5a13d32c82563614c4fe3a83f057d6de09e536309b91fd69",
+      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
+      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+      "context": "继承已合 QC 正常启动真实浏览器及两类合同 ready 的末步骤发厂隔离 PostgreSQL",
+      "startedAt": "2026-11-26T20:47:10.728104+00:00",
+      "endedAt": "2026-11-26T20:48:36.858716+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/legacy-final/inherited-native.log",
+      "logSha256": "5bfdb1c0f43490863240eef3ebb085499213d2af953b893339ae6d38db81ceab",
       "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f85a23557d2be9f4ddc6fe1ea06a57bd0ae73dabaa37dfe3e492de1d64c6a805"
+          "sha256": "ef68bd472307fb338dada89480961f3b6cb1f754c1ae7073f6020cc6a1d64f47"
         }
       ]
     },
     {
       "id": "canonical",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/frozen/canonical.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/canonical.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
-      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
-      "context": "准确候选的完整 canonical risk-map 用例，两项实际浏览器保留现有长正确性和正当浏览器准备。",
-      "startedAt": "2026-11-26T20:33:23.864440+00:00",
-      "endedAt": "2026-11-26T20:33:25.315077+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/frozen/canonical.log",
-      "logSha256": "fcd4bc0527a93f44016e1cde334e7a4f992a5943ccececd6f4620ae1018db4b9",
+      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
+      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+      "context": "本地审定风险映射全文件，保持两个原浏览器及原 suite 登记",
+      "startedAt": "2026-11-26T20:47:10.704932+00:00",
+      "endedAt": "2026-11-26T20:47:12.216794+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/legacy-final/canonical.log",
+      "logSha256": "7b7ba07bc62d981d3ccf8b05064d40b3df24e4c8e68e47c51fc588b30243c53f",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "50322b7be6c619a8f6746e6ddd241bdb83609254e33b90bcff430ab809129cc2"
+          "sha256": "8970e6ae732aa8e59e2986c81d2ec96e80de500488b0ef3807b1bacd49bf3f60"
         }
       ]
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/frozen/protocol.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/protocol.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
-      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
-      "context": "准确候选的 CI 协议和时间来源清单回归，核原先两项 Light 报错均通过。",
-      "startedAt": "2026-11-26T20:33:23.865804+00:00",
-      "endedAt": "2026-11-26T20:33:31.570543+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/frozen/protocol.log",
-      "logSha256": "82a74044c544626afc092b9b6892afb746f6cf7e060416468711de225ca43143",
+      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
+      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+      "context": "原 Gate 协议验算、预检和约束，不重新触发仓库 Light",
+      "startedAt": "2026-11-26T20:47:10.733114+00:00",
+      "endedAt": "2026-11-26T20:47:18.099043+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/legacy-final/protocol.log",
+      "logSha256": "7ff64d9009c4808a44a27e550914902daf62f499a7205536a4b121178ac19909",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "82a74044c544626afc092b9b6892afb746f6cf7e060416468711de225ca43143"
+          "sha256": "7ff64d9009c4808a44a27e550914902daf62f499a7205536a4b121178ac19909"
         }
       ],
       "passed": 285,
@@ -240,15 +241,15 @@
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/frozen/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
-      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
-      "context": "准确候选 Node 22 / npm 10，以现有时间清单、改动 ESLint、工作区类型、迁移及 secret 静态检查。",
-      "startedAt": "2026-11-26T20:33:23.867238+00:00",
-      "endedAt": "2026-11-26T20:34:16.160284+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/frozen/static.log",
+      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
+      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+      "context": "当前候选所有产品类型/本次变动 ESLint、时间清单、迁移 lint 和秘密扫描",
+      "startedAt": "2026-11-26T20:47:10.703015+00:00",
+      "endedAt": "2026-11-26T20:48:04.859983+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/legacy-final/static.log",
       "logSha256": "b4ae7da76bd1da311aaa145e65a15fcbb5f91e41b0f5bc664c9a58d76b5d7ed7"
     }
   ],
@@ -387,5 +388,36 @@
         }
       ]
     }
+  },
+  "priorInstructionEvidence": {
+    "head": "178973664ed1b03ec6e86e7002a5bb116ea71d92",
+    "base": "a86a45fa31865731bcaf2c2358a05936495e016e",
+    "runId": 45892354624,
+    "constructionSha256": "250df20dc97d794660d7808b2ed077feaeb936b40606080afa4f7c08ad4128b9",
+    "note": "旧准确候选已核的新版 framework 混合 PO 继续保留原断言，不在这次定向重跑，也不冒充新候选结果；现行最终 Full 自行按 canonical 套件选测。",
+    "mixedFrameworkCheck": {
+      "id": "native",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/native.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确基座与候选，隔离 PostgreSQL、原页面 Chromium、现有长正确性配置；原制单及双 PO 和原申请历程。",
+      "startedAt": "2026-11-26T20:33:23.864824+00:00",
+      "endedAt": "2026-11-26T20:36:12.906257+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/native.log",
+      "logSha256": "fc0a043249235cdba42a5e7c105f66b73348d512eef661cb841cf98ffa64635b",
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "360326df3be3e0aadfd40e94a1f628f924839440d19afb532c11449f6fb61e51"
+        }
+      ]
+    },
+    "scope": "既有原生 framework 混合 PO 测试通过；本次提取共用准备入口，不改该场景及其断言。"
   }
 }
