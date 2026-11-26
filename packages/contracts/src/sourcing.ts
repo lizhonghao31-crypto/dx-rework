@@ -171,7 +171,8 @@ export const ReturnSourcingCaseSchema = z.object({
   ...OwnerReturnExpectation,
 }).strict().superRefine((input,context)=>requireCompleteApprovalFields(input,["expectedDecisionId","expectedDecisionVersion","expectedApprovalBasis"],context));
 export const CorrectSourcingCaseSchema = SourcingCaseInputSchema.omit({ daxingUnitPrice: true, additionalMerchandiserUserId: true }).extend({
-  expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
+  expectedVersion: z.number().int().positive(),
+  adoptedBudget:z.object({budgetVersion:z.number().int().positive(),orderVersion:z.number().int().positive()}).strict().optional(), reason: z.string().trim().min(1).max(500),
 }).strict().refine(validLineImages, "款图必须包含在订单图片中")
   .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
 export type ReturnSourcingCase = z.infer<typeof ReturnSourcingCaseSchema>;
@@ -446,6 +447,7 @@ export const SourcingIeQuoteSchema = z.object({
   quoteReason: z.string(),
   quotedBy: IdSchema,
   quotedAt: z.string().datetime(),
+  adoptedFromBudget:z.object({orderId:IdSchema,budgetVersion:z.number().int().positive(),quotationRowId:IdSchema}).strict().optional(),
 }).strict();
 
 export const SourcingFactorySchema = z.object({
@@ -561,6 +563,7 @@ export const SourcingCaseSummarySchema = z.object({
   identityRevision: z.number().int().nonnegative().optional(),
   gender: z.enum(["男装", "女装"]).nullable().default(null),
   styleName: z.string().nullable().default(null),
+  originalIeBudgetOrderId:IdSchema.optional(),
   sourcingCaseId: IdSchema,
   erpOrderId: z.string(),
   erpOrderNo: z.string(),

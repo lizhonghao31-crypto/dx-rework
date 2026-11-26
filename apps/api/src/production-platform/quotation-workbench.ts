@@ -1,14 +1,18 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {calculateQuotationPricing,calculateQuotationUnitCost,quotationDraftReviewSummary,QuotationPricingInputSchema,
-  type QuotationAssignment,type QuotationLineReviewCommand,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
+  type QuotationAssignment,type QuotationLineReviewCommand,type QuotationReadiness,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
 import type {BudgetRow} from '@dx-rework/contracts/digital-budget';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
-import type {AssembledQuotation} from './quotation-assembly.js';
+import {quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
+import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
+import {developmentDocumentRow} from './development-round-repository.js';
 import {approvedSecondaryCraftRows,hasUnmappedSecondaryCraft,requiredCraftRows,secondaryCraftReady} from './secondary-craft-quotation.js';
 import {secondaryCraftDecisionAuthorityReady} from './secondary-craft-approval-authority.js';
+
+type ReadDatabase=Pick<PoolClient,'query'>;
 
 const conflict=(message:string):never=>{throw new ApplicationError('QUOTATION_CONFLICT',message,409);};
 
@@ -28,9 +32,11 @@ function costRows(quote:AssembledQuotation) {
     const assignment=quote.assignments.find(value=>value.rowId===row.rowId);
     const kind=rowKind(quote,row,assignment);
     const usage=quote.consumption_sources[row.rowId];
-    return {row,complete:Boolean(kind&&row.name&&row.unit&&row.consumption!==''&&row.unitPrice!==''
-      &&assignment?.priceAssigneeId&&quote.price_sources[row.rowId]
-      &&(kind!=='material'||assignment.technicalAssigneeId&&usage&&(!quote.assembly||usage.kind==='technical_artifact'))),
+    const hasIdentity=Boolean(kind&&row.name&&row.unit);
+    const hasPrice=Boolean(row.unitPrice!==''&&assignment?.priceAssigneeId&&quote.price_sources[row.rowId]);
+    const hasUsage=Boolean(row.consumption!==''&&(kind!=='material'||
+      assignment?.technicalAssigneeId&&usage&&(!quote.assembly||usage.kind==='technical_artifact')));
+    return {row,kind,hasIdentity,hasPrice,hasUsage,complete:hasIdentity&&hasPrice&&hasUsage,
       requiresCraftReview:kind==='craft'};
   });
 }
@@ -50,7 +56,30 @@ type LineReview = {
 
 const roundFor=(quote:AssembledQuotation):number|null=>quote.assembly?.roundNumber??(quote.source_id===null?1:null);
 
-export async function readWorkbenchQuotation(db:PoolClient,quote:AssembledQuotation,resource:QuotationResource,actorId:string){
+async function currentTechnicalUseBlocks(db:ReadDatabase,quote:AssembledQuotation){
+  const material=quote.document.rows.filter(row=>quote.assembly?.rows[row.rowId]?.kind==='material');
+  if(!material.length)return [];
+  const source=quote.source_id?await developmentDocumentRow(db,quote.source_id):null;
+  const round=quote.assembly?.roundNumber;
+  const artifact=source?.document&&quote.source_id&&round!==undefined
+    ?await publishedTechnicalArtifact(db,quote.source_id,round):null;
+  if(!source?.document||source.round_number!==round||!artifact
+    ||artifact.row.document_fingerprint!==technicalDocumentFingerprint(source.document)){
+    return ['待正式纸样技术成果'];
+  }
+  return material.some(row=>{
+    const adopted=quote.consumption_sources[row.rowId];
+    return adopted?.kind!=='technical_artifact'||adopted.artifactRef?.id!==artifact.artifact.artifactSetId
+      ||adopted.artifactRef.version!==artifact.artifact.version||adopted.artifactRef.materialId!==quote.assembly!.rows[row.rowId]?.sourceRef;
+  })?['待采用当前正式技术成果的单件用量']:[];
+}
+
+export async function assertCurrentWorkbenchTechnicalUse(db:PoolClient,quote:AssembledQuotation){
+  const [block]=await currentTechnicalUseBlocks(db,quote);
+  if(block)conflict(block);
+}
+
+export async function readWorkbenchQuotation(db:ReadDatabase,quote:AssembledQuotation,resource:QuotationResource,actorId:string,customerCode?:string|null){
   const round=roundFor(quote);
   const {rows:reviews}=await db.query<LineReview>(`SELECT review_id,row_id,field,reason,return_field_version,resubmit_field_version
     FROM digital_quotation_line_reviews WHERE quote_id=$1 AND round_number=$2 AND resolve_at IS NULL
@@ -79,8 +108,24 @@ export async function readWorkbenchQuotation(db:PoolClient,quote:AssembledQuotat
   const result=quotationDraftReviewSummary(states);
   const releaseReady=ready&&await secondaryCraftDecisionAuthorityReady(db);
   const unmapped=await hasUnmappedSecondaryCraft(db,quote);
-  const unitCost=audited.every(value=>value.complete)?calculateQuotationUnitCost(quote.document):null;
-  return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,
+  const technical=await currentTechnicalUseBlocks(db,quote);
+  const unitCost=technical.length?null:workbenchCost(quote);
+  const reasons=[...technical];
+  if(!quote.document.rows.length||audited.some(row=>!row.hasIdentity))reasons.push('待核对实际报价明细及单位');
+  if(audited.some(row=>row.kind==='ie'&&!row.hasPrice))reasons.push('待IE加工价');
+  if(audited.some(row=>row.kind==='material'&&!row.hasPrice))reasons.push('待物料单价或价格负责人');
+  if(audited.some(row=>row.kind==='processing'&&!row.hasPrice))reasons.push('待工序单价或价格负责人');
+  if(!technical.length&&audited.some(row=>!row.hasUsage))reasons.push('待补齐单件用量或技术用量负责人');
+  if(result.counts.returned)reasons.push('待修改已退回的报价字段');
+  if(result.counts.resubmitted)reasons.push('待复核已重新提交的报价字段');
+  if(unmapped||result.counts.pendingCraftApproval)reasons.push('待工艺审批');
+  if(customerCode===null)reasons.push('待明确客户');
+  if(!releaseReady)reasons.push('待联合报价流程接通');
+  const canMeasure=unitCost!==null&&quote.document.rows.length>0;
+  const readiness:QuotationReadiness={canMeasure,
+    canConfirm:canMeasure&&quotationComplete(quote)&&result.status==='awaiting_customer_confirmation'&&!reasons.length,
+    reasons:reasons.length||canMeasure?reasons:['待补齐用量、价格或负责人员']};
+  return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,readiness,
     ...(unmapped&&result.status==='awaiting_customer_confirmation'?{status:'awaiting_craft_approval' as const}:{}),
     saved:draft?{input:QuotationPricingInputSchema.parse(draft.pricing.input),version:draft.quote_version}:null,reviews:visibleReviews,
     confirmation:releaseReady?'joint_release_ready' as const:'awaiting_joint_release' as const};
@@ -96,7 +141,7 @@ export async function assertNoOpenQuotationReviews(db:PoolClient,quote:Assembled
 }
 
 export async function persistWorkbenchPricing(db:PoolClient,quote:AssembledQuotation,actorId:string,input:QuotationPricingInput){
-  const cost=workbenchCost(quote),pricing=calculateQuotationPricing(cost,input);
+  const cost=(await currentTechnicalUseBlocks(db,quote)).length?null:workbenchCost(quote),pricing=calculateQuotationPricing(cost,input);
   if(pricing.status==='price_out_of_range')conflict('按此倍率计算的客户单价超出金额范围');
   await db.query(`INSERT INTO digital_quotation_pricing_drafts(quote_id,actor_id,quote_version,pricing,updated_at)
     VALUES($1,$2,$3,$4,$5) ON CONFLICT(quote_id,actor_id) DO UPDATE SET

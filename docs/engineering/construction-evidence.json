@@ -1,65 +1,135 @@
 {
   "version": 1,
-  "base": "03be9f081da7c5f7ff9df8e4ecca04ec80c7441e",
+  "base": "288896d435794b8912366ad31d89731ad04ea6df",
   "risk": "full",
-  "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+  "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
   "rules": [
     {
-      "rule": "资料未齐的面料是实际预估风险，不成为只因未知而禁止的普通开发发布；原明确短交期仍按原审批办理",
-      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§3，A02/A03",
-      "initialization": "原编号开发草稿及原时效规则，普通开发单未掌握面料到货日期，不虚造实际到货",
-      "dateAndPermission": "由原设计与原审批角色操作，不代申请、不改生产正式确认门槛。实际短交期仍需原有效审核。",
+      "rule": "已确认且实际适用的唯一 IE 加工价沿原报价、已发布预算及外发正式采用，不重复创建 IE 初始任务；合法独立外发和返工核价不改",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§7.1–7.2，A10–A11",
+      "initialization": "原编号订单、精确报价/已发布预算版本、材料和 PO 准备、原正式外发申报；0314 只新增外发采用元数据与约束，不回填或覆盖历史独立 IE。",
+      "dateAndPermission": "原 IE 实际报价人和时间保持；已授权原跟单明确采用，原生产管理选厂，原老板审批；不替 IE 签名、不用客户售价或近似材料匹配预算。",
       "writes": [
-        "apps/api/src/production-platform/order-time-automatic.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "packages/contracts/src/digital-development.ts",
-        "packages/contracts/src/order-time-requests.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/workbench-material-amount.test.ts"
+        "apps/api/migrations/0314_sourcing_adopt_confirmed_ie_basis.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/budget-service.ts",
+        "apps/api/src/production-platform/budget-sourcing-adapter.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "apps/api/src/production-platform/quotation-ie-budget-basis.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/sourcing/sourcing-case-read.ts",
+        "apps/api/src/sourcing/sourcing-case-mapping.ts",
+        "apps/api/src/sourcing/sourcing-ie-directory.ts",
+        "packages/contracts/src/digital-budget.ts",
+        "packages/contracts/src/sourcing.ts",
+        "apps/web/src/sourcing-node-history-page.tsx",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/customer-quotation-fixture.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/quotation-ie-budget-basis.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/order-time-request-page.tsx"
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/web/src/digital-budget-panel.tsx",
+        "apps/api/src/sourcing/sourcing-case-read.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/ie-authorized-directory.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/digital-budget-shared-postgres.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
-      "expectation": "实际普通开发输入没有面料日期仍可在真实 App 发布，有真正短交期时返回原审批且仍拒绝未获准的正式写入。",
+      "expectation": "真实原 IE 报 15.8，实际预算/外发均采用 15.8 而非客户价，进入原选厂和审批且零重复 IE；合法重报价用已发布的新 16.2，原 15.8 历史准确且仅非价格更正不重派 IE。",
       "checks": [
         "native",
-        "order-time",
+        "static",
+        "protocol",
+        "non-db",
+        "warehouse",
+        "legacy",
+        "mapped-other",
+        "columns"
+      ]
+    },
+    {
+      "rule": "当前报价各入口共用真实测算和确认资格，明确指出纸样、用量、价格、工艺或其它实际缺项；不需技术用量的按件行不显示待分派",
+      "source": "同一批准施工方案 §7.3、§7.5，A09、A12-b",
+      "initialization": "正式纸样成果、当前报价版实际采用的用量及审批以原数据读取；真实起步无成果，历史适用性不明保持未知，不要求实裁。",
+      "dateAndPermission": "报价内容、原有效审批及技术/IE/工艺人员依权限办理；缺技术成果不允许普通客户确认，不改变原精确报价事件和时钟。",
+      "writes": [
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-workbench.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/quotation-workbench-pricing.tsx",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/quotation-workbench-preview.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-budget-basis.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/quotation-workbench-pricing.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/quotation-workbench-preview.test.ts"
+      ],
+      "expectation": "实际缺正式纸样、当前用量、工艺或 IE 时两个报价区呈同一缺项，保留测算时不得确认；完整授权资料允许原精确确认。工艺和 IE 按件行无技术用量岗位，不影响价格。",
+      "checks": [
+        "native",
         "static",
         "protocol",
         "non-db"
       ]
     },
     {
-      "rule": "普通辅料的真实预计约束必要的车板任务，既不在时效计算中倒填完成，也不阻断并行的纸样和裁板",
-      "source": "同一施工方案 §3.2 与 §3.3，原实际材料验证与纸样/裁板时效",
-      "initialization": "原客户款和普通辅料选择原编号开发；仅读取本轮实际必需且原设计未持有实物的预计时间。",
-      "dateAndPermission": "预计到货不作真实验证；原材料文员仍须登记实际到货/证据。真正需延期沿原岗和原审批。",
+      "rule": "原报价、预算和外发相关页面最多一位小数仅属展示，成本预算的三个价格列在桌面同屏，不截断精确输入、历史或原预算打印",
+      "source": "同一批准施工方案 §7.4、§7.6，A12-a/c；§7.7 未证实外洗导航故障不修改入口",
+      "initialization": "真实原报价当前、已发布与历史，预算三组正式行和值，浏览器用原 App 和原授权角色打开。",
+      "dateAndPermission": "金额呈现不写数据；编辑焦点恢复实际精度，原用户、单据版本、比价、差额和提交/打印前置均保持。",
       "writes": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/order-time-request-page.tsx"
+        "apps/web/src/digital-budget-panel.tsx",
+        "apps/web/src/digital-budget.css",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/document-editor.tsx",
+        "apps/web/src/order-document-container.css",
+        "apps/web/src/order-document-container.tsx",
+        "apps/web/src/quotation-amount-display.ts",
+        "apps/web/src/quotation-workbench-pricing.tsx",
+        "apps/web/src/sourcing-node-history-page.tsx",
+        "apps/web/src/sourcing-workspace-page.tsx",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/unit/quotation-amount-display.test.ts",
+        "tests/unit/quotation-workbench-confirmation.test.ts",
+        "tests/unit/quotation-workbench-preview.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/development-material-readiness.ts",
-        "apps/web/src/order-time-request-page.tsx"
+        "apps/web/src/document-editor.tsx",
+        "apps/web/src/digital-budget-panel.tsx",
+        "apps/web/src/order-document-container.tsx",
+        "packages/contracts/src/digital-budget.ts"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts#M05 lets paper and cutting proceed",
-        "tests/unit/workbench-material-amount.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/unit/quotation-workbench-confirmation.test.ts",
+        "tests/unit/quotation-workbench-preview.test.ts"
       ],
-      "expectation": "实际窗口只把必要辅料预计分配给车板；纸样裁板先行，实际文员验证前车板依然不能冒充可办。",
+      "expectation": "原 Chromium 在 1165×747 和 1366×768 可见同一行价格/金额/差异列，编辑价 3.8512 精确保留且失焦为 3.9；客户确认、历史和旧读保持实际精度。",
       "checks": [
         "native",
-        "order-time",
         "static",
         "protocol",
         "non-db"
@@ -70,80 +140,57 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/native.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
-      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
-      "context": "Native API, authenticated Chromium and real local PostgreSQL isolated original business routes including A02/A03 and exact formal-boundary cases.",
-      "startedAt": "2026-11-26T07:20:53.269169+00:00",
-      "endedAt": "2026-11-26T07:21:50.657600+00:00",
-      "log": "/workspace/scratch/r2-evidence/ci-corrected/native.log",
-      "logSha256": "79e30c087df6d369e57a4f383c9116cbe13cbfcdffdc7082b1e82e6917740cf5",
-      "passed": 7,
-      "failed": 0,
-      "skipped": 95,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "63d3ff696d9161408b431c8d92c6c1667b01616366d1b3412f4051de78a03e94"
-        }
-      ]
-    },
-    {
-      "id": "order-time",
-      "kind": "tests",
-      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/order-time.sh",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
-      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
-      "context": "Real local PostgreSQL original check, submit, approval and arrangement integration regression.",
-      "startedAt": "2026-11-26T07:20:53.227702+00:00",
-      "endedAt": "2026-11-26T07:22:04.471957+00:00",
-      "log": "/workspace/scratch/r2-evidence/ci-corrected/order-time.log",
-      "logSha256": "8f0b8a0843cdc6404a908b6d33d5ffd387000be4876bdca68ec15394b3080c9c",
-      "passed": 40,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "真实 PostgreSQL、登录 Chromium 原报价预算及外发两处 Review 复验",
+      "startedAt": "2026-11-26T08:39:31.249322+00:00",
+      "endedAt": "2026-11-26T08:42:36.753100+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/native.log",
+      "logSha256": "9096e031ab5016b162742b059639e289fdfba2bd5ebc881c3d48dbc5b297b219",
+      "passed": 89,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "342a1e465395d4285e113c4a1ce2c9be51bd46c56bf3e33ae35197b9ace5e078"
+          "sha256": "e2baedbfae7803dc013b0cbe4d4b9c1fc0341b9120c306463d932c981dbd8459"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/static.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
-      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
-      "context": "Exact TypeScript, changed lint, Git diff and repository secret controls.",
-      "startedAt": "2026-11-26T07:20:53.217756+00:00",
-      "endedAt": "2026-11-26T07:21:51.740883+00:00",
-      "log": "/workspace/scratch/r2-evidence/ci-corrected/static.log",
-      "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "当前发布基点的 TypeScript、改动 ESLint、迁移、时钟、格式与秘密扫描",
+      "startedAt": "2026-11-26T08:39:31.485038+00:00",
+      "endedAt": "2026-11-26T08:40:37.287215+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/static.log",
+      "logSha256": "14d14514555b7b6ba7e545c143cb570a89a1775ad2026979f58d8c7d259938c0"
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "bash -c 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
+      "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
-      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
-      "context": "Original CI protocol guard suite with exact inventory and gate checks.",
-      "startedAt": "2026-11-26T07:20:53.219189+00:00",
-      "endedAt": "2026-11-26T07:21:02.657292+00:00",
-      "log": "/workspace/scratch/r2-evidence/ci-corrected/protocol.log",
-      "logSha256": "1f471e4dff76f5c6c0b66549ade5974512aba023bdb6cf232f0a838616fcc98d",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "当前不可变门禁 Node TAP 协议和安全测试",
+      "startedAt": "2026-11-26T08:39:31.281038+00:00",
+      "endedAt": "2026-11-26T08:39:42.029898+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/protocol.log",
+      "logSha256": "0fa6a1367b2e1c766f654446f178656b69d8631ad3cebb2dccc5cfce22d80ed8",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "1f471e4dff76f5c6c0b66549ade5974512aba023bdb6cf232f0a838616fcc98d"
+          "sha256": "0fa6a1367b2e1c766f654446f178656b69d8631ad3cebb2dccc5cfce22d80ed8"
         }
       ],
       "passed": 285,
@@ -153,25 +200,108 @@
     {
       "id": "non-db",
       "kind": "tests",
-      "command": "bash -c 'source /workspace/.dx-cloud/activate.sh && DATABASE_URL= TEST_DATABASE_URL= ACCEPTANCE_CLOCK_TEST_DATABASE_URL= node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/scratch/r2-evidence/ci-corrected/non-db.json'",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/non-db.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
-      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
-      "context": "Original Full non-DB lane with databases explicitly empty, full unchanged selector plus exact required-accessory controls.",
-      "startedAt": "2026-11-26T07:20:53.221236+00:00",
-      "endedAt": "2026-11-26T07:26:44.042148+00:00",
-      "log": "/workspace/scratch/r2-evidence/ci-corrected/non-db.log",
-      "logSha256": "9a645bdbe8a4b13cdbf386f7ca4242c6a931d63c7885029c6627a6c0e99bf5f5",
-      "passed": 4664,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "原路径非数据库定向，包含报价只读授权、金额和历史",
+      "startedAt": "2026-11-26T08:39:31.355148+00:00",
+      "endedAt": "2026-11-26T08:39:53.662144+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/non-db.log",
+      "logSha256": "4163346a4069222f8c160a5a9cb10a2498fb36d6692acb908a5a4a3e4e042479",
+      "passed": 70,
       "failed": 0,
-      "skipped": 15,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "80164f73aee733ae61523360506a3c550fbe301441b3a3467477159f4eb7cdde"
+          "sha256": "4c873901688f6146bf4ac462c6281a495af279ec5de1ae3caa6c49982c0697bf"
         }
       ]
+    },
+    {
+      "id": "warehouse",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/warehouse.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "实际全部生产准备 PostgreSQL 原范围及兼容回归",
+      "startedAt": "2026-11-26T08:39:31.247803+00:00",
+      "endedAt": "2026-11-26T08:42:19.580209+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/warehouse.log",
+      "logSha256": "ab0ba633d2fb8a42f409bf43d4ea06242e5d79b5db3bbc8e70642235bba49ad1",
+      "passed": 59,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "85da1130d6821ad0a69904c860c60975a2e8a0e486a35278b9a8c0c18241f8ef"
+        }
+      ]
+    },
+    {
+      "id": "legacy",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/legacy.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "迁移前后的原预算、附件事务、真实报价与权限 PostgreSQL 回归",
+      "startedAt": "2026-11-26T08:39:31.382641+00:00",
+      "endedAt": "2026-11-26T08:39:50.202761+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/legacy.log",
+      "logSha256": "bf390a5b079ead98c96aeb07919421b95fdbe42d471bbc2f55433343980452ea",
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "597684029ae71910888620b103eb5610a96bb9cdd30f22ff706f83fa4964e929"
+        }
+      ]
+    },
+    {
+      "id": "mapped-other",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/mapped-other.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "严格据当前高风险映射运行其余完整的十八个真实 PostgreSQL 文件",
+      "startedAt": "2026-11-26T08:39:31.404855+00:00",
+      "endedAt": "2026-11-26T08:49:03.807104+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/mapped-other.log",
+      "logSha256": "68377b4a96327fb85118e899538bb4444d1f9b9ac764633c76cb6bd969c83766",
+      "passed": 325,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "cab18e4a331e02b0eca23b4dda47f493ea7f8b7fcbcf6b55c503e37e865592f8"
+        }
+      ]
+    },
+    {
+      "id": "columns",
+      "kind": "command",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/columns.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "实际隔离 PostgreSQL 的 0313 就地升级与 0314 空库建到最新，逐列验证预算及外发采用",
+      "startedAt": "2026-11-26T08:48:07.276148+00:00",
+      "endedAt": "2026-11-26T08:48:14.870171+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/columns.log",
+      "logSha256": "24f4712e88ac55caa54d93b96fccdc4151d5b406767ba160fa382d76140f2af2"
     }
   ]
 }

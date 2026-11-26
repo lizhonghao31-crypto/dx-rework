@@ -4,12 +4,59 @@ import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {ApplicationError} from '../platform/errors.js';
 import {approvedSecondaryCraftRows,hasPublishedSecondaryCraft,hasUnmappedSecondaryCraft,requiredCraftRows,secondaryCraftReady,type SecondaryCraftApprovalRef} from './secondary-craft-quotation.js';
 import type {AssembledQuotation} from './quotation-assembly.js';
+import {confirmedIeBudgetBasis,type ConfirmedIeQuote} from './quotation-ie-budget-basis.js';
 type Database=Pick<Pool|PoolClient,'query'>;
 export async function hasQuotationSchema(db:Database){return Boolean((await db.query("SELECT to_regclass('digital_quotation_documents') AS relation")).rows[0]?.relation);}
 export const designerQuotationPolicy='designer_quote_v1';
 export async function workbenchCommercialOrderPolicy(db:Database,orderId:string):Promise<string|null>{
  const row=(await db.query("SELECT to_jsonb(rule)->>'workbench_commercial_policy' AS policy FROM digital_commercial_order_rules rule WHERE production_order_id=$1",[orderId])).rows[0];
  return row?.policy??null;
+}
+type BudgetQuoteRef={quote_id?:string|null;quote_version?:number|null};
+export async function readBudgetIeAdoption(db:Database,orderId:string,ref:BudgetQuoteRef|undefined){
+ if(!await hasQuotationSchema(db))return {required:false as const,basis:null,reason:null};
+ const row=(await db.query<ConfirmedIeQuote&{
+  required:boolean;live_quote_id:string|null;live_version:number|null;confirmed_version:number|null;
+  order_source_id:string|null;quote_source_id:string|null;order_customer:string;customer_code:string|null;
+ }>(`SELECT v.quote_id,v.version,v.document,v.assignments,v.price_sources,v.customer_code,
+  to_jsonb(v)->'assembly' AS assembly,to_jsonb(v)->'workbench_pricing' AS workbench_pricing,
+  q.quote_id AS live_quote_id,q.version AS live_version,q.confirmed_version,q.source_id AS quote_source_id,
+  o.source_id AS order_source_id,o.customer_code AS order_customer,
+  COALESCE(to_jsonb(rule)->>'workbench_commercial_policy'='designer_quote_v1' AND (
+   to_jsonb(s)->>'workbench_generated_number'='true' OR
+   NULLIF(to_jsonb(q)->'assembly','null'::jsonb) IS NOT NULL),false) AS required
+  FROM digital_production_orders o
+  LEFT JOIN digital_production_sources s ON s.source_id=o.source_id
+  LEFT JOIN digital_commercial_order_rules rule USING(production_order_id)
+  LEFT JOIN digital_quotation_documents q ON q.production_order_id=o.production_order_id
+  LEFT JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=$2
+  WHERE o.production_order_id=$1`,[orderId,ref?.quote_version??null])).rows[0];
+ if(!row?.required)return {required:false as const,basis:null,reason:null};
+ if(!ref?.quote_id||ref.quote_id!==row.live_quote_id||!row.version||row.version!==row.confirmed_version||
+  row.version!==row.live_version||row.quote_source_id!==row.order_source_id||row.customer_code!==row.order_customer)
+  return {required:true as const,basis:null,reason:'请核对本母单当前已确认报价并采用准确版本'};
+ const basis=confirmedIeBudgetBasis(row);
+ if(basis&&(await db.query(`SELECT 1 FROM digital_quotation_line_reviews WHERE quote_id=$1
+   AND round_number=$2 AND resolve_at IS NULL AND row_id=ANY($3::uuid[]) LIMIT 1`,
+  [basis.quoteId,basis.roundNumber,row.document.rows.map(item=>item.rowId)])).rowCount)
+  return {required:true as const,basis:null,reason:'原报价有待处理的退回，请在报价中心完成复核后再采用'};
+ return {required:true as const,basis,reason:basis?null:'缺少可采用的原IE加工报价，请到报价中心核对报价人、价格和每件单位'};
+}
+// A supplier contract and any approved sourcing facts retain their immutable
+// budget. This exception only opens the native, explicitly returned correction.
+export async function readLinkedIeBudgetCorrection(db:Database,orderId:string){
+ return (await db.query<{case_id:string;budget_version:number;quote_version:number}>(`
+  SELECT link.child_id AS case_id,snapshot.version AS budget_version,snapshot.quote_version
+  FROM digital_production_child_links link
+  JOIN sourcing_cases source ON source.sourcing_case_id=link.child_id AND source.deleted_at IS NULL
+  JOIN LATERAL(SELECT quote.* FROM sourcing_ie_quotes quote WHERE quote.sourcing_case_id=link.child_id
+    ORDER BY quote.quote_version DESC LIMIT 1) adopted ON to_jsonb(adopted)->>'adopted_budget_order_id'=link.production_order_id::text
+  JOIN digital_budget_versions snapshot ON snapshot.production_order_id=link.production_order_id
+    AND snapshot.version=(to_jsonb(adopted)->>'adopted_budget_version')::int
+  WHERE link.module='sourcing' AND link.production_order_id=$1
+    AND sourcing_current_status(link.child_id)='pending_merchandiser_correction'
+    AND NOT EXISTS(SELECT 1 FROM sourcing_approval_snapshots approval WHERE approval.sourcing_case_id=link.child_id)
+ `,[orderId])).rows[0]??null;
 }
 export async function formalOrderQuantity(db:Database,orderId:string):Promise<number>{
  return Number((await db.query('SELECT coalesce(sum(s.quantity),0)::text AS quantity FROM digital_production_po_lines l JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1',[orderId])).rows[0]?.quantity??0);
@@ -59,12 +106,15 @@ export async function ensureQuotationBudget(db:PoolClient,orderId:string,actorId
  if(!rule)return; // Explicit historical adoption is separate; never infer consent.
  const current=(await db.query('SELECT * FROM digital_budget_documents WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
  if(current)return; // Revisions must be explicitly adopted; no overwrite.
- const version=(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[quote.quote_id,quote.confirmed_version])).rows[0];
+ const version=(await db.query<ConfirmedIeQuote&{customer_code:string;secondary_craft_approvals:SecondaryCraftApprovalRef[]|null}>(
+  'SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[quote.quote_id,quote.confirmed_version])).rows[0];
  if(!version||rule.policy===designerQuotationPolicy&&version.customer_code!==order.customer_code)return;
  if(!await hasCurrentBudgetCraftBasis(db,quote,version.secondary_craft_approvals??null,true))return;
+ const ie=rule.policy===designerQuotationPolicy?confirmedIeBudgetBasis(version):null;
+ const document=ie?{...version.document,outsourcingUnitPrice:ie.unitPrice}:version.document;
  await db.query('INSERT INTO digital_budget_quote_conversions(production_order_id,quote_id,quote_version,created_budget_version) VALUES($1,$2,$3,1) ON CONFLICT DO NOTHING',[orderId,quote.quote_id,quote.confirmed_version]);
  await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,quote_id,quote_version)
- VALUES($1,1,'draft',$2,$3,$4,$5)`,[orderId,version.document,actorId,quote.quote_id,quote.confirmed_version]);
+ VALUES($1,1,'draft',$2,$3,$4,$5)`,[orderId,document,actorId,quote.quote_id,quote.confirmed_version]);
 }
 export async function readBudgetQuoteComparison(db:Database,orderId:string,budget:{document:BudgetDocument;quote_id?:string|null;quote_version?:number|null}|undefined,historical=false):Promise<BudgetQuoteComparison>{
  const legacy:BudgetQuoteComparison={policy:'legacy',quoteId:null,quoteVersion:null,currentConfirmedVersion:null,state:'legacy',reason:'历史预算，未补造客户确认报价',budgetComparableTotal:null,confirmedQuoteTotal:null,amountScope:null,baseline:null,confirmation:null};

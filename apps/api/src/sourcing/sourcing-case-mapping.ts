@@ -62,6 +62,10 @@ export type SourcingCaseRow = Readonly<{
   quote_reason: string | null;
   quoted_by: string | null;
   quoted_at: Date | string | null;
+  original_ie_budget_order_id?:string|null;
+  adopted_budget_order_id?:string|null;
+  adopted_budget_version?:number|null;
+  adopted_quotation_row_id?:string|null;
   sourcing_decision_id: string | null;
   decision_version: number | string | null;
   source_type: "initial" | "management_revision" | "factory_change" | "price_reapplication" | null;
@@ -152,6 +156,8 @@ export const mapSourcingCase = (
         legacy: true,
       }];
   return {
+  ...(row.original_ie_budget_order_id&&canViewSourcingDaxingPrice(actor,row.effective_created_by===undefined?row.created_by:row.effective_created_by)?
+   {originalIeBudgetOrderId:row.original_ie_budget_order_id}:{}),
   sourcingCaseId: row.sourcing_case_id,
   identityRevision: Number(row.identity_revision ?? 0),
   gender: row.gender ?? null,
@@ -200,6 +206,9 @@ export const mapSourcingCase = (
         quoteReason: row.quote_reason,
         quotedBy: row.quoted_by,
         quotedAt: toSourcingIso(row.quoted_at),
+        ...(row.adopted_budget_order_id&&row.adopted_budget_version&&row.adopted_quotation_row_id?{adoptedFromBudget:{
+          orderId:row.adopted_budget_order_id,budgetVersion:row.adopted_budget_version,quotationRowId:row.adopted_quotation_row_id,
+        }}:{}),
       }
     : null,
   decision: row.sourcing_decision_id && row.decision_version !== null

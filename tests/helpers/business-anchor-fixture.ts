@@ -112,14 +112,20 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    const sourceMaterials=options?.adoptSourceMaterials?(await instruction.read(primary,id)).document:null;
    await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:sourceMaterials?{...instructionDoc,fabrics:sourceMaterials.fabrics,accessories:sourceMaterials.accessories}:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!,sourceMaterials?{leaveAccessoriesForReceipt:true}:undefined);await options?.beforeInstructionPublish?.(id);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
-   await customerQuotationFixture(db,root,id,undefined,designer);
-   const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:options?.budgetRows??[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
+   const existingIe=options?.adoptSourceMaterials?{actor:ie,unitPrice:'5'}:undefined;
+   await customerQuotationFixture(db,root,id,undefined,designer,existingIe);
+   const adoptedRows=existingIe?(await budget.read(primary,id)).document?.rows??[]:[];
+   const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:[...adoptedRows,...(options?.budgetRows??[])],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
    await budget.save(designer,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.publish(primary,id,2,randomUUID());
    const prepared=await budget.prepareSourcing(primary,id,2,attachments);
    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
    const key=randomUUID();await beforeCreate?.(input,key,primary);
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
-   const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
+   const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));
+   if(created.value.status==='pending_ie_quote')await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());
+   else if(!existingIe||created.value.status!=='pending_management_decision'||!created.value.ieQuote?.adoptedFromBudget)
+    throw Error('TEST original sourcing needs an explicit IE input or an exact adopted original IE quote');
+   await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
    await sourcingCommands.decideOwner(owner,caseId,await seenSourcingOwnerDecision(sourcingCommands,owner,caseId,{decision:'approved'}),randomUUID());
    // The final customer/size prerequisites were established before final publication above.
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());

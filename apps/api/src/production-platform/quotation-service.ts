@@ -23,7 +23,7 @@ import {ieProcessingViewer,readIeProcessingDirectory,readIeProcessingPriceReview
 import {readIeProcessingBasis,quotationStyleImage} from './quotation-display-basis.js';
 import {developmentDocumentSnapshot} from './development-document-snapshot.js';
 import {readDevelopmentOrderRush,type RushIdentity} from './development-order-rush.js';
-import {applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
+import {assertCurrentWorkbenchTechnicalUse,applyWorkbenchLineReview,assertNoOpenQuotationReviews,persistWorkbenchPricing,readWorkbenchQuotation,workbenchCost} from './quotation-workbench.js';
 import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraft,releasedCraftRows,requiredCraftRows,saveSecondaryCraft,secondaryCraftDetail,secondaryCraftDirectory,secondaryCraftReady} from './secondary-craft-quotation.js';
 import {secondaryCraftDecisionAuthorityReady} from './secondary-craft-approval-authority.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
@@ -89,7 +89,7 @@ export class DigitalQuotationService{
    if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalNotFound();
    const quote=context.quote??digitalNotFound();
    if(quote.version===quote.confirmed_version)digitalNotFound();
-   const result=await readWorkbenchQuotation(db,quote,resource,actor.actorId);
+   const result=await readWorkbenchQuotation(db,quote,resource,actor.actorId,context.customerCode);
    await db.query('COMMIT');
    return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
@@ -172,6 +172,8 @@ export class DigitalQuotationService{
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
   const requiresWorkbenchPricing=Boolean(c.confirm&&q&&version===undefined&&await newWorkbenchQuotation(db,actor,resource,c));
   const canConfirm=c.confirm&&(!requiresWorkbenchPricing||c.designerId===actor.actorId&&c.roles.has('sample_designer'));
+  const workbenchReadiness=c.full&&q&&q.version!==q.confirmed_version&&version===undefined&&(requiresWorkbenchPricing||c.workbenchPolicy&&Boolean(q.assembly))
+    ?(await readWorkbenchQuotation(db,q,resource,actor.actorId,c.customerCode)).readiness:undefined;
   const assessed=q&&version===undefined&&c.confirm;
   const craftRows=q&&version===undefined?requiredCraftRows(q):[];
   const released=q&&craftRows.length>0?await releasedCraftRows(db,q):[];
@@ -198,6 +200,7 @@ export class DigitalQuotationService{
    if(!c.full&&!technical&&!price)return [];
    const basis=assembly?.rows[row.rowId];
    return [{...row,...(secondaryCraft&&(price||secondaryHistory)?{secondaryCraftEntry:true}:{}),...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
+    technicalUsage:basis?.kind==='material'?'required' as const:basis?.kind==='ie'||basis?.kind==='craft'?'not_applicable' as const:a.technicalAssigneeId||row.section!=='外发工序'&&!assembly?'required' as const:'unknown' as const,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
     canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&!secondaryCraft&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
@@ -215,7 +218,7 @@ export class DigitalQuotationService{
     if(quoteUnit)(r.unit===quoteUnit?matchingUnits:unitMismatches).add(r.materialId);
    }
   }
-  return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
+  return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),...(workbenchReadiness?{workbenchReadiness}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),...(requiresWorkbenchPricing?{requiresWorkbenchPricing:true as const}:{}),
@@ -452,6 +455,7 @@ export class DigitalQuotationService{
     }
     if(input.workbenchPricing){
      if(c.designerId!==actor.actorId||!c.roles.has('sample_designer'))digitalForbidden();
+     await assertCurrentWorkbenchTechnicalUse(db,q);
      const cost=workbenchCost(q),proposal=calculateQuotationPricing(cost,input.workbenchPricing);
      if(cost===null||proposal.customerUnitPrice===null||input.amountScope!=='per_piece'||input.taxBasis!=='excludes_tax'
       ||quotationExact(proposal.customerUnitPrice)!==quotationExact(input.customerConfirmedTotal))conflict('报价方案与当前成本或实际客户确认金额不一致');

@@ -1,6 +1,7 @@
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
+import {writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
@@ -17,16 +18,208 @@ import {DigitalBudgetService} from '../../apps/api/src/production-platform/budge
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
-import {CreateSourcingCaseSchema} from '@dx-rework/contracts';
+import {CorrectSourcingCaseSchema,CreateSourcingCaseSchema} from '@dx-rework/contracts';
 import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
 import {ManagementReportingService} from '../../apps/api/src/reporting/management-reporting-service.js';
 import {renderAuthorizedQuotationImages} from '../helpers/render-authorized-quotation-images.js';
+import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {decideSeenSourcingOwner} from '../helpers/sourcing-owner-approval-fixture.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
- beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true,unifiedIeDirectory:true});});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true,unifiedIeDirectory:true,sourcingFullDetail:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
+ it('Acceptance R6 carries the one confirmed IE processing price through the real budget and original factory selection',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,ie=f.people.ie!,merch=f.people.merchandiser!;
+  const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),
+   quotes=new DigitalQuotationService(db,true),budgets=new DigitalBudgetService(db,true);
+  const sourcing=new SourcingService(db,undefined,undefined,new TodoProjectionService(new TodoService(db)),f.contracts);
+  const style='TEST-R6-IE-'+randomUUID(),alternate=style+'-ALT',source=await identity.createSource(designer,
+   {developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},today=beijingCalendarDate(new Date()),delivery=minimumInitialCustomerDate();
+  const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
+   returnDate:null,quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   materials:[],files:[{attachmentId:await f.image(designer),kind:'款图'}]});
+  const draft=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+  await forms.publish(designer,source.sourceId,draft.version,randomUUID());
+  const initial=await quotes.read(designer,resource),ieRow=initial.rows.find(row=>row.assignment.priceRole==='ie_reviewer')!;
+  const assigned=await quotes.save(designer,resource,{expectedVersion:initial.version,document:initial.document!,
+   assignments:initial.assignments.map(row=>row.rowId===ieRow.rowId?{...row,priceAssigneeId:ie.actorId}:row)},randomUUID());
+  const priced=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:assigned.version,unitPrice:'15.80'},randomUUID());
+  const confirmed=await quotes.confirm(designer,resource,{expectedVersion:priced.version,customerCode:'PD',customerConfirmedTotal:'32.4',
+   amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',
+   sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',
+   evidenceNote:'TEST 原客户确认与IE价格独立',workbenchPricing:{field:'customerUnitPrice',value:'32.4'},confirmedAt:new Date(Date.now()-1000).toISOString()},randomUUID());
+  const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+   designStyleNo:style,orderDate:today,primaryMerchandiserId:merch.actorId,
+   lines:[{formalPoNo:style+'-1',color:'黑',customerWarehouseArrivalDate:delivery,sizes:[{size:'M',quantity:5}]},
+    {temporaryStyleNo:alternate,color:'白',customerWarehouseArrivalDate:delivery,sizes:[{size:'M',quantity:8}]}]}),randomUUID(),source.sourceId);
+  const id=order.productionOrderId,preparedBudget=await budgets.read(merch,id);
+  expect(preparedBudget).toMatchObject({status:'draft',document:{outsourcingUnitPrice:'15.8'},outsourcingIeBasis:{unitPrice:'15.8'}});
+  const filled={...preparedBudget.document!,fabricType:'针织',productCategory:'上衣',date:today,
+   outsourcingScope:'成衣加工',imageAttachmentIds:[await f.image(designer)],rows:[
+    ...preparedBudget.document!.rows,
+    ...(['主料','辅料'] as const).map((section,index)=>({rowId:randomUUID(),section,category:'测试',name:`TEST ${section} 加长品名分两行用于核对预算字段展示`,
+      specification:'TEST规格-一二三四五六七八九十-abcdefghijklmno',unit:'米',supplier:'TEST 真实本地夹具供应方',consumption:'1',unitPrice:index?'3.8500':'3.0000'}))
+   ]};
+  await expect(budgets.save(designer,id,{expectedVersion:preparedBudget.version,document:{...filled,outsourcingUnitPrice:'32.4'}},randomUUID()))
+   .rejects.toMatchObject({statusCode:409});
+  let saved=await budgets.save(designer,id,{expectedVersion:preparedBudget.version,document:filled},randomUUID());
+  const tab=await h.open(merch.actorId,1165,{},'/ui/digital-production?budget='+id);
+  try{
+   await tab.page.getByRole('button',{name:'保存预算',exact:true}).waitFor();
+   for(const [width,height] of [[1165,747],[1366,768]] as const){
+    await tab.page.setViewportSize({width,height});
+    for(const index of [0,1,2]){
+     await tab.page.getByRole('navigation',{name:'单据章节'}).getByRole('button',{name:['主料','辅料','外发工序'][index]!,exact:true}).click();
+     const table=tab.page.locator(`#budget-section-${index} .budget-detail-table`);
+     await table.scrollIntoViewIfNeeded();
+     const geometry=await table.evaluate(node=>{
+      const wrap=node.parentElement!.getBoundingClientRect();
+      const cells=Array.from(node.querySelectorAll('thead th')).slice(6,9).map(cell=>{
+       const r=cell.getBoundingClientRect();return {left:r.left,right:r.right};
+      });
+      return {viewport:window.innerWidth,left:wrap.left,right:wrap.right,scroll:node.parentElement!.scrollLeft,cells};
+     });
+     expect(geometry.cells).toHaveLength(3);
+     expect(geometry.scroll).toBe(0);
+     for(const cell of geometry.cells){
+      expect(cell.left).toBeGreaterThanOrEqual(Math.max(0,geometry.left)-1);
+      expect(cell.right).toBeLessThanOrEqual(Math.min(geometry.viewport,geometry.right)+1);
+     }
+     await tab.page.screenshot({path:join(h.evidence,`r6-budget-edit-${width}-${index}.png`)});
+    }
+   }
+   await tab.page.getByRole('navigation',{name:'单据章节'}).getByRole('button',{name:'辅料',exact:true}).click();
+   const accessory=filled.rows.find(row=>row.name.startsWith('TEST 辅料 加长品名'))!;
+   const editable=tab.page.locator(`input#budget-${accessory.rowId}-unitPrice`);
+   expect(await editable.inputValue()).toBe('3.9');
+   await editable.focus();
+   expect(await editable.inputValue()).toBe('3.8500');
+   await editable.fill('3.8512');
+   await editable.blur();
+   expect(await editable.inputValue()).toBe('3.9');
+   const reply=tab.page.waitForResponse(response=>response.request().method()==='PUT'&&response.url().endsWith(`/orders/${id}/budget`));
+   await tab.page.getByRole('button',{name:'保存预算',exact:true}).click();
+   const response=await reply;
+   expect(response.status(),await response.text()).toBe(200);
+   saved=await response.json();
+   expect(saved.document?.rows.find(row=>row.rowId===accessory.rowId)).toMatchObject({unitPrice:'3.8512'});
+   expect((await budgets.read(merch,id)).document?.rows.find(row=>row.rowId===accessory.rowId)).toMatchObject({unitPrice:'3.8512'});
+  }finally{await tab.close();}
+  const budget=await budgets.publish(merch,id,saved.version,randomUUID(),confirmed.version);
+  const prepared=await budgets.prepareSourcing(merch,id,budget.version,f.attachments);
+  const payload=CreateSourcingCaseSchema.parse({gender:prepared.gender,styleName:prepared.styleName,deliveryDate:delivery,
+   estimatedCutPieceSendDate:today,daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(image=>image.attachmentId),
+   lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,...(styleNo?{styleNo}:{}),alternateStyleNo,color,quantity,factoryDeliveryDate:delivery})),
+   digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}});
+  await expect(sourcing.createCase(merch,{...payload,daxingUnitPrice:'32.4'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(sourcing.createCase(merch,{...payload,digitalBudget:{...payload.digitalBudget!,budgetVersion:prepared.budgetVersion+1}},randomUUID()))
+   .rejects.toMatchObject({statusCode:409});
+  const key=randomUUID(),created=(await sourcing.createCase(merch,payload,key)).value;
+  expect(created).toMatchObject({status:'pending_management_decision',ieQuote:{quoteVersion:1,
+   adoptedFromBudget:{orderId:id,budgetVersion:budget.version,quotationRowId:ieRow.rowId}}});
+  const history=await sourcing.nodeHistory({...merch,authorizationCapability:'sourcing:view'},created.sourcingCaseId,'ie_quote');
+  expect(history).toMatchObject({item:{ieQuote:{quotedBy:ie.actorId,adoptedFromBudget:{orderId:id,budgetVersion:budget.version}}}});
+  await expect(sourcing.quoteIePrice(ie,created.sourcingCaseId,{linePrices:[{position:1,unitPrice:'16'},{position:2,unitPrice:'16'}]},randomUUID()))
+   .rejects.toMatchObject({statusCode:409});
+  expect((await sourcing.createCase(merch,payload,key)).value.sourcingCaseId).toBe(created.sourcingCaseId);
+  const projection=await db.query(`SELECT quote.quoted_by,quote.adopted_budget_version,quote.adopted_quotation_row_id,quote.unit_price::text,
+   quote.total_amount::text,event.action,event.actor_id
+   FROM sourcing_ie_quotes quote JOIN operation_events event ON event.event_id=quote.operation_event_id
+   WHERE sourcing_case_id=$1`,[created.sourcingCaseId]);
+  expect(projection.rows).toEqual([{quoted_by:ie.actorId,adopted_budget_version:budget.version,adopted_quotation_row_id:ieRow.rowId,
+   unit_price:'15.8000',total_amount:'205.40',action:'sourcing.ie_basis.adopt',actor_id:merch.actorId}]);
+  expect((await db.query('SELECT DISTINCT category FROM rework_todos WHERE entity_id=$1 ORDER BY category',[created.sourcingCaseId])).rows)
+   .toEqual([{category:'sourcing_management_decision'}]);
+  const owner=f.people.owner??f.root;
+  const returned=(await sourcing.returnToMerchandiser(owner,created.sourcingCaseId,{
+   expectedVersion:created.version,reason:'TEST 仅更正交付日期说明'},randomUUID())).value;
+  expect(returned.status).toBe('pending_merchandiser_correction');
+  expect(returned.lineItems[1]).toMatchObject({formalStyleNo:null,alternateStyleNo:alternate});
+  const correction=CorrectSourcingCaseSchema.parse({gender:payload.gender,styleName:payload.styleName,deliveryDate:payload.deliveryDate,
+   estimatedCutPieceSendDate:payload.estimatedCutPieceSendDate,attachmentIds:payload.attachmentIds,lineItems:payload.lineItems,
+   expectedVersion:returned.version,reason:'TEST 继续采用原前置IE价'});
+  await expect(sourcing.correctCase(merch,created.sourcingCaseId,{...correction,lineItems:correction.lineItems.map((row,index)=>
+   index===1?{...row,alternateStyleNo:alternate+'-DIFFERENT'}:row)},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const earlierFactoryDate=beijingCalendarDate(new Date(Date.parse(delivery+'T12:00:00+08:00')-86_400_000));
+  const afterReturn=await h.open(merch.actorId,1165,{},`/ui/sourcing/orders/${created.sourcingCaseId}`);
+  let corrected:Awaited<ReturnType<typeof sourcing.correctCase>>['value'];
+  try{
+   await afterReturn.page.getByRole('link',{name:'修改订单资料',exact:true}).click();
+   await afterReturn.page.getByLabel('本 PO 加工厂交货日（必填）').nth(1).fill(earlierFactoryDate);
+   await afterReturn.page.getByLabel('修改说明（必填）',{exact:true}).fill('TEST 只改代用款号 PO 的加工厂交货日');
+   const actual=afterReturn.page.waitForResponse(response=>response.request().method()==='POST'&&
+    new URL(response.url()).pathname.endsWith(`/sourcing/cases/${created.sourcingCaseId}/corrections`),{timeout:8000});
+   await afterReturn.page.getByRole('button',{name:'提交并进入审批',exact:true}).click();
+   const response=await actual;
+   expect(response.request().postDataJSON().lineItems[1]).toMatchObject({alternateStyleNo:alternate,factoryDeliveryDate:earlierFactoryDate});
+   expect(response.request().postDataJSON().lineItems[1]).not.toHaveProperty('styleNo');
+   expect(response.status(),response.ok()?undefined:await response.text()).toBe(200);
+   corrected=await sourcing.getCase({...merch,authorizationCapability:'sourcing:view'},created.sourcingCaseId);
+  }finally{await afterReturn.close();}
+  expect(corrected).toMatchObject({status:'pending_management_decision',ieQuote:{quoteVersion:1,quotedBy:ie.actorId,quotedAt:created.ieQuote!.quotedAt}});
+  expect(corrected.lineItems[1]).toMatchObject({formalStyleNo:null,alternateStyleNo:alternate});
+  const center=await h.open(ie.actorId,1165,{},'/ui/ie-processing?directory=unified&kind=sourcing_review');
+  try{
+   const response=await center.page.request.get(h.base+'/api/digital-production/quotations/ie-directory?'+
+    new URLSearchParams({kind:'sourcing_review',page:'1',search:alternate}));
+   expect(response.status(),await response.text()).toBe(200);
+   const name=(await db.query('SELECT display_name FROM app_users WHERE id=$1',[ie.actorId])).rows[0]!.display_name;
+   expect(await response.json()).toMatchObject({total:1,items:[{objectId:created.sourcingCaseId,state:'priced',assigneeName:name,
+    pricing:{kind:'single',amount:'15.8000',unit:'件'}}]});
+  }finally{await center.close();}
+  expect((await db.query('SELECT count(*)::int AS count FROM sourcing_ie_quotes WHERE sourcing_case_id=$1',[created.sourcingCaseId])).rows[0]!.count).toBe(1);
+  expect((await db.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_ie_quote'",[created.sourcingCaseId])).rows[0]!.count).toBe(0);
+  const secondReturn=(await sourcing.returnToMerchandiser(owner,created.sourcingCaseId,{
+   expectedVersion:corrected.version,reason:'TEST 回原报价中心核对真实加工范围'},randomUUID())).value;
+  const latest=await quotes.read(designer,resource);
+  const repriced=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:latest.version,unitPrice:'16.2'},randomUUID());
+  const confirmation={...confirmed.confirmation!,expectedVersion:repriced.version};
+  const newQuote=await quotes.confirm(designer,resource,confirmation,randomUUID());
+  await expect(sourcing.correctCase(merch,created.sourcingCaseId,{...correction,expectedVersion:secondReturn.version},randomUUID()))
+   .rejects.toMatchObject({statusCode:409});
+  const oldBudget=await budgets.read(merch,id);
+  const newDraft=await budgets.adoptQuotation(merch,id,{expectedVersion:oldBudget.version,sourceQuoteVersion:newQuote.version},randomUUID());
+  expect(newDraft.document?.rows.filter(row=>row.rowId===ieRow.rowId)).toEqual([expect.objectContaining({unitPrice:'16.2'})]);
+  const publishedNew=await budgets.publish(merch,id,newDraft.version,randomUUID(),newQuote.version);
+  expect(publishedNew.linkedIeCorrection).toMatchObject({sourcingCaseId:created.sourcingCaseId,budgetVersion:publishedNew.version});
+  expect((await budgets.originalVersion(merch,id,budget.version)).sheet.document?.outsourcingUnitPrice).toBe('15.8');
+  const correctedBudgetUi=await h.open(merch.actorId,1165,{},'/ui/digital-production?budget='+id);
+  let readopt:Awaited<ReturnType<typeof sourcing.correctCase>>['value'];
+  try{
+   await correctedBudgetUi.page.getByRole('link',{name:'回原外发单明确采用本次新预算',exact:true}).click({timeout:8000});
+   await correctedBudgetUi.page.getByRole('checkbox',{name:`明确采用本单新确认报价与已发布预算 v${publishedNew.version}`,exact:true}).check({timeout:8000});
+   expect(new URL(correctedBudgetUi.page.url()).pathname).toContain(created.sourcingCaseId);
+   await correctedBudgetUi.page.getByLabel('修改说明（必填）',{exact:true}).fill('TEST 在原外发单明确采用新发布预算');
+   const actual=correctedBudgetUi.page.waitForResponse(response=>response.request().method()==='POST'&&
+    new URL(response.url()).pathname.endsWith(`/sourcing/cases/${created.sourcingCaseId}/corrections`),{timeout:8000});
+   await correctedBudgetUi.page.getByRole('button',{name:'提交并进入审批',exact:true}).click({timeout:8000});
+   const response=await actual;
+   expect(response.status(),response.ok()?undefined:await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toMatchObject({expectedVersion:secondReturn.version,
+    adoptedBudget:{budgetVersion:publishedNew.version,orderVersion:publishedNew.linkedIeCorrection!.orderVersion}});
+   readopt=await sourcing.getCase({...merch,authorizationCapability:'sourcing:view'},created.sourcingCaseId);
+  }catch(error){
+   const current=new URL(correctedBudgetUi.page.url());
+   await writeFile(join(h.evidence,'r6-sourcing-correction.txt'),current.pathname+'?'+current.searchParams.toString()+'\n'+await correctedBudgetUi.page.locator('body').innerText());
+   throw error;
+  }finally{await correctedBudgetUi.close();}
+  expect(readopt.status).toBe('pending_management_decision');
+  expect(Number(readopt.daxingUnitPrice)).toBe(16.2);
+  expect(readopt.ieQuote?.adoptedFromBudget?.budgetVersion).toBe(publishedNew.version);
+  expect((await db.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_ie_quote'",[created.sourcingCaseId])).rows[0]!.count).toBe(0);
+  const craft=(await db.query("SELECT craft_id FROM current_craft_catalog WHERE craft_name='TEST车缝'")).rows[0]!;
+  const manager=f.people['production-management']!;
+  const selection=(await sourcing.recordManagementDecision(manager,created.sourcingCaseId,{supplierId:f.supplierId,craftIds:[craft.craft_id],
+   linePrices:prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:'16.2'})),cuttingProcess:'in_house'},randomUUID())).value;
+  expect(selection.status).toBe('pending_owner_approval');
+  const approval=await decideSeenSourcingOwner(sourcing,owner,created.sourcingCaseId,{decision:'approved'},randomUUID());
+  expect(approval.value.status).toBe('pending_finance_reconciliation');
+ },35_000);
  it('keeps jointly enabled R4 row reviews and prices on the exact stored version and leaves the budget locked before customer confirmation',async()=>{
   const {f,db}=h,designer=f.people['sample-designer']!,worker=f.people['pattern-room-worker']!,merch=f.people.merchandiser!;
   const identity=new DigitalProductionIdentityService(db,true),quotes=new DigitalQuotationService(db,true);
@@ -516,6 +709,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await forms.publish(designer,source.sourceId,saved.version,randomUUID());
   const publish=await forms.read(designer,source.sourceId);
   const blank=await quotes.read(designer,resource);expect(blank.rows.find(row=>row.rowId===materialId)?.technicalConsumptionIssue).toBeUndefined();
+  expect(blank.workbenchReadiness).toMatchObject({canConfirm:false,reasons:expect.arrayContaining(['待正式纸样技术成果','待IE加工价'])});
+  const noPaper=await h.open(designer.actorId,1165,{},path);
+  try{
+   await noPaper.page.locator('.quotation-editor > p').filter({hasText:'待正式纸样技术成果'}).first().waitFor();
+   expect(await noPaper.page.locator('#quote-cost-reference').innerText()).toContain('待正式纸样技术成果');
+   expect(await noPaper.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
+  }finally{await noPaper.close();}
   const initial=await publishedTechnicalFixture(h.db,h.f.root,source.sourceId,publish.document!,publish.version,worker.actorId);
   const artifact=(await technical.read(h.f.root,source.sourceId)).artifacts.find(row=>row.artifactSetId===initial?.artifactSetId&&row.version===initial?.version)!;
   const write=(version:number,consumptionRows:typeof artifact.body.consumptionRows)=>technical.saveArtifact(h.f.root,source.sourceId,{taskId:artifact.taskId,expectedDocumentVersion:publish.version,expectedVersion:version,scopeRef:'整款',action:'publish',body:{...artifact.body,consumptionRows}},randomUUID());
@@ -536,13 +736,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await mainRow.getByText(hint,{exact:true}).waitFor();expect(await mainRow.getByRole('cell',{name:'—',exact:true}).count()).toBe(1);
    expect(await otherRow.getByText(hint,{exact:true}).count()).toBe(0);
    expect(await tab.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
-   expect(await otherRow.getByRole('cell',{name:'19.75',exact:true}).count()).toBeGreaterThan(0);
+   expect(await otherRow.getByRole('cell',{name:'19.8',exact:true}).count()).toBeGreaterThan(0);
    expect(await tab.page.locator('#quote-cost-reference').innerText()).toContain('成本合计 待补齐');
    await write(mismatch.version,[{materialId:otherId,unit:'米',consumption:'1'}]);
    await tab.page.getByRole('button',{name:'重新读取报价',exact:true}).click();
    await mainRow.waitFor();await expect.poll(()=>mainRow.getByText(hint,{exact:true}).count()).toBe(0);
    expect((await quotes.read(designer,resource)).rows.find(row=>row.rowId===materialId)).toMatchObject({consumption:'',unitPrice:'20',consumptionSource:null});
-  }finally{await tab.context.close();}
+  }finally{await tab.close();}
  });
  it('unlocks only the confirmed order in the original merchandiser budget after two tabs and a lost confirmation receipt',async()=>{
   const designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,worker=h.f.people['pattern-room-worker']!;

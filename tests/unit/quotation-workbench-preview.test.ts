@@ -17,7 +17,8 @@ const quoteId='7cd3f988-a895-4cbb-8a3a-bf9d0fbac507';
 const path=`sources/${resource.id}/quotation`;
 const preview=QuotationWorkbenchPreviewSchema.parse({resource,quoteId,version:1,unitCost:'1.23456789',
  status:'awaiting_customer_confirmation',counts:{returned:0,resubmitted:0,incomplete:0,pendingCraftApproval:0},
- reviews:[],saved:{input:{field:'multiplier',value:'137.5'},version:1},confirmation:'joint_release_ready'});
+ reviews:[],saved:{input:{field:'multiplier',value:'137.5'},version:1},confirmation:'joint_release_ready',
+ readiness:{canMeasure:true,canConfirm:true,reasons:[]}});
 
 function mountPricing(){
  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
@@ -111,6 +112,20 @@ it('does not double-round the inverse rate, divide by zero or expose an adopt ac
   expect(h.adoptButton()).toBeUndefined();
   expect(h.onAdopt).not.toHaveBeenCalled();
   expect(h.read.mock.calls.map(call=>call[1])).toEqual(['GET','GET','GET']);
+ }finally{await h.close();}
+});
+
+it('does not adopt a price when an otherwise measurable quotation lacks original confirmation readiness',async()=>{
+ const h=mountPricing();
+ try{
+  await h.render({...preview,readiness:{canMeasure:true,canConfirm:false,reasons:['工艺审批未完成']}});
+  expect(h.element.textContent).toContain('工艺审批未完成');
+  expect(h.adoptButton()?.getAttribute('aria-disabled')).toBe('true');
+  await act(async()=>h.adoptButton()!.click());
+  expect(h.onAdopt).not.toHaveBeenCalled();
+  await h.render({...preview,readiness:undefined},1);
+  expect(h.element.textContent).toContain('待核对确认条件');
+  expect(h.adoptButton()?.getAttribute('aria-disabled')).toBe('true');
  }finally{await h.close();}
 });
 

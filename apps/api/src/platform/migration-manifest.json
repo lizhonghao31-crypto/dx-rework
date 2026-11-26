@@ -1311,6 +1311,10 @@
     {
       "version": "0313_external_craft_repair_continuation",
       "checksum": "dbaaacbc6a45910c2d4a6a179573f0ff44d2253990e33374936de97f74ea9587"
+    },
+    {
+      "version": "0314_sourcing_adopt_confirmed_ie_basis",
+      "checksum": "c01f37f79a1b98b9dfbe59f578c922ac083c50d36c3bf8e39541479f93867617"
     }
   ]
 }
