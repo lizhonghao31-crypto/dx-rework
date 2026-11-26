@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
   "risk": "full",
-  "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
+  "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
   "rules": [
     {
       "rule": "正常 API 启动接通原工艺、成衣 QC 同批返工已有入口；不改变来源定位、数量、原权限、重放或普通返工。",
@@ -47,10 +47,31 @@
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts#runs every consumer of the original shared authenticated App browser"
       ],
-      "expectation": "最新本地现有风险选择回归全通过，原浏览器回归实际走已登记长预算通过。首次 Full 的非数据库失败单独记录。",
+      "expectation": "原 canonical 风险映射全文件 143/143，新增浏览器采用原长预算并原样覆盖同批返工 3 条。",
       "checks": [
-        "native",
-        "canonical"
+        "canonical",
+        "native"
+      ]
+    },
+    {
+      "rule": "旧时效历史夹具保留原版本序列，使用显式当前 0316 原合同生成依赖，仍经原合同 ready 与发厂门禁验证。",
+      "source": "准确 Full 45883912914 PostgreSQL 旧固定时效两个串联发厂失败；未改发布基线 b7db88a3 两个同点 409 的定向对照。",
+      "initialization": "保留历史 0280/0281/0282，仅给会走现有 SourcingService 的隔离 schema 补当前真实 0316 合同生成领取字段和 staging，不写生产，不变迁移脚本。",
+      "dateAndPermission": "当前已审批原合同确实 ready 后仍以真实 QC 与末步骤发厂，核中间批及不合格拒绝、分批正例及幂等；未放松任何权限和合同门禁。",
+      "writes": [
+        "tests/integration/fixed-timeline-postgres.test.ts#0316_sourcing_contract_generation_attempts.sql"
+      ],
+      "reads": [
+        "apps/api/migrations/0316_sourcing_contract_generation_attempts.sql",
+        "apps/api/src/production-platform/factory-flow-service.ts#batchDispatch",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#generateIfReady"
+      ],
+      "oldTests": [
+        "tests/integration/fixed-timeline-postgres.test.ts#terminal-only dispatch"
+      ],
+      "expectation": "同一旧套件 15/15，包含绣→印和印→绣两条旧红，原各发厂/QC/数量/重试断言均保留。新增一条原合同已就绪的断言。",
+      "checks": [
+        "native"
       ]
     }
   ],
@@ -58,46 +79,46 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-02-evidence/budget-fix/native.sh",
+      "command": "bash /workspace/scratch/m02-02-evidence/contract-and-budget/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "135ab696466e27dae8a46780624629f89c708577",
-      "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
-      "context": "Node 22 / Chromium / normal server.ts / isolated PostgreSQL, using the exact existing long correctness config now selected by canonical plan.",
-      "startedAt": "2026-11-26T19:43:54.020938+00:00",
-      "endedAt": "2026-11-26T19:44:30.046197+00:00",
-      "log": "/workspace/scratch/m02-02-evidence/budget-fix/native.log",
-      "logSha256": "aacf0aa37dc48ab082a7590adf9f6659576afcbcb28adcfdcaeee2971620afdf",
-      "passed": 3,
+      "testedHead": "2c221cc2a7d7b1784bf3c9e626843821372eddb7",
+      "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
+      "context": "Node22 and isolated PostgreSQL with Chromium; existing long correctness config over normal server.ts QC plus original timeline full suite including 2 real contract/dispatch cases.",
+      "startedAt": "2026-11-26T19:53:40.720886+00:00",
+      "endedAt": "2026-11-26T19:54:40.801965+00:00",
+      "log": "/workspace/scratch/m02-02-evidence/contract-and-budget/native.log",
+      "logSha256": "f0a7672bc2d3d4042b301599b39d851e5b307ca8a8d618ebef350f19c542ed9f",
+      "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "74aece08b140d9916292f496d0182cb5c23ab63a4d65097c8fc0987f885fbf4a"
+          "sha256": "93ecc2c13ed59f77ea38336a75d004e4bcf7b81bff519e87443952184b56fd9d"
         }
       ]
     },
     {
       "id": "canonical",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-02-evidence/budget-fix/canonical.sh",
+      "command": "bash /workspace/scratch/m02-02-evidence/contract-and-budget/canonical.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "135ab696466e27dae8a46780624629f89c708577",
-      "sourceFingerprint": "84489c049d16a5f33e4e162458540be08e04d10a23f34bcc49d72c6a11244477",
-      "context": "Local Node 22 at corrected source, the complete canonical Full-risk mapping unit suite, including the original browser shared harness rule.",
-      "startedAt": "2026-11-26T19:45:23.659269+00:00",
-      "endedAt": "2026-11-26T19:45:24.231351+00:00",
-      "log": "/workspace/scratch/m02-02-evidence/budget-fix/canonical.log",
-      "logSha256": "338c0ebdc17b26fd524afb236bae33fafafe7dc2f6e7dfef65800fb9ad2d3b59",
+      "testedHead": "2c221cc2a7d7b1784bf3c9e626843821372eddb7",
+      "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
+      "context": "Node22 / exact original canonical Full plan selects this browser suite using established long correctness config; entire risk mapping unit file.",
+      "startedAt": "2026-11-26T19:54:11.454025+00:00",
+      "endedAt": "2026-11-26T19:54:12.609758+00:00",
+      "log": "/workspace/scratch/m02-02-evidence/contract-and-budget/canonical.log",
+      "logSha256": "8b53f072e4bcb858e561fd2c4a6c8ed9ce010963fe278198d9505527b929ac86",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "95cc5bea6fa5984cb2b1ae9745a251eafc492135b32a08778ef2463ef391f769"
+          "sha256": "5898779dd510823dc0a9119ea125d39b5d59a8965b61da416cea0c86224ce95a"
         }
       ]
     }
