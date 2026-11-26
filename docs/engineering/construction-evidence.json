@@ -2,7 +2,7 @@
   "version": 1,
   "base": "288896d435794b8912366ad31d89731ad04ea6df",
   "risk": "full",
-  "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
+  "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
   "rules": [
     {
       "rule": "已确认且实际适用的唯一 IE 加工价沿原报价、已发布预算及外发正式采用，不重复创建 IE 初始任务；合法独立外发和返工核价不改",
@@ -29,7 +29,8 @@
         "tests/helpers/customer-quotation-fixture.ts",
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/integration/development-technical-postgres.test.ts",
-        "tests/unit/quotation-ie-budget-basis.test.ts"
+        "tests/unit/quotation-ie-budget-basis.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-assembly.ts",
@@ -44,7 +45,8 @@
         "tests/integration/production-readiness-postgres.test.ts",
         "tests/unit/ie-authorized-directory.test.ts",
         "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts"
+        "tests/integration/digital-budget-shared-postgres.test.ts",
+        "tests/integration/budget-washing-fees-postgres.test.ts"
       ],
       "expectation": "真实原 IE 报 15.8，实际预算/外发均采用 15.8 而非客户价，进入原选厂和审批且零重复 IE；合法重报价用已发布的新 16.2，原 15.8 历史准确且仅非价格更正不重派 IE。",
       "checks": [
@@ -53,7 +55,9 @@
         "protocol",
         "non-db",
         "warehouse",
-        "legacy"
+        "legacy",
+        "mapped-other",
+        "columns"
       ]
     },
     {
@@ -136,38 +140,38 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r6-evidence/legacy-fix/native.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "原真实 PostgreSQL、登录 Chromium 报价预算与外发，更正、IE 联合目录和原时间保持",
-      "startedAt": "2026-11-26T08:33:17.888080+00:00",
-      "endedAt": "2026-11-26T08:35:39.361451+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/native.log",
-      "logSha256": "ea64cefd45b878168c4a053f4c7527e79bc787892d599ef7752b53535a6653fb",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "真实 PostgreSQL、登录 Chromium 原报价预算及外发两处 Review 复验",
+      "startedAt": "2026-11-26T08:39:31.249322+00:00",
+      "endedAt": "2026-11-26T08:42:36.753100+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/native.log",
+      "logSha256": "9096e031ab5016b162742b059639e289fdfba2bd5ebc881c3d48dbc5b297b219",
       "passed": 89,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "985c793866f2c9431b61e5c7c45e3cf3c2f518cd63ac279e59917496d2d192d8"
+          "sha256": "e2baedbfae7803dc013b0cbe4d4b9c1fc0341b9120c306463d932c981dbd8459"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r6-evidence/legacy-fix/static.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "准确发布基点类型、改动 ESLint、迁移、时钟、格式与秘密扫描",
-      "startedAt": "2026-11-26T08:33:17.874771+00:00",
-      "endedAt": "2026-11-26T08:34:14.995282+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/static.log",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "当前发布基点的 TypeScript、改动 ESLint、迁移、时钟、格式与秘密扫描",
+      "startedAt": "2026-11-26T08:39:31.485038+00:00",
+      "endedAt": "2026-11-26T08:40:37.287215+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/static.log",
       "logSha256": "14d14514555b7b6ba7e545c143cb570a89a1775ad2026979f58d8c7d259938c0"
     },
     {
@@ -176,17 +180,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "本仓库实际门禁协议及原时钟 Node TAP 检查",
-      "startedAt": "2026-11-26T08:33:18.024813+00:00",
-      "endedAt": "2026-11-26T08:33:27.773503+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/protocol.log",
-      "logSha256": "f7393b0778e4f483a0c866ba4aa9ded178a8afbb245908b7393ba6630808be01",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "当前不可变门禁 Node TAP 协议和安全测试",
+      "startedAt": "2026-11-26T08:39:31.281038+00:00",
+      "endedAt": "2026-11-26T08:39:42.029898+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/protocol.log",
+      "logSha256": "0fa6a1367b2e1c766f654446f178656b69d8631ad3cebb2dccc5cfce22d80ed8",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "f7393b0778e4f483a0c866ba4aa9ded178a8afbb245908b7393ba6630808be01"
+          "sha256": "0fa6a1367b2e1c766f654446f178656b69d8631ad3cebb2dccc5cfce22d80ed8"
         }
       ],
       "passed": 285,
@@ -196,71 +200,108 @@
     {
       "id": "non-db",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r6-evidence/legacy-fix/non-db.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/non-db.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "原外发更正与联合 IE 目录授权、报价精度在实际非数据库测试入口定向回归",
-      "startedAt": "2026-11-26T08:33:17.926218+00:00",
-      "endedAt": "2026-11-26T08:33:36.571913+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/non-db.log",
-      "logSha256": "4021fea65c20e861f7fef23e71175798a550a4267a11fabdc45fc7aa69dba9d1",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "原路径非数据库定向，包含报价只读授权、金额和历史",
+      "startedAt": "2026-11-26T08:39:31.355148+00:00",
+      "endedAt": "2026-11-26T08:39:53.662144+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/non-db.log",
+      "logSha256": "4163346a4069222f8c160a5a9cb10a2498fb36d6692acb908a5a4a3e4e042479",
       "passed": 70,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5483f8be669855aa311976c424becdccd9a08564a86ed4e1c492086333eaf10a"
+          "sha256": "4c873901688f6146bf4ac462c6281a495af279ec5de1ae3caa6c49982c0697bf"
         }
       ]
     },
     {
       "id": "warehouse",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r6-evidence/legacy-fix/warehouse.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/warehouse.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "原仓库范围、纠正和批次对同一原真实 IE 采用的兼容",
-      "startedAt": "2026-11-26T08:33:17.893756+00:00",
-      "endedAt": "2026-11-26T08:34:03.512950+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/warehouse.log",
-      "logSha256": "eef161079401899ef309a8ceeb347c64540899fe3386d56d0504ca9ec308dbc1",
-      "passed": 3,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "实际全部生产准备 PostgreSQL 原范围及兼容回归",
+      "startedAt": "2026-11-26T08:39:31.247803+00:00",
+      "endedAt": "2026-11-26T08:42:19.580209+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/warehouse.log",
+      "logSha256": "ab0ba633d2fb8a42f409bf43d4ea06242e5d79b5db3bbc8e70642235bba49ad1",
+      "passed": 59,
       "failed": 0,
-      "skipped": 56,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "47a0508d58ae7c77462e4b3f04f2c4cd36bd306f0525a8b0979bd73cd2eb67d4"
+          "sha256": "85da1130d6821ad0a69904c860c60975a2e8a0e486a35278b9a8c0c18241f8ef"
         }
       ]
     },
     {
       "id": "legacy",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r6-evidence/legacy-fix/legacy.sh",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/legacy.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bf3ceb7055275418fbeaaf4feb8fd1d6682203cf",
-      "sourceFingerprint": "16f1ed46ce8f2951e4be166ee2caaedc82f804346c061c2cd43ce07371a5aa4b",
-      "context": "迁移前后的原预算保存、发布、附件、报价和权限实际隔离 PostgreSQL 回归",
-      "startedAt": "2026-11-26T08:33:17.874281+00:00",
-      "endedAt": "2026-11-26T08:33:30.305461+00:00",
-      "log": "/workspace/scratch/r6-evidence/legacy-fix/legacy.log",
-      "logSha256": "fcb2c4c4b5e6b6f3bec85c8640d5e7286cc75dc7edd35d75080d2a9024d3a282",
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "迁移前后的原预算、附件事务、真实报价与权限 PostgreSQL 回归",
+      "startedAt": "2026-11-26T08:39:31.382641+00:00",
+      "endedAt": "2026-11-26T08:39:50.202761+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/legacy.log",
+      "logSha256": "bf390a5b079ead98c96aeb07919421b95fdbe42d471bbc2f55433343980452ea",
       "passed": 23,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d7c1e2f6bf6c4c29ba96c3c1fd82da842ef6a005756cc3c55de00e03722315f8"
+          "sha256": "597684029ae71910888620b103eb5610a96bb9cdd30f22ff706f83fa4964e929"
         }
       ]
+    },
+    {
+      "id": "mapped-other",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/mapped-other.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "严格据当前高风险映射运行其余完整的十八个真实 PostgreSQL 文件",
+      "startedAt": "2026-11-26T08:39:31.404855+00:00",
+      "endedAt": "2026-11-26T08:49:03.807104+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/mapped-other.log",
+      "logSha256": "68377b4a96327fb85118e899538bb4444d1f9b9ac764633c76cb6bd969c83766",
+      "passed": 325,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "cab18e4a331e02b0eca23b4dda47f493ea7f8b7fcbcf6b55c503e37e865592f8"
+        }
+      ]
+    },
+    {
+      "id": "columns",
+      "kind": "command",
+      "command": "bash /workspace/scratch/r6-evidence/mapped-fix/columns.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b06e7389a564505650e6d25b430dde6f4bddc58a",
+      "sourceFingerprint": "d029c35389a3d74fe22359c8894daafc0a14b157fd6abc0888315e9b09d04fe9",
+      "context": "实际隔离 PostgreSQL 的 0313 就地升级与 0314 空库建到最新，逐列验证预算及外发采用",
+      "startedAt": "2026-11-26T08:48:07.276148+00:00",
+      "endedAt": "2026-11-26T08:48:14.870171+00:00",
+      "log": "/workspace/scratch/r6-evidence/mapped-fix/columns.log",
+      "logSha256": "24f4712e88ac55caa54d93b96fccdc4151d5b406767ba160fa382d76140f2af2"
     }
   ]
 }
