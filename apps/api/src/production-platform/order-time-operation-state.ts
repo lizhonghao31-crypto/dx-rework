@@ -17,7 +17,7 @@ import type {SlaAnchor,SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {CraftStepChoicesSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
-import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {isDevelopmentMaterialPlaceholder,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
 import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -308,15 +308,33 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   if(applicable.length&&applicable.every(work=>begunStates.get(work.id)?.all)&&JSON.stringify(original?.overrides[key]??original?.company.nodes[key]??company.nodes[key])!==JSON.stringify(rule))conflict('已开始的节点保留原用时和责任时钟，请调整尚未开始的节点');
  }
  const notBefore:Record<string,SlaAnchor>={...rewashBounds};
+ const unconfirmedFabric:string[]=[];
  if(development){
   const native=operation.kind==='development_revision'?null:await materialReadiness(db,sourceId!,round),byId=new Map(native?.materials.map(row=>[row.materialId,row])??[]);
   const expected=(await db.query(`SELECT DISTINCT ON(material_id) material_id,expected_date::text AS expected_date,event_id FROM digital_development_material_events WHERE source_id=$1 AND route_version=$2 AND action='修改预计日期' ORDER BY material_id,sequence DESC`,[sourceId,round])).rows;
   const waiting=development.materials.filter(material=>{const row=byId.get(material.materialId);return (row?row.required:material.requiredThisRound)&&(row?!row.supplyAvailable:!material.available);});
-  const bounds=waiting.map(material=>({id:material.materialId,name:material.name||material.label,date:expected.find(row=>row.material_id===material.materialId)?.expected_date??material.expectedDate}));
-  const dates=bounds.flatMap(row=>row.date?[row.date as string]:[]).sort();
-  for(const row of bounds.filter(row=>!row.date)){value.route.complete=false;value.route.missing.push(`${row.name}尚未到位，请在原单填写预计到位日`);}
-  sourceVersion.materialSupply={readiness:native?.materials??null,expected};
-  if(dates.length){const first=value.work.find(work=>work.parameterKey==='development_materials');if(first)notBefore[first.id]={precision:'date',value:dates.at(-1)!,source:'本单已登记的最晚物料到位日'};}
+  const bounds=waiting.map(material=>({material,name:material.name||material.label,date:(expected.find(row=>row.material_id===material.materialId)?.expected_date??material.expectedDate) as string|null}));
+  if(source?.workbench_generated_number||source?.workbench_number_root_id){
+   const fabric=bounds.filter(row=>row.material.category!=='辅料'&&!isDevelopmentMaterialPlaceholder(row.material));
+   const accessories=bounds.filter(row=>row.material.category==='辅料'&&row.material.designerHasMaterial===false&&!isDevelopmentMaterialPlaceholder(row.material));
+   for(const row of fabric)if(!row.date)unconfirmedFabric.push(row.name);
+   for(const row of accessories)if(!row.date){
+    value.route.complete=false;
+    value.route.missing.push(`${row.name}选择了没有实物，请填写预计日期`);
+   }
+   const setBound=(parameterKey:string,rows:typeof bounds,label:string)=>{
+    const work=value.work.find(item=>item.parameterKey===parameterKey);
+    const latest=rows.flatMap(row=>row.date?[row.date]:[]).sort().at(-1);
+    if(work&&latest)notBefore[work.id]={precision:'date',value:latest,source:label};
+   };
+   setBound('development_materials',fabric,'本单已登记的最晚面料预计');
+   setBound('development_sewing',accessories,'本单已登记的最晚辅料预计，实际车板仍以文员补核为准');
+  }else{
+   const dates=bounds.flatMap(row=>row.date?[row.date]:[]).sort();
+   for(const row of bounds.filter(row=>!row.date)){value.route.complete=false;value.route.missing.push(`${row.name}尚未到位，请在原单填写预计到位日`);}
+   if(dates.length){const first=value.work.find(work=>work.parameterKey==='development_materials');if(first)notBefore[first.id]={precision:'date',value:dates.at(-1)!,source:'本单已登记的最晚物料到位日'};}
+  }
+  sourceVersion.materialSupply={readiness:native?.materials??null,expected,...(unconfirmedFabric.length?{unconfirmedFabric}:{})};
  }
  if(washing)sourceVersion.washing=[...washing];
  if(rewashing)sourceVersion.rewashing=rewashing.sourceVersion;
@@ -387,6 +405,20 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   check.expectedEnd=ends.length&&ends.every((at):at is string=>Boolean(at))?new Date(Math.max(...ends.map(at=>Date.parse(at!)))).toISOString():null;
   check.requiredMinutes=check.expectedEnd?Math.max(0,(Date.parse(check.expectedEnd)-Date.parse(time.now))/60000):null;
   check.forecastQuality=unresolvedNativeRemainder?'lower_bound':check.expectedEnd?'conditional':'unknown';
+ }
+ if(unconfirmedFabric.length){
+  check.coverage.push(`${unconfirmedFabric.join('、')}的实际到料待跟单核实，板房核配仍以原文员确认实物为准`);
+  if(check.expectedEnd)check.forecastQuality='lower_bound';
+  const developmentOnly=operation.kind==='development_publish'&&!includesProduction;
+  const formalAdmission=includesProduction&&(operation.kind==='development_publish'||operation.kind==='confirm_order');
+  if(formalAdmission||check.feasibility==='sufficient'||check.feasibility==='not_applicable'){
+   // Accepting a known delay cannot stand in for missing material facts when
+   // this approval would create a formal order in the same transaction.
+   if(formalAdmission&&check.feasibility==='insufficient')check.coverage.push('已核实的安排也存在交期缺口，补齐资料后仍须按原时效审批办理');
+   if(developmentOnly)check.publicationMayProceedWithUnconfirmedFabric=true;
+   check.feasibility='unknown';
+   check.lateMinutes=null;
+  }
  }
  if(washing)check.washing=[...washing].map(([lineId,row])=>({lineId,label:row.label,version:row.version,document:row.document}));
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);

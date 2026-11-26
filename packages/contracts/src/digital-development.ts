@@ -372,7 +372,7 @@ export function developmentWorkbenchPublishIssues(sheet:WorkbenchDevelopmentShee
 
 type DevelopmentMaterialPublishField = "name"|"specification"|"expectedDate"|"composition"|"width"|"supplier";
 export function developmentAuxiliaryPlanningPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:"expectedDate";message:string}> {
- return document.materials.filter(row=>row.category==="辅料"&&row.designerHasMaterial===false&&!row.expectedDate)
+ return document.materials.filter(row=>row.category==="辅料"&&row.requiredThisRound&&row.designerHasMaterial===false&&!row.expectedDate)
   .map(row=>({materialId:row.materialId,field:"expectedDate",message:`${row.label||row.name||row.category}选择了没有实物，请填写预计日期`}));
 }
 export function developmentMaterialPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:DevelopmentMaterialPublishField;message:string}>{

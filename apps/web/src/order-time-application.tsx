@@ -17,7 +17,7 @@ export function useOrderTimeApplication(onRequested?:()=>void){
   if(!enabled)return true;
   const turn=++generation.current,check=OrderTimeCheckResultSchema.parse(await digitalRequest('order-time/check','POST',{operation}));
   if(!live.current||turn!==generation.current)return false;
-  if(check.feasibility==='sufficient'||check.feasibility==='not_applicable')return true;
+  if(check.feasibility==='sufficient'||check.feasibility==='not_applicable'||check.publicationMayProceedWithUnconfirmedFabric)return true;
   const next={operation,check};setIntent(next);setError('');setReason('');
   if(!check.canRequest&&!check.canApply&&check.feasibility==='insufficient'){
    const note='工艺变更后时间不足，请原单设计师接续提交时效调整申请';setReason(note);await send(next,note);
@@ -42,7 +42,7 @@ export function useOrderTimeApplication(onRequested?:()=>void){
  const submit=()=>intent?send(intent,reason):Promise.resolve();
  const dialog=intent&&<section className="r5-time-application" aria-label="本单时效申请">
   <h3>{intent.check.feasibility==='unknown'?'本单资料还没齐':'本单时间不足'}</h3>
-  {intent.check.feasibility==='unknown'?<p>{intent.check.coverage.join('；')}</p>:<p>可用 {timeText(Math.max(0,intent.check.availableMinutes??0))}，当前安排需要 {timeText(intent.check.requiredMinutes)}{intent.check.lateMinutes===0?'。':`，预计晚交 ${timeText(intent.check.lateMinutes)}。`}</p>}
+  {intent.check.feasibility==='unknown'?<p>{intent.check.coverage.join('；')}</p>:<p>可用 {timeText(Math.max(0,intent.check.availableMinutes??0))}，当前安排{intent.check.forecastQuality==='lower_bound'?'至少':''}需要 {timeText(intent.check.requiredMinutes)}{intent.check.lateMinutes===0?'。':`，预计晚交 ${timeText(intent.check.lateMinutes)}。`}</p>}
   {error&&<p role="alert">{error}</p>}
   <label>申请说明<textarea aria-label="本单时效申请说明" maxLength={2000} disabled={busy||uncertain} value={reason} onChange={event=>setReason(event.target.value)}/></label>
   <footer><Button type="button" disabled={busy||uncertain} onClick={()=>setIntent(null)}>继续补充原单</Button><Button type="button" variant="primary" disabled={busy||!reason.trim()} onClick={()=>void submit()}>{uncertain?'核对上次申请结果':busy?'正在提交…':intent.check.canRequest?'提交时效调整申请':'通知设计师接续申请'}</Button></footer>

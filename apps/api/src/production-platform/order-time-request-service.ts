@@ -127,7 +127,8 @@ export class OrderTimeRequestService{
    if(row.version!==input.expectedVersion||row.state!=='pending')conflict('ORDER_TIME_STALE','申请已由其他人处理或更新，请刷新查看结果');
    const operation=await currentOrderTimeOperation(db,row.operation_json),time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing,input.rewashing);
    if(input.fingerprint!==state.check.fingerprint)conflict('ORDER_TIME_STALE','原单资料已更新，本次调整已保留，请重新核对后提交');
-   if(state.check.feasibility==='unknown')conflict('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间');
+   if(state.check.feasibility==='unknown'&&!state.check.publicationMayProceedWithUnconfirmedFabric)
+    conflict('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间');
    if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',orderTimeGapText(state.check));
    const eventId=randomUUID(),resource=orderTimeOperationScope(state.operation);
    await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
