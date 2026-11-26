@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
   "risk": "full",
-  "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
+  "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -12,7 +12,8 @@
       "writes": [
         "apps/api/src/production-platform/production-instruction-service.ts#lockImageBindings",
         "apps/api/src/production-platform/order-time-automatic.ts#automaticOrderTime",
-        "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
+        "tests/integration/instruction-forecast-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts#ProductionClosureService"
       ],
       "reads": [
         "apps/api/src/production-platform/production-instruction-routes.ts#registerInstructionRoutes",
@@ -23,12 +24,13 @@
       "oldTests": [
         "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts#R5-09 follows one new order"
       ],
       "newTests": [
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。",
+      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。",
       "checks": [
         "native",
         "static"
@@ -67,39 +69,39 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/native.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/revision/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4f866d17fb7885bd9521e096fa59ce10f02ff670",
-      "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
-      "context": "本地 Node22/Chromium，原 Web 制单、真实鉴权/HTTP handlers 与隔离 PostgreSQL，含结构化时效和原正式写。",
-      "startedAt": "2026-11-26T19:16:18.427608+00:00",
-      "endedAt": "2026-11-26T19:16:58.703499+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/native.log",
-      "logSha256": "6992d54496a490895817ee42f58aac0d071cfa797fdbe5c914fa595fc633f7e2",
-      "passed": 5,
+      "testedHead": "60e4d2e0cc11404c0c5da8895d56b8d0dd01215e",
+      "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
+      "context": "本地 Chromium 和标记的低权限隔离 PostgreSQL，原时效、制单和 R5-09 全链，现有正确性配置、单 worker。",
+      "startedAt": "2026-11-26T19:22:12.614749+00:00",
+      "endedAt": "2026-11-26T19:24:43.767114+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/revision/native.log",
+      "logSha256": "185ab87d33daeebd86a4c9401864aeb408d681e357e03afa9fdad316d418c266",
+      "passed": 22,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5ade11293c6c695cdbe57e9d640e3cb3d3fda38347cbe43cf198f42ab1c8e331"
+          "sha256": "08bdc672e19e30c203734812e0ed95e646a653e839f8955da7ec3ad6e99481cb"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/static.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/revision/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6b23ad28a8bd3d7538b5b24be2f47f22a4d8c949",
-      "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
-      "context": "Node22/npm10，工作区类型校验、受影响 ESLint、迁移清单和 secret 校验；测试已更新为读回实际申请。",
-      "startedAt": "2026-11-26T19:16:40.952547+00:00",
-      "endedAt": "2026-11-26T19:17:31.540981+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/static.log",
-      "logSha256": "310151ca46e5dc3cbe92c83638314ae3d5518aaf809308612203b8f60ee744cc"
+      "testedHead": "60e4d2e0cc11404c0c5da8895d56b8d0dd01215e",
+      "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
+      "context": "Node22/npm10，原 preflight 和时间来源盘点、改动 ESLint、工作区类型、静态迁移及 secret 校验。",
+      "startedAt": "2026-11-26T19:22:40.526359+00:00",
+      "endedAt": "2026-11-26T19:23:34.484920+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/revision/static.log",
+      "logSha256": "e605744c294e2c9e4ad90d26568c89d8d8b6efd166b4d4f91a5fff203c896ba5"
     }
   ]
 }
