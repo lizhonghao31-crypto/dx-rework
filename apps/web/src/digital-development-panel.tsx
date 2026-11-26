@@ -67,7 +67,8 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const [revisionComment,setRevisionComment]=useState<RevisionCommentIntent|null>(null);
   const commentRef=revision?.customerCommentRef,repeatBase=revision?.repeatOriginalComment,revisionRound=revision?.basedOnRound;
   const linkedComment=revisionComment&&commentRef&&sameOriginalComment(revisionComment.ref,commentRef)?revisionComment:null;
-  const publishCurrent=Boolean(commentRef&&(linkedComment||repeatBase?.sourceId===sourceId));
+  const publishCurrent=Boolean(commentRef&&(repeatBase?repeatBase.sourceId===sourceId:
+    commentRef.sourceId===sourceId&&commentRef.roundNumber===revisionRound));
   const applyingComment=useRef<RevisionCommentIntent|null>(null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);

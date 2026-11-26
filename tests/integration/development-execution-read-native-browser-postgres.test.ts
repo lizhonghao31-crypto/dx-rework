@@ -315,7 +315,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await author.addCookies([{name:'dx_rework_session',value:authorToken,url:base}]);
   const editor=await author.newPage(),writes:string[]=[];
   editor.on('request',request=>{if(request.method()==='PUT'||request.method()==='POST')writes.push(new URL(request.url()).pathname);});
-  let submitted:{sourceId:string;roundNumber:number};
+  let submitted:{sourceId:string;roundNumber:number;status?:string};
   try{
    await editor.goto(base+`/ui/digital-production?workspace=designer&section=workspace&area=development&development=${own.id}`);
    await editor.getByRole('button',{name:'编辑版单',exact:true}).click();
@@ -343,22 +343,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    submitted=await result.json();
    expect(writes).not.toContain('/api'+submitPath.replace('round-publish','round-draft'));
    const payload=result.request().postDataJSON(),idem=result.request().headers()['idempotency-key']!;
-   expect(payload).toMatchObject({expectedDraftVersion:0,revision:{customerCommentRef:ref,document:{instructions:current.revision.document.instructions}}});
+   expect(payload).toMatchObject({expectedDraftVersion:0,publishCurrent:true,expectedBasisVersion:original.version,
+    revision:{customerCommentRef:ref,document:{instructions:current.revision.document.instructions}}});
+   expect(submitted.status).toBe('published');
    expect(idem).toBeTruthy();
    expect((await post(submitPath,payload,idem)).json()).toEqual(submitted);
-   expect((await post(submitPath,payload)).statusCode).toBe(409);
+   expect((await post(submitPath,payload)).json()).toEqual(submitted);
   }finally{await author.close();}
   const {sourceId:revisionId,roundNumber}=submitted,b=await post(commentPath,comment('TEST 后录不能混入的评语 B',imageB,ref.version));
   expect(b.statusCode,b.body).toBe(200);
   expect((await technical.read(designer,own.id,1,'整款')).comments.map(row=>row.commentId)).toEqual(expect.arrayContaining([ref.commentId,b.json().commentId]));
-  let saved=await forms.read(designer,revisionId,undefined,roundNumber);
-  if(saved.status==='draft'){
-   const category=saved.document!.patternCategoryId!;
-   const price=await new PatternRoomPriceService(f.db).quote(f.root,'category',category);
-   const published=await post(`/digital-production/sources/${revisionId}/development/publish`,{expectedVersion:saved.version,patternOrder:{categoryId:category,priceVersion:price.version}});
-   expect(published.statusCode,published.body).toBe(200);
-   saved=await forms.read(designer,revisionId,undefined,roundNumber);
-  }
+  const saved=await forms.read(designer,revisionId,undefined,roundNumber);
   expect(saved).toMatchObject({document:{instructions:'TEST 本次未保存的制作说明'},status:'published'});
   const version=`/api/digital-production/sources/${revisionId}/development/versions/${saved.version}`;
   const context=await browser.newContext({viewport:{width:1165,height:840}});
