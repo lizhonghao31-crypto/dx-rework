@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
+import { RECEIVING_BOARD_BASE_SQL } from "../../apps/api/src/receiving/receiving-quantity-query.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 
 describe("receiving defective quantity", () => {
@@ -35,7 +36,6 @@ describe("receiving defective quantity", () => {
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
       readFile("apps/web/src/order-board-page.css", "utf8"),
     ]);
-    const quantityRead = await readFile("apps/api/src/receiving/receiving-quantity-query.ts", "utf8");
     expect(service).toContain("readReceivingBoard");
 
     expect(migration).toContain("defective_quantity integer NOT NULL DEFAULT 0");
@@ -43,7 +43,9 @@ describe("receiving defective quantity", () => {
     expect(migration).toContain("defective_quantity_adjustment");
     expect(routes).toContain("body.defectiveQuantity === undefined ? 0");
     expect(service).toContain("defectiveQuantity: input.defectiveQuantity");
-    expect(quantityRead).toContain("sum(r.defective_quantity)+batch.defective_quantity_adjustment");
+    expect(RECEIVING_BOARD_BASE_SQL).toMatch(
+      /sum\(r\.defective_quantity\)\+\(?batch\.defective_quantity_adjustment\)?\)::bigint AS current_defective_quantity/,
+    );
     expect(receivingPage.indexOf("<span>次品数量</span>")).toBeGreaterThan(
       receivingPage.indexOf("<span>实际收货数量</span>"),
     );
