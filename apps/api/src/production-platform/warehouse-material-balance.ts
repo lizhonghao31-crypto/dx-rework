@@ -51,6 +51,17 @@ function difference(left: Decimal | null, right: Decimal | null): string | null 
   return fraction ? `${padded.slice(0, -scale)}.${fraction}` : padded.slice(0, -scale);
 }
 
+/** Start-inspection threshold only. Both amounts must be actual evidence for
+ * the same scope and unit, not demand from a production instruction. */
+export function warehouseFabricInspectionThreshold(unit:string,invested:WarehouseMaterialQuantity|null,received:WarehouseMaterialQuantity|null){
+ const expected=decimal(invested,unit),actual=decimal(received,unit);
+ if(!expected||expected.coefficient<=0n||!actual)return null;
+ const scale=Math.max(expected.scale,actual.scale);
+ const scaledExpected=expected.coefficient*10n**BigInt(scale-expected.scale);
+ const scaledActual=actual.coefficient*10n**BigInt(scale-actual.scale);
+ return 10n*scaledActual>=9n*scaledExpected;
+}
+
 /** A single current native snapshot, not the sum of obsolete versions. A
  * historical ready flag without actual quantities is not receipt evidence. */
 export function currentWarehouseReceiptQuantity(fact: NativeWarehouseReceipt | null, scope: Readonly<{

@@ -6,12 +6,13 @@ import {Pool} from 'pg';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
 import {ReworkInitiationService} from '../../apps/api/src/rework/service.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:string,cuts:string[],actors:{root:TrustedActorContext;primary:TrustedActorContext;manager:TrustedActorContext;warehouse:TrustedActorContext;qc:TrustedActorContext},special:boolean){
- const {root,primary,manager,warehouse,qc}=actors,receiving=new ReceivingService(db),closure=new OrderClosureService(db),identity=new DigitalProductionIdentityService(db,true,sourcing);
+ const {root,primary,manager,warehouse,qc}=actors,receiving=new ReceivingService(db,undefined,undefined,new ProductionClosureService(db)),closure=new OrderClosureService(db),identity=new DigitalProductionIdentityService(db,true,sourcing);
  for(const actor of [root,manager]){
   if(!(await db.query('SELECT 1 FROM identity_mappings WHERE user_id=$1',[actor.actorId])).rowCount)await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),actor.actorId]);
   await db.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');try{for(const role of actor.actorRoles.filter(r=>r!=='root_superuser'))await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) SELECT $1,$2,$3,$2,'TEST P14' WHERE NOT EXISTS(SELECT 1 FROM user_role_assignments WHERE user_id=$2 AND role_code=$3 AND revoked_at IS NULL)",[randomUUID(),actor.actorId,role]);}finally{await db.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');}

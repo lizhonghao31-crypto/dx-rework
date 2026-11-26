@@ -266,6 +266,13 @@ function closureDatabase(roles: string[]) {
   return database(roles, (sql, values) => {
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [order()] : [];
     if (sql.startsWith('SELECT p.*,(')&&sql.includes('packing_absence_proven')) return [{line_id: ROW, po_number: 'TEST-PMC-PO', color: '黑', total_quantity: '10', cutting_id: TASK}];
+    if (sql === "SELECT to_regclass('digital_production_child_lines') AS relation") return [{relation:'digital_production_child_lines'}];
+    if (sql.startsWith('WITH authorized AS (SELECT l.production_order_id,l.line_id,l.child_id,l.module')&&sql.includes('exact_refs AS (')) {
+      expect(values).toEqual([[ORDER]]);
+      expect(sql).toContain('sourcing_production_receipt_links original');
+      // This fixture represents a prior workflow without current digital dispatch enrollment.
+      return [];
+    }
     if (sql.startsWith('SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id')&&sql.includes('sourcing_factory_execution_lines')) {
       expect(values).toEqual([ORDER]);
       return [{production_order_id:QUOTE,factory_decision_id:null,line_id:ROW,quantity:10,target_date:null}];

@@ -2,8 +2,9 @@ import {bulkWashingInstalled} from './bulk-washing-coverage.js';
 import {NATIVE_CUT_SCOPE_ROWS_SQL,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journey-cut-scopes.js';
 import type {PoolClient} from 'pg';
 import type {DeliveryCalendarFilters,DeliverySummary} from '@dx-rework/contracts/delivery-calendar';
-import {RECEIVING_GROUP_PACKING_JOIN_SQL,DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
+import {RECEIVING_GROUP_PACKING_JOIN_SQL,digitalReceivingBaseSql} from '../receiving/receiving-quantity-query.js';
 import {packingQualityCoverageSql,effectivePackingQuantitySql} from './packing-quality-coverage.js';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 
 export type DeliveryDebtSummary={overdue:DeliverySummary;beforeSelected:DeliverySummary;quantityUnknownPoCount:number};
 const empty=():DeliverySummary=>({poCount:0,orderedQty:0,packedQty:0,pendingQty:0,extraQty:0,knownOrderedQty:0,comparableOrderedQty:0,knownPackedQty:0,knownPendingQty:0,knownExtraQty:0,unknownQuantityPoCount:0,missingDuePoCount:0,overduePoCount:0,overduePendingQty:0});
@@ -16,7 +17,8 @@ export async function deliveryDebtSummary(db:PoolClient,orderIds:readonly string
  const cutIds=(await db.query<{ids:string[]|null}>(`SELECT array_agg(DISTINCT map.child_id) AS ids FROM digital_production_child_lines map
   JOIN digital_production_po_lines p USING(production_order_id,line_id) WHERE map.module='cutting' AND map.production_order_id=ANY($1::uuid[])
   AND p.customer_warehouse_arrival_date<greatest($2::date,$3::date)`,[orderIds,today,selectedDate])).rows[0]?.ids??[];
- const rows=(await db.query<{bucket:string;po_count:string;ordered:string|null;packed:string|null;pending:string|null}>(`${DIGITAL_RECEIVING_BASE_SQL}, quality_totals AS (${packingQualityCoverageSql('$5',await bulkWashingInstalled(db))}), calendar_po AS (
+ const excluded=[...new Set((await readNativeReceiptExceptions(db,{cutIds})).map(row=>row.receiptId))];
+ const rows=(await db.query<{bucket:string;po_count:string;ordered:string|null;packed:string|null;pending:string|null}>(`${digitalReceivingBaseSql('$13')}, quality_totals AS (${packingQualityCoverageSql('$5',await bulkWashingInstalled(db),'$13')}), calendar_po AS (
   SELECT p.line_id,p.customer_warehouse_arrival_date AS due,
    (SELECT sum(size.quantity) FROM digital_production_po_sizes size WHERE size.line_id=p.line_id) AS demand,
    CASE WHEN cutting.verified OR (${NATIVE_EMPTY_PACKING_SCOPE_SQL}) THEN CASE WHEN packed.packing_revision_id IS NULL THEN 0 ELSE packed.packing_quantity END ELSE NULL END AS raw_packed,
@@ -55,7 +57,7 @@ export async function deliveryDebtSummary(db:PoolClient,orderIds:readonly string
    ('quantity-unknown',fact.demand IS NULL OR fact.packed IS NULL)) bucket(name,matches)
   WHERE bucket.matches AND ($11::text IS NULL OR fact.risk=$11)
  ) SELECT name AS bucket,count(*)::text AS po_count,sum(demand)::text AS ordered,sum(least(demand,packed))::text AS packed,sum(greatest(demand-packed,0))::text AS pending
-  FROM calendar_buckets GROUP BY name`,['2000-01-01','2199-12-31','#',cutIds,orderIds,today,selectedDate,filters.search,filters.customer??null,filters.scope,filters.status??null,sourcingAllowed])).rows;
+  FROM calendar_buckets GROUP BY name`,['2000-01-01','2199-12-31','#',cutIds,orderIds,today,selectedDate,filters.search,filters.customer??null,filters.scope,filters.status??null,sourcingAllowed,excluded])).rows;
  const result:DeliveryDebtSummary={overdue:empty(),beforeSelected:empty(),quantityUnknownPoCount:0};
  for(const row of rows){
   if(row.bucket==='quantity-unknown'){result.quantityUnknownPoCount=Number(row.po_count);continue;}

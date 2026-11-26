@@ -30,10 +30,11 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  const finalReasons:string[]=[];
  if(!technical||technical.state!=='effective')finalReasons.push('客户最终批复及本次技术尺寸复核尚未形成有效走货依据');
  if(!repeat&&tail?.kind!=='尾查通过')finalReasons.push('本轮尾查未通过；已有首版的复版须提供原首版和客户面料确认依据');
- if(receipt&&(!receipt.valid||receipt.state!=='ready'))finalReasons.push('当前主料到仓记录尚未有效备齐');
+ const scopedInspection=fabric.warehouseInspection;
+ if(!scopedInspection&&receipt&&(!receipt.valid||receipt.state!=='ready'))finalReasons.push('当前主料到仓记录尚未有效备齐');
  if(!fabric.usable)finalReasons.push('主料未通过验布或尚无有效允许使用决定');
- const receiptAt=receipt&&['ready','partial'].includes(receipt.state)&&receipt.valid?receipt.occurredAt:!receipt?fabric.report?.arrivedAt??null:null;
- if(!receiptAt&&!receipt&&!fabric.report?.arrivedAt)finalReasons.push('尚未登记主料实际到仓');
+ const receiptAt=scopedInspection?scopedInspection.firstReceiptAt:receipt&&['ready','partial'].includes(receipt.state)&&receipt.valid?receipt.occurredAt:!receipt?fabric.report?.arrivedAt??null:null;
+ if(scopedInspection?!scopedInspection.firstReceiptAt:!receiptAt&&!receipt&&!fabric.report?.arrivedAt)finalReasons.push('尚未登记主料实际到仓');
  const timeRows=technical?.finalCommentRef?(await db.query(`SELECT c.recorded_at,r.reviewed_at FROM digital_development_final_comments c
   LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
   LEFT JOIN digital_development_size_review_results r USING(review_id) WHERE c.comment_id=$1`,[technical.finalCommentRef.id])).rows[0]:null;

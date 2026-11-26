@@ -1,6 +1,7 @@
 import type {Pool,PoolClient} from 'pg';
 import {bulkWashingInstalled,washingCoverageValidSql,washingRequiredSql} from './bulk-washing-coverage.js';
 import type {ClosureLine,ReceiptQualityFact} from '@dx-rework/contracts/order-closure';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 
 export type PackingQualityCoverage={received:number;inspected:number;qualified:number};
 type PackingLine=Pick<ClosureLine,'lineId'|'actualQuantity'|'packingQuantity'|'cutScope'>;
@@ -29,7 +30,7 @@ export function packingQualityCoverage(line:PackingLine,quality:readonly Receipt
 /** Same native receipt, latest quantity correction and latest receipt-QC event
  * as garmentQuality(). Only scalar quantities leave this query, after callers
  * have authorized the complete order set. No Journey or SLA per-order load. */
-export const packingQualityCoverageSql=(ordersParameter:'$1'|'$5',washing=false)=>`WITH current_receipt_quality AS (
+export const packingQualityCoverageSql=(ordersParameter:'$1'|'$5',washing=false,except?:'$2'|'$13')=>`WITH current_receipt_quality AS (
  SELECT DISTINCT l.production_order_id,l.line_id,r.receipt_id,
   coalesce(c.actual_quantity,r.actual_quantity)::bigint AS quantity,
   coalesce(c.correction_id,r.receipt_id)::text AS quantity_version,q.payload${washing?`,${washingRequiredSql('po')} AS washing_required,
@@ -43,6 +44,7 @@ export const packingQualityCoverageSql=(ordersParameter:'$1'|'$5',washing=false)
   WHERE resource_kind='order' AND resource_id=l.production_order_id AND event_kind='garment_receipt_qc'
    AND payload->>'receiptId'=r.receipt_id::text ORDER BY recorded_at DESC,event_id DESC LIMIT 1)q ON true
  WHERE l.module='receiving' AND l.production_order_id=ANY(${ordersParameter}::uuid[]) AND b.deleted_at IS NULL
+ ${except?`AND r.receipt_id<>ALL(${except}::uuid[])`:''}
 ), checked_receipt_quality AS (
  SELECT *,coalesce(payload->>'quantityVersion'=quantity_version AND payload->'quantity'=to_jsonb(quantity)
   AND CASE WHEN jsonb_typeof(payload->'qualifiedQuantity')='number'
@@ -55,9 +57,10 @@ SELECT production_order_id,line_id,sum(quantity)::text AS received,
  ${washing?"CASE WHEN bool_or(quantity>0 AND washing_required AND washing_qualified IS NULL) THEN NULL ELSE sum(CASE WHEN quantity>0 AND inspected THEN least((payload->>'qualifiedQuantity')::numeric,CASE WHEN washing_required THEN washing_qualified ELSE quantity END) ELSE 0 END)::text END":"sum(CASE WHEN inspected THEN (payload->>'qualifiedQuantity')::numeric ELSE 0 END)::text"} AS qualified
 FROM checked_receipt_quality GROUP BY production_order_id,line_id`;
 
-export async function readPackingQualityCoverage(db:Pick<Pool|PoolClient,'query'>,orderIds:readonly string[]){
+export async function readPackingQualityCoverage(db:Pick<Pool|PoolClient,'query'>,orderIds:readonly string[],except?:readonly string[]){
  const result=new Map<string,PackingQualityCoverage>();if(!orderIds.length)return result;
- const rows=(await db.query(packingQualityCoverageSql('$1',await bulkWashingInstalled(db)),[orderIds])).rows;
+ const excluded=[...new Set(except??(await readNativeReceiptExceptions(db,{orderIds})).map(row=>row.receiptId))];
+ const rows=(await db.query(packingQualityCoverageSql('$1',await bulkWashingInstalled(db),'$2'),[orderIds,excluded])).rows;
  for(const row of rows)if(row.qualified!==null)result.set(row.line_id,{received:Number(row.received),inspected:Number(row.inspected),qualified:Number(row.qualified)});
  return result;
 }

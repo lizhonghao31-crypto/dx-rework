@@ -36,7 +36,7 @@ export function ProductionExpectedPicker({value,onSelect,disabled=false,cuttingO
   {open?<><p>仅预填首款款号。送货单数量和实际收货数量请按本次到货填写。</p>
    <label className="receiving-field">搜索款号或供应商<input disabled={disabled} maxLength={100} value={q} onChange={e=>{setQ(e.target.value);setPage(1);}}/></label>
    {error?<p role="alert">{error}</p>:null}
-   {data?.items.filter(s=>!cuttingOrderId||s.cuttingOrderIds?.includes(cuttingOrderId)).map(s=><div key={`${s.productionOrderId}:${s.factoryDecisionId??"original"}`}><Button disabled={disabled} variant="secondary" onClick={()=>{setSelected(s);onSelect(s);setOpen(false);}}>{s.firstStyleNo} · {s.supplierName} · 合同 {s.contractNumber} · {s.shippedOn} · 预计 {s.expectedQuantity} 件 · 已关联 {s.receipts.filter(r=>!r.archived).length} 次收货</Button></div>)}
+   {data?.items.filter(s=>!cuttingOrderId||s.cuttingOrderIds?.includes(cuttingOrderId)).map(s=><div key={`${s.productionOrderId}:${s.factoryDecisionId??"original"}`}><Button disabled={disabled} variant="secondary" onClick={()=>{setSelected(s);onSelect(s);setOpen(false);}}>{s.firstStyleNo} · {s.supplierName} · 合同 {s.contractNumber} · {s.shippedOn} · 预计 {s.expectedQuantity} 件 · 已关联 {s.receipts.filter(r=>!r.archived&&!r.pendingQualification).length} 次收货</Button></div>)}
    {data&&data.totalCount===0?<p>没有匹配的已发货生产单。</p>:null}
    {data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} ariaLabel="预期回货分页"/>:null}</>:null}
  </Surface>;
@@ -56,7 +56,7 @@ export function ProductionReceiptSummary({productionOrderId,refreshKey,factoryDe
  if(error)return <p role="alert">{error}</p>;if(!data)return null;
  return <Surface className="sourcing-list-card"><h2>发货与实际回货</h2><p>{data.shippedOn} 已发货 · 首款 {data.firstStyleNo} · 预计 {data.expectedQuantity} 件</p>
   <p>发货不代表仓库已收货。以下为仓库关联的实收记录；批次汇总调整仍以订单回货页面为准。</p>
-  {data.receipts.length?data.receipts.map(r=><p key={r.receiptId}>{new Date(r.receivedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})} · 实收 {r.actualQuantity} 件{r.archived?" · 批次已归档":""}</p>):<p>尚无关联的实际收货记录。</p>}
+  {data.receipts.length?data.receipts.map(r=><p key={r.receiptId}>{new Date(r.receivedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})} · {r.pendingQualification?'原登记':'实收'} {r.actualQuantity} 件{r.archived?" · 批次已归档":r.pendingQualification?` · 待核，未计入有效实收 · ${r.pendingQualification}`:""}</p>):<p>尚无关联的实际收货记录。</p>}
  </Surface>;
 }
 

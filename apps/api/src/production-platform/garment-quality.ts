@@ -9,6 +9,7 @@ import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {receiptTime} from './receiving-summary.js';
 import {exactUnboundQualityPhotos,garmentReceiptQualityAttachment} from './original-quality-photo.js';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('GARMENT_QUALITY_CONFLICT',message,409);};
 async function ensureCurrentQualityOrder(db:DB,orderId:string){
@@ -52,7 +53,8 @@ export async function lockOriginalGarmentReworkOrder(db:PoolClient,actor:Trusted
  return original!;
 }
 /** Each native receipt is a batch. Current quantity correction invalidates coverage, never deletes inspection history. */
-export async function garmentQuality(db:DB,orderId:string){
+export async function garmentQuality(db:DB,orderId:string,except?:readonly string[]){
+ const excluded=except??(await readNativeReceiptExceptions(db,{orderIds:[orderId]})).map(row=>row.receiptId);
  const rows=(await db.query(`SELECT l.line_id,r.receipt_id,r.receiving_batch_id,r.cutting_order_id,r.received_at,e.after_state,
   coalesce(c.actual_quantity,r.actual_quantity)::bigint AS quantity,coalesce(c.correction_id,r.receipt_id)::text AS quantity_version,
   q.event_id,q.occurred_at,q.time_quality,q.payload,q.actor_id,u.display_name,verification.event_id AS verification_event_id,availability.event_id AS availability_event_id,availability.occurred_at AS availability_at,snapshot.snapshot_id,snapshot.rule_version,snapshot.parameters_json
@@ -80,7 +82,8 @@ export async function garmentQuality(db:DB,orderId:string){
    ORDER BY old.occurred_at,old.recorded_at,old.event_id LIMIT 1)availability ON true
   LEFT JOIN app_users u ON u.id=q.actor_id
   LEFT JOIN digital_sla_order_snapshots snapshot ON snapshot.snapshot_id::text=q.payload->>'snapshotId' AND snapshot.production_order_id=l.production_order_id
-  WHERE l.module='receiving' AND l.production_order_id=$1 AND b.deleted_at IS NULL ORDER BY r.received_at,r.receipt_id`,[orderId])).rows;
+  WHERE l.module='receiving' AND l.production_order_id=$1 AND b.deleted_at IS NULL AND r.receipt_id<>ALL($2::uuid[])
+  ORDER BY r.received_at,r.receipt_id`,[orderId,[...new Set(excluded)]])).rows;
  const applications=await slaApplications(db,orderId);
  return rows.map(r=>{
   const base=r.snapshot_id?validateDigitalSlaSnapshot({ruleVersion:r.rule_version,parameters:r.parameters_json}):null,applied=base?appliedSlaWindow(base,'garment_packing',`packing:${r.line_id}`,applications):null,frozen=applied?.snapshot.parameters;

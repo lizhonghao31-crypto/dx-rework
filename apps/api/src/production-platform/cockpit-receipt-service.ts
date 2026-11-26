@@ -2,6 +2,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {readReceivingDocumentHistory} from '../receiving/receiving-document-history.js';
 import {readNativeReceivingTotals} from '../receiving/native-receiving-totals.js';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 import {DigitalProductionAccessPolicy,digitalNotFound} from './access-policy.js';
 import {canOpenOrderReceiving} from './receiving-summary.js';
 import {journeyCutScopes} from './journey-cut-scopes.js';
@@ -34,7 +35,9 @@ export class CockpitReceiptService {
       const cutIdsByLine=new Map((await journeyCutScopes(db,orderId)).flatMap(scope=>
         scope.status==='verified'?[[scope.lineId,scope.cuts[0]!.cuttingOrderId] as const]:[]));
       const cutIds=[...cutIdsByLine.values()];
-      const native=new Map((await readNativeReceivingTotals(db,cutIds)).map(row=>[row.group_key,row]));
+      const qualification=await readNativeReceiptExceptions(db,{orderIds:[orderId]});
+      const excluded=new Set(qualification.map(row=>row.receiptId));
+      const native=new Map((await readNativeReceivingTotals(db,cutIds,[...excluded])).map(row=>[row.group_key,row]));
       const receipts=await readCockpitOrderReceipts(db,orderId);
       const batchIds=(await db.query<{id:string}>(`
         SELECT receiving_batch_id AS id FROM receiving_batches WHERE deleted_at IS NULL
@@ -44,13 +47,15 @@ export class CockpitReceiptService {
       const documents=history?.files.filter(file=>file.status==='ready'&&file.retiredAt===null)
         .map(({id,filename,entityId})=>({id,filename,...(includeDocumentBindings?{entityId}:{})}))??[];
       const lines=poLines.map(line=>{
-        const own=receipts.filter(row=>row.lineId===line.lineId);
+        const own=receipts.filter(row=>row.lineId===line.lineId&&!excluded.has(row.receiptId));
+        const unresolved=qualification.filter(row=>row.lineId===line.lineId);
         const aggregate=native.get(`cut:${cutIdsByLine.get(line.lineId)}`);
         const received=numberOrNull(aggregate?.current_actual_quantity)??(own.length?own.reduce((n,row)=>n+row.actualQuantity,0):null);
         const receiptCount=numberOrNull(aggregate?.receipt_count)??own.length;
-        const status=!receiptCount?'暂无收货记录':received==null?'实收待核':received<line.demand?'部分收货':'已收齐';
+        const status=unresolved.length?'实收待核':!receiptCount?'暂无收货记录':received==null?'实收待核':received<line.demand?'部分收货':'已收齐';
         return {lineId:line.lineId,poNumber:line.poNumber,color:line.color,
           demand:line.demand,received,receiptCount,status,documentQuantity:numberOrNull(aggregate?.document_quantity),
+          ...(unresolved.length?{pendingQualification:unresolved.map(({receiptId,quantityVersion,quantity,reason})=>({receiptId,quantityVersion,quantity,reason}))}:{}),
           defectiveQuantity:numberOrNull(aggregate?.current_defective_quantity)??(own.length?own.reduce((n,row)=>n+row.defectiveQuantity,0):null),
           packingQuantity:numberOrNull(aggregate?.packing_quantity),
           receivingResolution:aggregate?.receiving_resolution??null,packingResolution:aggregate?.packing_resolution??null,
@@ -61,13 +66,13 @@ export class CockpitReceiptService {
       const demand=lines.length?lines.reduce((n,row)=>n+row.demand,0):null;
       const observed=lines.some(row=>row.received!==null);
       const received=observed?lines.reduce((n,row)=>n+(row.received??0),0):null;
-      const complete=demand!==null&&received!==null&&lines.every(row=>row.received!==null||row.receiptCount===0);
+      const complete=qualification.length===0&&demand!==null&&received!==null&&lines.every(row=>row.received!==null||row.receiptCount===0);
       // Extra units in one PO never satisfy the obligation of another PO.
       const differences=complete?lines.reduce((totals,row)=>{
         const difference=(row.received??0)-row.demand;
         return {remaining:totals.remaining+Math.max(0,-difference),excess:totals.excess+Math.max(0,difference)};
       },{remaining:0,excess:0}):null;
-      const status=!observed?'暂无收货记录':!differences?'数量待核':differences.remaining>0?'部分收货':'已收齐';
+      const status=qualification.length?'数量待核':!observed?'暂无收货记录':!differences?'数量待核':differences.remaining>0?'部分收货':'已收齐';
       const closed=Boolean((await db.query(
         'SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 LIMIT 1',[orderId])).rowCount);
       return {orderId,status,closed,totals:{demand,received,remaining:differences?.remaining??null,excess:differences?.excess??null},

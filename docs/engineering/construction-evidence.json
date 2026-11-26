@@ -1,76 +1,141 @@
 {
   "version": 1,
-  "base": "ed2382a34537d6bd00cae4fcd1c46e8414b22686",
+  "base": "b885466d2d0d73c703d6fba8b4866ff378ba406a",
   "risk": "full",
-  "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
+  "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
   "rules": [
     {
-      "rule": "预下单转正仅在原料、供方、单位、实际范围和真实依据相符时继承原投料及收料；仅补齐与实质变更分开，需求不覆盖真实已投收",
-      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§5，A04/A05",
-      "initialization": "原自动编号预下单、准确已发布资料、原物料及交接记录，经法定原跟单确认后转正式。旧无身份的量不自动补齐。",
-      "dateAndPermission": "仅原设计师与原跟单拥有资料与确认权限，原仓库实际批次保持。原采购和收料业务时钟不改，正式时效仅由原正式动作首次启动。",
+      "rule": "大货制单草稿可独立保存恢复。实际同一采购范围达到90%方可验布，原真实合格或有权批准且其它条件齐才正式发布",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§6.2，A14/A15",
+      "initialization": "准确原采购数量、材料/批次、订正版本、实际日期与同单位。没有正式制单时仍可合法办理仓库原部分到货和验布，不因达到验布资格就跳制单或发料。",
+      "dateAndPermission": "原有权仓库、原验布报告/批准、原跟单正式发布，保持实际发生日期或原合法订正。不同批次、材料、单位、范围或未审批不代填。",
       "writes": [
-        "apps/api/src/production-platform/cockpit-actionable.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/preorder-investment-applicability.ts",
-        "apps/api/src/production-platform/preorder-investment-evidence.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/bulk-fabric-facts.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts",
+        "apps/api/src/production-platform/warehouse-fabric-inspection-eligibility.ts",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
         "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/web/src/production-readiness-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
+        "apps/web/src/bulk-fabric-panel.tsx",
+        "packages/contracts/src/bulk-preparation.ts",
         "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/unit/preorder-investment-applicability.test.ts"
+        "tests/helpers/warehouse-original-issue-fixture.ts",
+        "tests/helpers/production-readiness-fixture.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/unit/warehouse-fabric-inspection-threshold.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/preparation-series-bridge.ts",
-        "apps/api/src/production-platform/material-investment-reminder.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts"
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
         "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/unit/warehouse-material-balance.test.ts",
-        "tests/unit/production-readiness-contract.test.ts"
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
       ],
-      "expectation": "真实 A/B 转正及补齐仍保原520米、实际日期与原凭证。补齐凭证仅从同一有权原版读回，已开投料表单保留未保存输入并续用准确版本。增加只补真实差额，减少不删除已投收，换供方影响单项，老无证范围不误认。",
+      "expectation": "原仓库三批累计450、467、468，采购应收520与真实技术生产需用500分开。前两次拒验，468仅允许验布且采购欠52。全程无整单到仓，质量尚未获准不发布，原有权批准及其它实际前置齐全后才正式发布。保原500应收下449/450的精确量边界用例。",
       "checks": [
         "native",
-        "browser",
-        "mapped-other",
+        "readiness",
         "static",
         "protocol"
       ]
     },
     {
-      "rule": "已合法保存的 H1 同一 PO、同一物料、同一范围实收可投影；无关旧 PO 或无实数标记不可遮蔽，可能重复的旧有效量保持待核",
-      "source": "同一批准施工方案 A13-a，H1 原 Acceptance 单 PO 回货批次的专项取证与用户授权；不是 A13-b/c 工艺收发",
-      "initialization": "同一当前投资两类范围，准确选定 ID、有效批次和采购目标。原共享 60 米作为同一实际事实分别由 A/B 命中。",
-      "dateAndPermission": "仅原授权仓库读和实际批次命令；H1 不补造数量、目标、原日期、不扩大范围或原任务。",
+      "rule": "实际发厂、工厂发回及准确 PO/裁单/生产厂原证据是新版成衣回货的共同写端前置，缺少时不能创建正式回货、质检或半套链接",
+      "source": "同一批准施工方案 §6.1，A16/A17/A18",
+      "initialization": "按原已记录准确数字化母单与实际 PO 身份、裁片/工厂、现存工厂执行来源。真实未选厂或未发厂、未有合法实际发回时不构造待收；原真正旧未接管路保留。",
+      "dateAndPermission": "由原仓管、工厂、原质检角色操作，原工厂发回实际上海业务日和仓库实际发出证据保真；先写后补假事实不允许，失败整个事务回滚。",
       "writes": [
-        "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "apps/api/src/production-platform/receiving-link-adapter.ts",
+        "apps/api/src/receiving/native-receipt-admission.ts",
+        "apps/api/src/receiving/receiving-service.ts",
+        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/order-closure-fixture.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts"
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts",
+        "apps/api/src/receiving/receiving-service.ts"
       ],
       "oldTests": [
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
         "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/warehouse-material-balance.test.ts"
+        "tests/integration/receiving-postgres.test.ts",
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/integration/terminal-quality-projections-browser-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts"
       ],
-      "expectation": "原业务正常入口精确 PO 60/20/40，共享 60/10/50 且不重复。可能重叠仍待核，原批次订正后原余额按同一批次计算。",
+      "expectation": "正常和旧入参未满足原实际发厂/发回均拒绝且不生成半套记录。实际同范围到仓280再220并保持原差异和真实待办；旧待核的实数为正仍拦，原入口更正为零保历史不拦其后合法原批次。",
       "checks": [
         "native",
-        "browser",
-        "mapped-other",
+        "readiness",
+        "static",
+        "protocol"
+      ]
+    },
+    {
+      "rule": "既有历史原提前回货保留而标待核，不冒充有效实收、装箱、质检或放行。正常原准确批次以同一资格在各业务读端取数",
+      "source": "同一批准施工方案 §6.1，A16–A18；F2 原测试异常仅只读",
+      "initialization": "只用原已授权准确原单、批次、当前数量版、PO、原裁单、原生产记录和工厂实际证据。原显示继续有审计记录，不删除修复伪造历史。",
+      "dateAndPermission": "保留原角色及原读权限，PMC 只能读不能写；不把旧数量登记视作已放行，实际合格、复检、差异和补录都看当前准确原数量版本。",
+      "writes": [
+        "apps/api/src/production-platform/cockpit-receipt-service.ts",
+        "apps/api/src/production-platform/delivery-calendar-debt-summary.ts",
+        "apps/api/src/production-platform/delivery-calendar-facts.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/packing-quality-coverage.ts",
+        "apps/api/src/production-platform/quality-center-garment-directory.ts",
+        "apps/api/src/production-platform/receiving-span.ts",
+        "apps/api/src/receiving/native-receipt-qualification.ts",
+        "apps/api/src/receiving/native-receiving-totals.ts",
+        "apps/api/src/receiving/pending-receiving-original-allocation.ts",
+        "apps/api/src/receiving/receiving-board-query.ts",
+        "apps/api/src/receiving/receiving-quantity-query.ts",
+        "apps/api/src/receiving/receiving-service.ts",
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/web/src/cockpit-receipt-dialog.tsx",
+        "apps/web/src/order-board-page.tsx",
+        "apps/web/src/order-closure-panel.tsx",
+        "apps/web/src/production-closure-ui.tsx",
+        "apps/web/src/receiving-board-types.ts",
+        "packages/contracts/src/order-closure.ts",
+        "packages/contracts/src/production-closure.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/receiving-defective-quantity.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/receiving-summary.ts",
+        "apps/api/src/production-platform/receiving-link-adapter.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/receiving/native-receiving-totals.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/m01-delivery-calendar-postgres.test.ts",
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/integration/receiving-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/receiving-defective-quantity.test.ts"
+      ],
+      "expectation": "本地旧提前100更正为0后能合法收到300，原待核历史保留。与干净的300对照，座舱和结案实收均300，实际300合格并按原批次装箱后日历有效300，不混入原批次-100订正。合法订正计入实际数及次品，旧异常恢复正数只影响待核和写门，不改变有效合计或有效版本。现场F2不改。",
+      "checks": [
+        "native",
+        "readiness",
         "static",
         "protocol"
       ]
@@ -80,84 +145,61 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r4-evidence/review-fix/native.sh",
+      "command": "bash /workspace/scratch/r5-evidence/review-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
-      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
-      "context": "原实际 A/B、正式 T0、原凭证范围、H1 及共享、原材料与数量",
-      "startedAt": "2026-11-26T10:50:21.374855+00:00",
-      "endedAt": "2026-11-26T10:52:06.814054+00:00",
-      "log": "/workspace/scratch/r4-evidence/review-fix/native.log",
-      "logSha256": "968a9de5bbdfbf97895ba500a56251cfa63ae7492638c50d9f133b93ecdbd5b5",
-      "passed": 88,
+      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
+      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
+      "context": "实际仓管收发、历史独立、旧座舱次品口径、返工质检结案、交付日历及原角色 PG/Chromium",
+      "startedAt": "2026-11-26T12:01:22.762483+00:00",
+      "endedAt": "2026-11-26T12:09:09.518580+00:00",
+      "log": "/workspace/scratch/r5-evidence/review-fix/native.log",
+      "logSha256": "3351849b4759105ade336ce05ebb186ca20323825de80c9bb7e414002841e2a9",
+      "passed": 326,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9dbd5c72be832bd311f688d6258a408552befde130a8422c4d9e01629e7831e9"
+          "sha256": "e41a5995071dddd85f2dd99cc1f4064f924f9832413c8fbbd40ec8a30c3a794e"
         }
       ]
     },
     {
-      "id": "browser",
+      "id": "readiness",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r4-evidence/review-fix/browser.sh",
+      "command": "bash /workspace/scratch/r5-evidence/review-fix/readiness.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
-      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
-      "context": "实际原正式订单浏览器，确认凭证授权和未保存投料编辑器准确续版",
-      "startedAt": "2026-11-26T10:49:17.162402+00:00",
-      "endedAt": "2026-11-26T10:50:21.169776+00:00",
-      "log": "/workspace/scratch/r4-evidence/review-fix/browser.log",
-      "logSha256": "87b809ab0b15a2dc8701de39cbd73c519c6b9ae72136b3b87b60e15c2bc3a3e9",
-      "passed": 5,
+      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
+      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
+      "context": "原真实仓库三批累计450、467、468，采购520生产500，无整单到仓，草稿与验布和原发布独立",
+      "startedAt": "2026-11-26T12:01:22.768534+00:00",
+      "endedAt": "2026-11-26T12:03:58.973180+00:00",
+      "log": "/workspace/scratch/r5-evidence/review-fix/readiness.log",
+      "logSha256": "9b9178164d5be6a974c8c50e418f96f77b5baf10e940570f6b79b57943b16897",
+      "passed": 65,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ade6982c980532288a62cdbaf9477de7c973004e11222cf642038e8af077f7aa"
-        }
-      ]
-    },
-    {
-      "id": "mapped-other",
-      "kind": "tests",
-      "command": "bash /workspace/scratch/r4-evidence/review-fix/mapped-other.sh",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
-      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
-      "context": "当前实际 R3 发布基点映射的余下十套 PostgreSQL",
-      "startedAt": "2026-11-26T10:52:07.016884+00:00",
-      "endedAt": "2026-11-26T10:57:23.053247+00:00",
-      "log": "/workspace/scratch/r4-evidence/review-fix/mapped-other.log",
-      "logSha256": "bf5fc2f23c38bf1df09ac25d0120317890c16e21ddc7889838d7e47a0352f614",
-      "passed": 144,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "67fa67c99ee1646f676a374fac57b7bce4af15cda38817b430de42f3452a1125"
+          "sha256": "eec160ba5be7071d9881c565cf794f0cd4ddc6a85f3ccb530496f0226a3938d4"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r4-evidence/review-fix/static.sh ed2382a34537d6bd00cae4fcd1c46e8414b22686",
+      "command": "bash /workspace/scratch/r5-evidence/review-fix/static.sh b885466d2d0d73c703d6fba8b4866ff378ba406a",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
-      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
-      "context": "实际源码对应的类型、迁移、时间、凭证和已授权编辑范围静态检查",
-      "startedAt": "2026-11-26T10:49:17.166930+00:00",
-      "endedAt": "2026-11-26T10:50:08.954789+00:00",
-      "log": "/workspace/scratch/r4-evidence/review-fix/static.log",
+      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
+      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
+      "context": "本候选类型、全部变更逻辑 lint、迁移 lint、时间清单、diff 及敏感扫描",
+      "startedAt": "2026-11-26T12:01:22.761151+00:00",
+      "endedAt": "2026-11-26T12:02:19.786356+00:00",
+      "log": "/workspace/scratch/r5-evidence/review-fix/static.log",
       "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
     },
     {
@@ -166,17 +208,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "535121d04503c49337f7e38ff07ce2b1fc61328f",
-      "sourceFingerprint": "79c8f2e5006ec593a73e5cb33c830f0e35d1955d6cdec29db85804913a247f63",
-      "context": "原治理门禁、时效与 release 机制协议测试",
-      "startedAt": "2026-11-26T10:49:17.159185+00:00",
-      "endedAt": "2026-11-26T10:49:23.048456+00:00",
-      "log": "/workspace/scratch/r4-evidence/review-fix/protocol.log",
-      "logSha256": "d011895c76d898d39ffbffb1665a45da17efb82ce4da33ceb1e89926cbe1ebac",
+      "testedHead": "dad714fafb753451b439a3492d2b35f9e385f874",
+      "sourceFingerprint": "deec4705ae441acdebd013ba6e68a3d5249c4b0e025af26a57c5228c61af38ef",
+      "context": "仓库固定 PR Gate、Evidence 与 Closeout 协议",
+      "startedAt": "2026-11-26T12:01:39.448636+00:00",
+      "endedAt": "2026-11-26T12:01:46.925165+00:00",
+      "log": "/workspace/scratch/r5-evidence/review-fix/protocol.log",
+      "logSha256": "d3320b68b95a437ae82bfe1bb4160833c7e497c9f7cc2bc54c8954a9481cda56",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "d011895c76d898d39ffbffb1665a45da17efb82ce4da33ceb1e89926cbe1ebac"
+          "sha256": "d3320b68b95a437ae82bfe1bb4160833c7e497c9f7cc2bc54c8954a9481cda56"
         }
       ],
       "passed": 285,

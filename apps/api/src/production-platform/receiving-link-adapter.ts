@@ -12,5 +12,5 @@ async function source(db:PoolClient,batchId:string){
  if(lines.length!==1)throw new ApplicationError('DIGITAL_LINK_MISSING','原裁单款色来源缺失，不能模糊绑定回货',409);
  return {id,lineId:lines[0].line_id};
 }
-export async function linkDigitalReceipt(db:PoolClient,receiptId:string,batchId:string){const s=await source(db,batchId);if(s){await linkNewDigitalChild(db,{module:'receiving',childId:receiptId,productionOrderId:s.id,lines:[{childLineKey:'record',lineId:s.lineId}]});await registerGarmentReceipt(db,s.id,receiptId);}}
+export async function linkDigitalReceipt(db:PoolClient,receiptId:string,batchId:string){const s=await source(db,batchId);if(s){await linkNewDigitalChild(db,{module:'receiving',childId:receiptId,productionOrderId:s.id,lines:[{childLineKey:'record',lineId:s.lineId}]});await registerGarmentReceipt(db,s.id,receiptId);}return s;}
 export async function linkDigitalRework(db:PoolClient,reworkId:string,batchId:string|null){if(!batchId)return;const s=await source(db,batchId);if(s)await linkNewDigitalChild(db,{module:'rework',childId:reworkId,productionOrderId:s.id,lines:[{childLineKey:'record',lineId:s.lineId}]});}

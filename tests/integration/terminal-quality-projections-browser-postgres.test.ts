@@ -8,9 +8,12 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {admittedFrameworkProductionFixture,admittedOrderFixture,prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {nodeStatus} from '../../apps/web/src/digital-journey-cockpit-model.js';
@@ -21,7 +24,7 @@ import {configureTimelineAdoption} from '../../apps/api/src/production-platform/
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
-import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {businessNow,ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
@@ -38,9 +41,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());
    const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,orderId);
-   await flow.dispatch(f.root,orderId,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST actual dispatch before terminal quality'},randomUUID());
+   const sent=await flow.dispatch(f.root,orderId,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST actual dispatch before terminal quality'},randomUUID());
+   const productionId=sent.currentProduction!.productionId,reporting=new ProductionReportingService(f.db),date=beijingCalendarDate(businessNow());
+   await reporting.report(f.root,productionId,{position:1,businessDate:date,quantity:2},randomUUID());
+   await reporting.execute(f.root,productionId,'complete',{businessDate:date,confirmed:true},randomUUID());
+   await reporting.execute(f.root,productionId,'ship',{businessDate:date,confirmed:true},randomUUID());
    const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
-   await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:cut,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
+   await new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db)).create(warehouse,
+    {cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
   });
   await f.advance(scene,'2026-11-17T13:00:00.000Z');
   await f.runtime.run(scene,f.root,async()=>{

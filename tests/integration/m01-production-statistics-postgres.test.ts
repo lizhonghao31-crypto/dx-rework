@@ -18,6 +18,8 @@ import {FactoryFlowService} from '../../apps/api/src/production-platform/factory
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {DigitalAnalysisQuery} from '../../apps/api/src/production-platform/reporting-query.js';
 import {AnalysisResultStore} from '../../apps/api/src/production-platform/analysis-result-store.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -151,8 +153,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }
  });
  it('preserves effective cumulative2, actual receipt and warehouseQC1, packing2 and special closure as separate original facts',async()=>{
-  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{quantity:2}),cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0],cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());await f.contracts.generateIfReady(f.root,ready.caseId);const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,ready.id);await flow.dispatch(f.root,ready.id,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST native I quantity scope'},randomUUID());
-  const receiving=new ReceivingService(f.db),receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receipt=(await receiving.create(receiver,{cuttingOrderId:cut.cutting_order_id,documentQuantity:2,actualQuantity:1,attachmentIds:[await f.image(receiver)]},randomUUID())).value,closure=new OrderClosureService(f.db),basis=(await closure.read(f.root,ready.id)).quality!.find(row=>row.receiptId===receipt.receiptId)!;
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{quantity:2}),cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0],cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:2,attachmentIds:[await f.image(cutter)]},randomUUID());await f.contracts.generateIfReady(f.root,ready.caseId);const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,ready.id),sent=await flow.dispatch(f.root,ready.id,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST native I quantity scope'},randomUUID());
+  const native=sent.currentProduction!.productionId,reporting=new ProductionReportingService(f.db),businessDate=today();
+  await reporting.report(f.root,native,{position:1,businessDate,quantity:2},randomUUID());
+  await reporting.execute(f.root,native,'complete',{businessDate,confirmed:true},randomUUID());
+  await reporting.execute(f.root,native,'ship',{businessDate,confirmed:true},randomUUID());
+  const receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db)),receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},receipt=(await receiving.create(receiver,{cuttingOrderId:cut.cutting_order_id,productionOrderId:native,factoryDecisionId:null,documentQuantity:2,actualQuantity:1,attachmentIds:[await f.image(receiver)]},randomUUID())).value,closure=new OrderClosureService(f.db),basis=(await closure.read(f.root,ready.id)).quality!.find(row=>row.receiptId===receipt.receiptId)!;
   await new GarmentQualityService(f.db).record(f.root,ready.id,{receiptId:receipt.receiptId,quantityVersion:basis.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:1,problem:''},randomUUID());
   // The second piece arrived separately. Correcting the first receipt's quantity
   // would correctly make its original one-piece QC obsolete.

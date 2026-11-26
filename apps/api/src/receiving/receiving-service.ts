@@ -9,6 +9,8 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
 import {receivingDocumentHistory} from "./receiving-document-history.js";
 import {parsePendingReceivingIdentity,pendingReceivingSelection,pendingReceivingView} from './pending-receiving-view.js';
+import {admitNativeReceipt} from './native-receipt-admission.js';
+import {nativeExceptionsForBatchGroup} from './native-receipt-qualification.js';
 import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
@@ -1402,6 +1404,17 @@ export class ReceivingService {
     input: NormalizedCreateReceivingInput,
     targetReceivingBatchId?: string,
   ): Promise<ReceivingReceipt> {
+    const now=businessNow().toISOString();
+    const actualAt=input.receivedDate?(await client.query<{at:Date}>(`SELECT
+      (($1::date+($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai') AS at`,[input.receivedDate,now])).rows[0]!.at.toISOString():now;
+    const native=await admitNativeReceipt(client,{...input,receivedAt:actualAt});
+    if(native){
+      await this.activePendingReceiver(client,actor);
+      if(!actor.actorRoles.includes('root_superuser')&&!await new DigitalProductionAccessPolicy(client).lockActiveRole(actor.actorId,'warehouse_receiver'))
+        return fail('仅当前原收货岗位可办理数字回货',403,'FORBIDDEN');
+      if(!this.production)return fail('原工厂实收关联不可用，未登记回货',409,'CONFLICT');
+      input={...input,productionOrderId:native.productionOrderId,factoryDecisionId:native.factoryDecisionId};
+    }
     const receivingBatchId = targetReceivingBatchId ?? (await this.resolveReceivingBatch(
       client,
       actor,
@@ -1462,7 +1475,7 @@ export class ReceivingService {
           [
             receiptId,receivingBatchId,input.cuttingOrderId,input.styleNo,input.documentQuantity,
             input.actualQuantity,input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,
-            actor.requestId,input.receivedDate,businessNow().toISOString(),
+            actor.requestId,input.receivedDate,now,
           ],
         )
       : await client.query<{
@@ -1487,7 +1500,7 @@ export class ReceivingService {
                      difference_quantity,received_by,received_at`,
           [
             receiptId,receivingBatchId,input.styleNo,input.documentQuantity,input.actualQuantity,
-            input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,actor.requestId,input.receivedDate,businessNow().toISOString(),
+            input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,actor.requestId,input.receivedDate,now,
           ],
         );
     if (input.receivingSource === "other_factory") {
@@ -1504,12 +1517,15 @@ export class ReceivingService {
     }
     const row = inserted.rows[0]!;
     if(!input.cuttingOrderId)await invalidatePackingAliasCandidates(client,[input.styleNo]);
-    await linkDigitalReceipt(client,receiptId,receivingBatchId);
+    const digitalLink=await linkDigitalReceipt(client,receiptId,receivingBatchId);
+    if(native&&(digitalLink?.id!==native.orderId||digitalLink.lineId!==native.lineId))
+      return fail('原母单和款色关联没有完整保存，未登记回货',409,'CONFLICT');
     if (this.production && input.cuttingOrderId) {
-      await this.production.linkReceiptByCuttingOrder(client,actor,{
+      const productionLink=await this.production.linkReceiptByCuttingOrder(client,actor,{
         cuttingOrderId:input.cuttingOrderId,receiptId,...(input.productionOrderId?{productionOrderId:input.productionOrderId}:{}),...(input.factoryDecisionId!==undefined?{factoryDecisionId:input.factoryDecisionId}:{}),
         styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString(),
       });
+      if(native&&productionLink!==native.productionOrderId)return fail('原工厂执行关联没有完整保存，未登记回货',409,'CONFLICT');
     } else if (this.production && input.productionOrderId) {
       await this.production.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,...(input.factoryDecisionId!==undefined?{factoryDecisionId:input.factoryDecisionId}:{}),
         styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString()});
@@ -1986,6 +2002,11 @@ export class ReceivingService {
             || snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
           fail("订单或装箱数量已更新，本次未覆盖；请在本单回货处理页重新读取累计收货与装箱数，再核对后提交", 409, "CONFLICT");
         }
+        if(normalized.packingQuantity>0){
+          const exceptions=await nativeExceptionsForBatchGroup(client,snapshot.receivingBatchId);
+          if(exceptions.length&&(!normalized.packingAllocations?.length||normalized.packingAllocations.some(row=>exceptions.some(exception=>exception.receiptId===row.receiptId))))
+            return fail('原收货存在待核依据，请按已核准的原实收批次装箱',409,'CONFLICT');
+        }
         const packingRevisionId = randomUUID();
         const now=businessNow().toISOString(),packingActualTime=resolvePackingTime(normalized.packingTime,now);
         const allocations=normalized.packingAllocations===undefined?undefined:await packingReceiptAllocations(client,snapshot.receivingBatchId,normalized.packingQuantity,normalized.packingAllocations,now);
@@ -2112,6 +2133,8 @@ export class ReceivingService {
         if (differenceType === "packing" && snapshot.packingQuantity === null) {
           fail("请先录入装箱数量；请有权回货岗位在本单回货处理页登记实际装箱数，再处理与累计收货数的差异");
         }
+        if((await nativeExceptionsForBatchGroup(client,snapshot.receivingBatchId)).length)
+          return fail('原收货关联或发厂依据待核，不能用差异处理将原登记计为有效实收',409,'CONFLICT');
         const differenceQuantity = differenceType === "receiving"
           ? snapshot.actualQuantity - snapshot.documentQuantity
           : snapshot.packingQuantity! - snapshot.actualQuantity;

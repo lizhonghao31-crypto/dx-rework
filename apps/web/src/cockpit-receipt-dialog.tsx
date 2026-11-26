@@ -22,6 +22,7 @@ type ReceiptDetail = {
     packingQuantity: number | null;
     receivingResolution: string | null;
     packingResolution: string | null; receiptCount: number; status: string;
+    pendingQualification?:Array<{receiptId:string;quantityVersion:string;quantity:number;reason:string}>;
     records: Array<{ receiptId: string; receivedAt: string | null; receivedDate?: string | null; actualQuantity: number }>;
   }>;
   documents: Array<{ id: string; filename: string }>;
@@ -73,6 +74,7 @@ export function CockpitReceiptDialog({ orderId, label, onClose, returnFocus }: {
           <strong>PO {line.poNumber ?? "—"} · {line.color}</strong>
           <p>{line.status} · {quantity(line.received)}/{quantity(line.demand)} 件 · 收货 {line.receiptCount} 次</p>
           <p>送货单 {quantity(line.documentQuantity)} · 次品 {quantity(line.defectiveQuantity)} · 装箱 {quantity(line.packingQuantity)}</p>
+          {line.pendingQualification?.map(row=><p key={row.receiptId}>原登记 {quantity(row.quantity)} 件待核 · {row.reason} · 未计入正式实收</p>)}
           {line.receivingResolution && <p>收货差异处理：{line.receivingResolution}</p>}
           {line.packingResolution && <p>装箱差异处理：{line.packingResolution}</p>}
           {line.records.length > 0 && <details><summary>收货记录</summary>

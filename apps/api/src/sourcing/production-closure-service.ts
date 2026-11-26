@@ -15,6 +15,7 @@ import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import { OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 const caps=(actor:TrustedActorContext)=>actor.authorizationCapabilities??[actor.authorizationCapability];
 function fail(message:string,status=403):never {throw new ApplicationError(status===404?"NOT_FOUND":status===400?"VALIDATION_ERROR":status===409?"INVALID_STATE_TRANSITION":"FORBIDDEN",message,status);};
 const iso=(value:Date|string)=>new Date(value).toISOString();
@@ -164,6 +165,7 @@ export class ProductionClosureService {
   await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id,factory_decision_id) VALUES($1,$2,$3,$4)",[input.receiptId,input.productionOrderId,input.operationEventId,input.factoryDecisionId??null]);
  }
  private async receipts(ids:string[]):Promise<ProductionReceivingSummary[]> {
+  if(!ids.length)return [];
   const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number;factory_decision_id:string|null;cutting_order_ids:string[]}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,
    sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
    ARRAY(SELECT cutting.cutting_order_id FROM cutting_orders cutting JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=cutting.sourcing_line_position AND allocation.quantity>0 WHERE cutting.sourcing_case_id=production.sourcing_case_id) AS cutting_order_ids
@@ -173,8 +175,12 @@ export class ProductionClosureService {
    FROM sourcing_production_receipt_links link JOIN receiving_receipts receipt USING(receipt_id) JOIN receiving_batches batch USING(receiving_batch_id)
    LEFT JOIN LATERAL (SELECT actual_quantity FROM receiving_receipt_corrections WHERE receipt_id=receipt.receipt_id ORDER BY created_at DESC,correction_id DESC LIMIT 1) correction ON true
    WHERE link.production_order_id=ANY($1::uuid[]) ORDER BY receipt.received_at,receipt.receipt_id`,[ids]);
+  const orders=receipts.rows.length&&(await this.database.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation?
+   (await this.database.query<{id:string}>("SELECT DISTINCT production_order_id AS id FROM digital_production_child_links WHERE module='production' AND child_id=ANY($1::uuid[])",[ids])).rows.map(row=>row.id):[];
+  const pending=new Map((await readNativeReceiptExceptions(this.database,{orderIds:orders})).map(row=>[row.receiptId,row.reason]));
   return result.rows.map(r=>ProductionReceivingSummarySchema.parse({productionOrderId:r.production_order_id,factoryDecisionId:r.factory_decision_id,cuttingOrderIds:r.cutting_order_ids,firstStyleNo:r.first_style_no,contractNumber:r.contract_number,supplierName:r.supplier_name_snapshot,
-   shippedOn:r.shipped_on,expectedQuantity:r.recorded_quantity,receipts:receipts.rows.filter(x=>x.production_order_id===r.production_order_id&&x.factory_decision_id===r.factory_decision_id).map(x=>({receiptId:x.receipt_id,receivingBatchId:x.receiving_batch_id,actualQuantity:x.actual_quantity,receivedAt:iso(x.received_at),archived:x.archived}))}));
+   shippedOn:r.shipped_on,expectedQuantity:r.recorded_quantity,receipts:receipts.rows.filter(x=>x.production_order_id===r.production_order_id&&x.factory_decision_id===r.factory_decision_id).map(x=>({receiptId:x.receipt_id,receivingBatchId:x.receiving_batch_id,actualQuantity:x.actual_quantity,receivedAt:iso(x.received_at),archived:x.archived,
+    ...(pending.has(x.receipt_id)?{pendingQualification:pending.get(x.receipt_id)}:{})}))}));
  }
  async expected(actor:TrustedActorContext,input:{q?:string|undefined;page?:number|undefined;cuttingOrderId?:string|undefined}={}){
   if(!this.warehouse(actor))fail("仅仓管可查看预期回货");

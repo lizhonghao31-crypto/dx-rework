@@ -8,6 +8,7 @@ import {garmentInspectionTiming} from './garment-sla-evidence.js';
 import {readJourneySelectionAccess} from './journey-selection-access.js';
 import {slaApplicationsByOrder} from './sla-applied-window.js';
 import {receiptTime} from './receiving-summary.js';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 
 type ReceiptState={order_id:string;receipt_id:string;quantity:string;quantity_version:string;received_at:Date;after_state:Record<string,unknown>;
  qualified_quantity:unknown;snapshot_id:string|null;rule_version:string;parameters_json:unknown};
@@ -35,7 +36,9 @@ export async function qualityCenterGarmentDirectory(pool:Pool,actor:TrustedActor
   const scopes=[...new Set(candidates.map(row=>row.order_id))].map(id=>({kind:'order' as const,id}));
   const access=await readJourneySelectionAccess(db,actor,scopes);
   if(!root&&(!actor.actorRoles.includes('quality_control')||!access.liveRoles.has('quality_control')))return digitalForbidden();
-  const selected=candidates.filter(row=>access.resources.get(businessScopeKey({kind:'order',id:row.order_id}))?.technical);
+  const authorized=candidates.filter(row=>access.resources.get(businessScopeKey({kind:'order',id:row.order_id}))?.technical);
+  const excluded=new Set((await readNativeReceiptExceptions(db,{orderIds:[...new Set(authorized.map(row=>row.order_id))]})).map(row=>row.receiptId));
+  const selected=authorized.filter(row=>!excluded.has(row.receipt_id));
   const completed=input.status==='completed';
   // The status filter is over the latest effective quantity correction and
   // latest actual QC for the very same original receipt. Read only scalar

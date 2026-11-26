@@ -3,6 +3,7 @@ import {factoryProductionScopesForOrders} from '../production-platform/factory-p
 import {readWarehouseFactoryDispatchScopesForOrders} from '../production-platform/warehouse-factory-dispatch-evidence.js';
 import {readPendingReceivingNativeReceipts,receivingFactoryAllocationKey} from './pending-receiving-native-receipts.js';
 import {projectPendingReceivingScope,type PendingReceivingIdentity} from './pending-receiving-scope.js';
+import {readNativeReceiptExceptions} from './native-receipt-qualification.js';
 
 /** Builds the new receiving view from the original facts, within the caller's
  * already-authorized repeatable snapshot. Before a factory sends garments it
@@ -14,6 +15,8 @@ export async function pendingReceivingForAuthorizedOrders(db:Pick<PoolClient,'qu
  const masters=[...new Set(dispatches.map(row=>row.orderId))];
  const allocations=await factoryProductionScopesForOrders(db,masters);
  const receipts=await readPendingReceivingNativeReceipts(db,masters);
+ const pendingQualification=await readNativeReceiptExceptions(db,{orderIds:masters},dispatches);
+ const excluded=new Set(pendingQualification.map(row=>row.receiptId));
  const dispatchGroups=new Map<string,{identity:PendingReceivingIdentity;facts:typeof dispatches}>();
  const cutIds=new Map<string,Set<string>>();
  const allocationKey=(scope:PendingReceivingIdentity)=>JSON.stringify([scope.orderId,scope.factoryAllocationKey,scope.lineId]);
@@ -30,10 +33,13 @@ export async function pendingReceivingForAuthorizedOrders(db:Pick<PoolClient,'qu
    row.factory_decision_id===factoryDecisionId&&row.line_id===identity.lineId);
   if(!matched.length)return [];
   const expectedQuantity=matched.length===1&&cutIds.get(allocationKey(identity))?.size===1?Number(matched[0].quantity):null;
-  const balance=projectPendingReceivingScope({identity,expectedQuantity,effectiveReceipts:receipts.get(identity.orderId)??[],
+  const balance=projectPendingReceivingScope({identity,expectedQuantity,effectiveReceipts:(receipts.get(identity.orderId)??[]).filter(row=>!excluded.has(row.receiptId)),
    dispatches:facts.map(fact=>({identity,factId:fact.factId,kind:'仓库实际发厂',actualDispatchedAt:fact.dispatchedAt,dispatchedQuantity:fact.quantity}))});
   if(!balance)return [];
-  return [{identity,factoryDecisionId,expectedQuantity,balance,
+  const needsQualification=pendingQualification.some(row=>row.quantity>0&&row.orderId===identity.orderId&&row.lineId===identity.lineId&&
+   (row.cuttingId===null||row.cuttingId===identity.cuttingOrderId)&&(!row.productionId||
+    row.productionId===identity.productionId&&row.factoryDecisionId===factoryDecisionId));
+  return [{identity,factoryDecisionId,expectedQuantity,balance:needsQualification?{...balance,status:'unresolved' as const,received:null,remaining:null,difference:null}:balance,
    supplierId:matched.length===1?matched[0].supplier_id as string:null,
    supplierName:matched.length===1?matched[0].supplier_name_snapshot as string|null:null,
    poNumber:matched.length===1?matched[0].po_number as string|null:null,

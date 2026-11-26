@@ -10,7 +10,8 @@ import {confirmedTechnicalFixture} from './development-technical-fixture.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 /** Explicit production-test prerequisite; physical sample execution is not claimed by this fixture.
  * Typed material and original quality/publication commands remain real. */
-export async function productionReadinessFixture(db:Pool,root:TrustedActorContext,orderId:string,workerId:string,warehouse:TrustedActorContext,options?:{leaveAccessoriesForReceipt:boolean}){
+export type NativeTestFabricFixture=(actions:{service:ProductionReadinessService;bulk:BulkPreparationService;orderId:string;warehouse:TrustedActorContext})=>Promise<void>;
+export async function productionReadinessFixture(db:Pool,root:TrustedActorContext,orderId:string,workerId:string,warehouse:TrustedActorContext,options?:{leaveAccessoriesForReceipt?:boolean;nativeFabric?:NativeTestFabricFixture}){
  const service=new ProductionReadinessService(db),bulk=new BulkPreparationService(db),current=await service.read(root,{kind:'order',id:orderId});
  if(!current.enrolled)return current;
  const assigned=await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[orderId]);
@@ -21,7 +22,8 @@ export async function productionReadinessFixture(db:Pool,root:TrustedActorContex
  if(!(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='尾查通过'",[source,sheet.roundNumber??1])).rowCount)
   await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,'尾查通过',$4,$5)",[randomUUID(),source,sheet.roundNumber??1,JSON.stringify({actualCompletedAt:businessNow().toISOString(),note:'TEST explicit completed sample prerequisite; native sample execution tested separately'}),root.actorId]);
  const refresh=await service.read(root,{kind:'order',id:orderId}),receipt=refresh.facts.find(f=>f.kind==='fabric_receipt'&&f.scopeRef==='whole');
- if(!receipt)await bulk.reportFabric(warehouse,orderId,{expectedReportId:null,expectedReceiptVersion:0,material:'TEST本单实际主料',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST native quality prerequisite'},randomUUID());
+ if(options?.nativeFabric)await options.nativeFabric({service,bulk,orderId,warehouse});
+ else if(!receipt)await bulk.reportFabric(warehouse,orderId,{expectedReportId:null,expectedReceiptVersion:0,material:'TEST本单实际主料',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST native quality prerequisite'},randomUUID());
  const technical=new DevelopmentTechnicalService(db,true);
  const materials=await technical.read(root,source,sheet.roundNumber??1);
  for(const material of sheet.document!.materials.filter(m=>m.category!=='辅料'&&m.name.trim())){

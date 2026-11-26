@@ -21,6 +21,9 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
 import {CuttingService} from '../../apps/api/src/cutting/cutting-source-service.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {SourcingContractService} from '../../apps/api/src/sourcing/sourcing-contract-service.js';
@@ -87,7 +90,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花'|'特殊工艺',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{preshrink?:'需要预缩'|'无需预缩';budgetRows?:BudgetRow[];stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;poQuantities?:readonly number[];primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string;developmentReturnDate?:string;craftSteps?:CraftStepChoice[];existingOrder?:{orderId:string;sourceId:string};adoptSourceMaterials?:boolean;beforeInstructionPublish?:(orderId:string)=>Promise<void>})=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花'|'特殊工艺',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{preshrink?:'需要预缩'|'无需预缩';budgetRows?:BudgetRow[];stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;poQuantities?:readonly number[];primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string;developmentReturnDate?:string;craftSteps?:CraftStepChoice[];existingOrder?:{orderId:string;sourceId:string};adoptSourceMaterials?:boolean;beforeInstructionPublish?:(orderId:string)=>Promise<void>;nativeFabric?:Parameters<typeof productionReadinessFixture>[5]})=>{
    const designer=options?.designerActor??people['sample-designer']!,primary=options?.primaryActor??people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`${options?.stylePrefix??'TEST-ANCHOR-'}${randomUUID()}`;
@@ -110,7 +113,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
     instructionDoc.unit=original.unit;instructionDoc.sizes=[...original.sizes];instructionDoc.measurements=original.measurements.map(row=>({id:randomUUID(),name:row.name,tolerance:'',method:'',values:[...row.values]}));
    }
    const sourceMaterials=options?.adoptSourceMaterials?(await instruction.read(primary,id)).document:null;
-   await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:sourceMaterials?{...instructionDoc,fabrics:sourceMaterials.fabrics,accessories:sourceMaterials.accessories}:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!,sourceMaterials?{leaveAccessoriesForReceipt:true}:undefined);await options?.beforeInstructionPublish?.(id);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
+   await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:sourceMaterials?{...instructionDoc,fabrics:sourceMaterials.fabrics,accessories:sourceMaterials.accessories}:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!,sourceMaterials||options?.nativeFabric?{...(sourceMaterials?{leaveAccessoriesForReceipt:true}:{}),...options?.nativeFabric}:undefined);await options?.beforeInstructionPublish?.(id);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
    const existingIe=options?.adoptSourceMaterials?{actor:ie,unitPrice:'5'}:undefined;
    await customerQuotationFixture(db,root,id,undefined,designer,existingIe);
@@ -135,11 +138,18 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    return {id,caseId,sourceId:source.sourceId,preparationId:sheet.preparationId!,input,key,cutting:new CuttingService(db),primary};
   };
   const reworkReady=async(poCount=1,onWaitingForIe?:(id:string)=>Promise<void>)=>{
-   const ready=await bulkReady('无',undefined,poCount),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows[0];
+   const ready=await bulkReady('无',undefined,poCount),cuts=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows;
    const cutter={...people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
-   await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await image(cutter)]},randomUUID());
+   for(const cut of cuts)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await image(cutter)]},randomUUID());
    const warehouse={...people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
-   const receipt=await new ReceivingService(db).create(warehouse,{cuttingOrderId:cut.cutting_order_id,documentQuantity:10,actualQuantity:10,attachmentIds:[await image(warehouse)]},randomUUID());
+   const flow=new FactoryFlowService(db),currentFlow=await flow.read(root,ready.id),now=businessNow().toISOString(),day=beijingCalendarDate(businessNow());
+   const sent=await flow.dispatch(warehouse,ready.id,{expectedRevision:currentFlow.revision,occurredAt:now,supplierId:supplier.supplierId,note:'TEST original physical dispatch before return'},randomUUID());
+   const productionId=sent.currentProduction!.productionId,reports=new ProductionReportingService(db);
+   for(let position=1;position<=cuts.length;position++)await reports.report(root,productionId,{position,businessDate:day,quantity:10},randomUUID());
+   await reports.execute(root,productionId,'complete',{businessDate:day,confirmed:true},randomUUID());
+   await reports.execute(root,productionId,'ship',{businessDate:day,confirmed:true},randomUUID());
+   const receipt=await new ReceivingService(db,undefined,undefined,new ProductionClosureService(db)).create(warehouse,{cuttingOrderId:cuts[0]!.cutting_order_id,
+    productionOrderId:productionId,factoryDecisionId:null,documentQuantity:10,actualQuantity:10,attachmentIds:[await image(warehouse)]},randomUUID());
    const qc={...people.qc!,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']};
    const initiation=new ReworkInitiationService(db,env.DINGTALK_CORP_ID),configuration=new ProcessConfigurationService(db),plan=new ProcessWorkerPlanService(db),work=new WorkReportingService(db);
    const draft=await initiation.createDraft(qc,{receivingBatchId:receipt.value.receivingBatchId,styleNo:ready.input.lineItems[0]!.styleNo!,orderQuantity:10,merchandiserUserId:people.merchandiser!.actorId,processingFactory:{type:'supplier',supplierId:supplier.supplierId},tailInspectionRequired:false,inspectionReport:completeInspectionReport(),problemPart:'袖口',problemDescription:'TEST native clock',reworkQuantity:10,attachmentIds:[await image(qc)]},randomUUID());

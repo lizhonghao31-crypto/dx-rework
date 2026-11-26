@@ -82,7 +82,14 @@ export type StyleOperationSnapshot = Readonly<{
 }>;
 
 // Shared native aggregation; the digital adapter changes only the exact-ID scope.
-const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope}), scoped_batches AS (
+const receivingBoardBaseSql = (scope: string, except?:'$5'|'$13') => {
+ // A mixed batch's old aggregate adjustment includes excluded receipts and
+ // cannot prove an effective physical quantity. Use only retained corrections.
+ const actualAdjustment=except?`CASE WHEN mixed.receiving_batch_id IS NOT NULL THEN COALESCE(adjustments.all_actual_adjustment,0)
+  ELSE batch.actual_quantity_adjustment END`:'batch.actual_quantity_adjustment';
+ const defectiveAdjustment=except?`CASE WHEN mixed.receiving_batch_id IS NOT NULL THEN COALESCE(adjustments.all_defective_adjustment,0)
+  ELSE batch.defective_quantity_adjustment END`:'batch.defective_quantity_adjustment';
+ return `WITH scoped_groups AS (${scope}), scoped_batches AS (
          SELECT batch.receiving_batch_id,
                 scope.group_key,
                 scope.style_key,
@@ -92,68 +99,54 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
            ON scope.group_key=COALESCE('cut:'||batch.cutting_order_id::text,
              'style:'||upper(btrim(batch.style_no)))
          WHERE batch.deleted_at IS NULL
+       )${except?`, mixed_batches AS (
+         SELECT DISTINCT receipt.receiving_batch_id FROM receiving_receipts receipt JOIN scoped_batches scope USING(receiving_batch_id)
+         WHERE receipt.receipt_id=ANY(${except}::uuid[])
+       ), retained_corrections AS (
+         SELECT receipt.receiving_batch_id,event.event_id,event.created_at,
+                correction.actual_quantity-lag(correction.actual_quantity,1,receipt.actual_quantity::bigint) OVER history AS actual_delta,
+                correction.defective_quantity-lag(correction.defective_quantity,1,receipt.defective_quantity::bigint) OVER history AS defective_delta,
+                correction.document_quantity-lag(correction.document_quantity,1,receipt.document_quantity::bigint) OVER history AS document_delta
+         FROM mixed_batches JOIN receiving_receipts receipt USING(receiving_batch_id)
+         JOIN receiving_receipt_corrections correction USING(receipt_id)
+         JOIN operation_events event ON event.event_id=correction.operation_event_id
+         WHERE receipt.receipt_id<>ALL(${except}::uuid[])
+         WINDOW history AS (PARTITION BY receipt.receipt_id ORDER BY correction.created_at,correction.correction_id)
+       )`:''}, adjustment_events AS (
+         SELECT scope.receiving_batch_id,event.created_at,
+           CASE WHEN event.action='receiving.batch.merge' THEN (event.after_state->>'actualQuantityAdjustment')::bigint
+            ELSE (event.after_state->>'actualQuantity')::bigint-(event.before_state->>'actualQuantity')::bigint END AS actual_delta,
+           CASE WHEN event.action='receiving.batch.merge' THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
+            ELSE (event.after_state->>'defectiveQuantity')::bigint-(event.before_state->>'defectiveQuantity')::bigint END AS defective_delta,
+           (event.after_state->>'documentQuantity')::bigint-(event.before_state->>'documentQuantity')::bigint AS document_delta
+         FROM operation_events event JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
+         WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge') AND event.entity_type='receiving_batch'
+           ${except?'AND NOT EXISTS(SELECT 1 FROM mixed_batches mixed WHERE mixed.receiving_batch_id=scope.receiving_batch_id)':''}
+         ${except?`UNION ALL SELECT receiving_batch_id,created_at,actual_delta,defective_delta,0::bigint FROM retained_corrections`:''}
        ), correction_adjustments AS (
-         SELECT event.entity_id::uuid AS receiving_batch_id,
-                COALESCE(sum(
-                  CASE WHEN event.action='receiving.batch.merge'
-                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
-                    ELSE (event.after_state->>'actualQuantity')::bigint
-                      -(event.before_state->>'actualQuantity')::bigint
-                  END
-                ) FILTER (
+         SELECT event.receiving_batch_id,
+                COALESCE(sum(event.actual_delta) FILTER (
                   WHERE event.created_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS prior_actual_adjustment,
-                COALESCE(sum(
-                  CASE WHEN event.action='receiving.batch.merge'
-                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
-                    ELSE (event.after_state->>'actualQuantity')::bigint
-                      -(event.before_state->>'actualQuantity')::bigint
-                  END
-                ) FILTER (
+                COALESCE(sum(event.actual_delta) FILTER (
                   WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS period_actual_adjustment,
-                COALESCE(sum(
-                  CASE WHEN event.action='receiving.batch.merge'
-                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
-                    ELSE (event.after_state->>'actualQuantity')::bigint
-                      -(event.before_state->>'actualQuantity')::bigint
-                  END
-                ) FILTER (
+                COALESCE(sum(event.actual_delta) FILTER (
                   WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS through_end_actual_adjustment,
-                COALESCE(sum(
-                  CASE WHEN event.action='receiving.batch.merge'
-                    THEN (event.after_state->>'actualQuantityAdjustment')::bigint
-                    ELSE (event.after_state->>'actualQuantity')::bigint
-                      -(event.before_state->>'actualQuantity')::bigint
-                  END
-                ),0)::bigint AS all_actual_adjustment,
-                COALESCE(sum(
-                  (event.after_state->>'documentQuantity')::bigint
-                    -(event.before_state->>'documentQuantity')::bigint
-                ) FILTER (
+                COALESCE(sum(event.actual_delta),0)::bigint AS all_actual_adjustment,
+                COALESCE(sum(event.defective_delta),0)::bigint AS all_defective_adjustment,
+                COALESCE(sum(event.document_delta) FILTER (
                   WHERE event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS through_end_document_adjustment,
-                COALESCE(sum(
-                  (event.after_state->>'documentQuantity')::bigint
-                    -(event.before_state->>'documentQuantity')::bigint
-                ),0)::bigint AS all_document_adjustment,
-                COALESCE(sum(
-                  CASE WHEN event.action='receiving.batch.merge'
-                    THEN (event.after_state->>'defectiveQuantityAdjustment')::bigint
-                    ELSE (event.after_state->>'defectiveQuantity')::bigint
-                      -(event.before_state->>'defectiveQuantity')::bigint
-                  END
-                ) FILTER (
+                COALESCE(sum(event.document_delta),0)::bigint AS all_document_adjustment,
+                COALESCE(sum(event.defective_delta) FILTER (
                   WHERE event.created_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     AND event.created_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                 ),0)::bigint AS period_defective_adjustment
-         FROM operation_events event
-         JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
-         WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge')
-           AND event.entity_type='receiving_batch'
-         GROUP BY event.entity_id
+         FROM adjustment_events event
+         GROUP BY event.receiving_batch_id
        ), batch_totals AS (
          SELECT r.receiving_batch_id,
                 scope.group_key,
@@ -198,11 +191,11 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
                       WHERE r.received_at<($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                     ),0)
                     +COALESCE(adjustments.prior_actual_adjustment,0)
-                    +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
+                    +(${actualAdjustment})-COALESCE(adjustments.all_actual_adjustment,0)
                   )
                 END::bigint AS prior_actual_quantity,
                 CASE WHEN $3::text<>'' THEN
-                  sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                  sum(r.actual_quantity)+(${actualAdjustment})
                 ELSE
                   COALESCE(sum(r.actual_quantity) FILTER (
                     WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
@@ -210,23 +203,23 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
                   ),0)+COALESCE(adjustments.period_actual_adjustment,0)
                 END::bigint AS actual_quantity,
                 CASE WHEN $3::text<>'' THEN
-                  sum(r.defective_quantity)+batch.defective_quantity_adjustment
+                  sum(r.defective_quantity)+(${defectiveAdjustment})
                 ELSE
                   COALESCE(sum(r.defective_quantity) FILTER (
                     WHERE r.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
                       AND r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                   ),0)+COALESCE(adjustments.period_defective_adjustment,0)
                 END::bigint AS defective_quantity,
-                (sum(r.actual_quantity)+batch.actual_quantity_adjustment)::bigint AS current_actual_quantity,
-                (sum(r.defective_quantity)+batch.defective_quantity_adjustment)::bigint AS current_defective_quantity,
+                (sum(r.actual_quantity)+(${actualAdjustment}))::bigint AS current_actual_quantity,
+                (sum(r.defective_quantity)+(${defectiveAdjustment}))::bigint AS current_defective_quantity,
                 CASE WHEN $3::text<>'' THEN
-                  sum(r.actual_quantity)+batch.actual_quantity_adjustment
+                  sum(r.actual_quantity)+(${actualAdjustment})
                 ELSE
                   COALESCE(sum(r.actual_quantity) FILTER (
                     WHERE r.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
                   ),0)
                   +COALESCE(adjustments.through_end_actual_adjustment,0)
-                  +batch.actual_quantity_adjustment-COALESCE(adjustments.all_actual_adjustment,0)
+                  +(${actualAdjustment})-COALESCE(adjustments.all_actual_adjustment,0)
                 END::bigint AS cumulative_actual_quantity,
                 (count(*) FILTER (
                   WHERE $3::text<>''
@@ -259,20 +252,24 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
          ) receipt_correction ON true
          LEFT JOIN correction_adjustments adjustments
            ON adjustments.receiving_batch_id=r.receiving_batch_id
+         ${except?'LEFT JOIN mixed_batches mixed ON mixed.receiving_batch_id=r.receiving_batch_id':''}
+         ${except?`WHERE r.receipt_id<>ALL(${except}::uuid[])`:''}
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
                   scope.group_key,scope.style_key,scope.cutting_order_id,
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
                   adjustments.through_end_document_adjustment,adjustments.all_document_adjustment,
-                  adjustments.period_defective_adjustment
+                  adjustments.period_defective_adjustment,adjustments.all_defective_adjustment
+                  ${except?',mixed.receiving_batch_id':''}
        ), quantity_changes AS (
          SELECT scope.group_key,event.event_id::text AS change_id,event.created_at AS changed_at,
            CASE WHEN receipt.actual_quantity<>0 THEN event.created_at END AS actual_changed_at
          FROM receiving_receipts receipt JOIN scoped_batches scope USING(receiving_batch_id)
          JOIN operation_events event ON event.event_id=receipt.operation_event_id
-         WHERE receipt.actual_quantity<>0 OR (receipt.document_quantity<>0 AND (
+         WHERE (receipt.actual_quantity<>0 OR (receipt.document_quantity<>0 AND (
            receipt.receiving_source='other_factory' OR receipt.receipt_id=(SELECT first.receipt_id
-             FROM receiving_receipts first WHERE first.receiving_batch_id=receipt.receiving_batch_id ORDER BY first.received_at,first.receipt_id LIMIT 1)))
+             FROM receiving_receipts first WHERE first.receiving_batch_id=receipt.receiving_batch_id ORDER BY first.received_at,first.receipt_id LIMIT 1))))
+           ${except?`AND receipt.receipt_id<>ALL(${except}::uuid[])`:''}
          UNION ALL
          SELECT scope.group_key,event.event_id::text,event.created_at,CASE WHEN event.action='receiving.batch.merge'
            OR event.after_state->'actualQuantity' IS DISTINCT FROM event.before_state->'actualQuantity' THEN event.created_at END
@@ -281,6 +278,11 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
            AND (event.action='receiving.batch.merge'
              OR event.after_state->'actualQuantity' IS DISTINCT FROM event.before_state->'actualQuantity'
              OR event.after_state->'documentQuantity' IS DISTINCT FROM event.before_state->'documentQuantity')
+           ${except?'AND NOT EXISTS(SELECT 1 FROM mixed_batches mixed WHERE mixed.receiving_batch_id=scope.receiving_batch_id)':''}
+         ${except?`UNION ALL
+         SELECT scope.group_key,retained.event_id::text,retained.created_at,CASE WHEN retained.actual_delta<>0 THEN retained.created_at END
+         FROM retained_corrections retained JOIN scoped_batches scope USING(receiving_batch_id)
+         WHERE retained.actual_delta<>0 OR retained.document_delta<>0`:''}
          UNION ALL
          SELECT scope.group_key,event.event_id::text,event.created_at,
            CASE WHEN (event.before_state->>'actualQuantity')::bigint<>0 THEN event.created_at END
@@ -319,6 +321,7 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
          FROM batch_totals totals
          GROUP BY totals.group_key,totals.style_key
        )`;
+};
 export const RECEIVING_BOARD_BASE_SQL = receivingBoardBaseSql(`
          SELECT DISTINCT
                 COALESCE('cut:'||batch.cutting_order_id::text,
@@ -342,9 +345,10 @@ export const RECEIVING_BATCH_BOARD_BASE_SQL = receivingBoardBaseSql(`
  upper(btrim(batch.style_no)) AS style_key FROM receiving_batches batch
  WHERE batch.receiving_batch_id=$3::text::uuid AND batch.deleted_at IS NULL
 `);
-export const DIGITAL_RECEIVING_BASE_SQL = receivingBoardBaseSql(`
+export const digitalReceivingBaseSql = (except?:'$5'|'$13')=>receivingBoardBaseSql(`
  SELECT DISTINCT 'cut:'||batch.cutting_order_id::text AS group_key,
                  'cut:'||batch.cutting_order_id::text AS style_key
  FROM receiving_batches batch JOIN receiving_receipts receipt USING(receiving_batch_id)
  WHERE batch.deleted_at IS NULL AND batch.cutting_order_id=ANY($4::uuid[])
-`);
+ `,except);
+export const DIGITAL_RECEIVING_BASE_SQL=digitalReceivingBaseSql();
