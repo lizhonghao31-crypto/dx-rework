@@ -2007,6 +2007,56 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    added.facts.find(row=>row.kind==='material_investment')!.investmentMaterialOccurrences?.[fabricB]);
   expect(movedResult.history.find(row=>row.recordId===initial.recordId&&row.version===4)).toMatchObject({quantities:[rowA,rowB]});
  });
+ it('Acceptance H1 projects an exact PO receipt and the shared positive control without mixing original snapshots',async()=>{
+  const {h,merch,root,scene,started,orderId}=await directMaterialOrder(2);
+  const resource={kind:'order' as const,id:orderId},receipts=new ProductionReadinessService(h.db);
+  const instructions=new ProductionInstructionService(h.db,true),warehouse=h.f.people.warehouse!;
+  const perPO=randomUUID(),shared=randomUUID();
+  await h.f.runtime.run(scene,root,async()=>{
+   const current=await instructions.read(merch,orderId);
+   const saved=await instructions.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+    document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+     fabrics:[{id:perPO,name:'TEST H1 原 PO 主布',part:'本身',colors:{},remarks:''},{id:shared,name:'TEST H1 共享料',part:'本身',colors:{},remarks:''}]}},randomUUID());
+   const common={scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+   const handover=await receipts.record(root,resource,{...common,kind:'design_handover',note:'TEST 原实物采购范围交接',quantities:[],
+    orderInstructionVersion:saved.version,recipientId:merch.actorId},randomUUID());
+   const [a,b]=handover.lines;
+   const purchase={materialId:perPO,lineId:a!.lineId,name:'TEST H1 原 PO 主布',quantity:60,unit:'米'};
+   await receipts.record(merch,resource,{...common,kind:'material_investment',note:'TEST 原实际投料',quantities:[purchase,
+    {materialId:shared,lineId:null,name:'TEST H1 共享料',quantity:60,unit:'米'}]},randomUUID());
+   await receipts.assign(root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,colorConfirmationRole:null,
+    reason:'TEST 原收料任务指派'},randomUUID());
+   const old=(expectedVersion:number,quantities:Array<typeof purchase>)=>receipts.record(warehouse,resource,
+    {...common,expectedVersion,kind:'fabric_receipt',note:'TEST 同一资源原整单快照',quantities},randomUUID());
+   await old(0,[{...purchase,lineId:b!.lineId,quantity:3}]);
+   const work=()=>receipts.warehouseReceiptWork(warehouse,resource);
+   const native=await work();
+   const recordBatch=(item:typeof native[number],quantity:string,expectedReceiptVersion=0,replaces?:{recordId:string;version:number})=>
+    receipts.recordWarehouseReceiptBatch(warehouse,resource,{kind:item.kind,scopeRef:item.scopeRef,lineId:item.lineId,materialId:item.materialId,
+     supplierId:item.basis.supplierId,unit:'米',investment:item.purchase.original,materialFingerprint:item.basis.adoptedRef,quantity,
+     expectedReceiptVersion,occurredAt:started,note:'TEST 原仓库实际批次',...(replaces?{replaces}:{})},randomUUID());
+   const exact= native.find(row=>row.materialId===perPO)!,commonTask=native.find(row=>row.materialId===shared)!;
+   await recordBatch(exact,'20');
+   await recordBatch(commonTask,'10');
+   const found=(await work()).find(row=>row.materialId===perPO)!;
+   expect(found).toMatchObject({lineId:a!.lineId,scopeRef:'whole',received:{quantity:'20',unit:'米'},balance:{procurementRemaining:'40'},
+    activeBatches:[{quantity:{quantity:'20',unit:'米'}}]});
+   expect(found.productionRequired).toBeNull();
+   const page=await receipts.warehouseReceipts(warehouse,{search:'TEST H1 原 PO 主布',status:'open',page:1});
+   expect(page.items).toMatchObject([{lineId:a!.lineId,materialId:perPO,received:{quantity:'20',unit:'米'},balance:{procurementRemaining:'40'}}]);
+   expect((await work()).find(row=>row.materialId===shared)).toMatchObject({lineId:null,received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
+   const oldOverlap=await old(1,[{...purchase,quantity:22}]);
+   expect((await work()).find(row=>row.materialId===perPO)).toMatchObject({received:null,balance:{procurementRemaining:null},
+    activeBatches:[{quantity:{quantity:'20'}}]});
+   const oldMarker=await old(2,[]);
+   expect(oldMarker.history.find(row=>row.kind==='fabric_receipt'&&row.scopeRef==='whole'&&row.version===2)?.quantities)
+    .toEqual(oldOverlap.facts.find(row=>row.kind==='fabric_receipt')?.quantities);
+   await recordBatch(exact,'18',1,found.activeBatches[0]!.ref);
+   expect((await work()).find(row=>row.materialId===perPO)).toMatchObject({received:{quantity:'18',unit:'米'},balance:{procurementRemaining:'42'},
+    activeBatches:[{ref:{recordId:found.activeBatches[0]!.ref.recordId,version:2}}]});
+   expect((await work()).find(row=>row.materialId===shared)).toMatchObject({received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
+  });
+ });
  it('adopts the first material cutoff for the same formal handover only after supplying its missing lead time',async()=>{
   const {h,merch,root,scene,started,orderId,requests}=await directMaterialOrder();
   const resource={kind:'order' as const,id:orderId},operation={kind:'arrangement' as const,resource};
