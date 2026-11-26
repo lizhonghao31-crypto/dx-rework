@@ -85,7 +85,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const x=await setup(),quote=new DigitalQuotationService(f.db,true),resource={kind:'order' as const,id:x.orderId};
   const before=await quote.read(f.root,resource),oldBudget=(await f.db.query('SELECT * FROM digital_budget_versions WHERE production_order_id=$1 AND version=2',[x.orderId])).rows[0];
   const saved=await quote.save(f.root,resource,{expectedVersion:before.version,document:{...before.document!,freight:'1'},assignments:before.assignments},randomUUID());
-  await quote.confirm(f.root,resource,QuotationConfirmationSchema.parse({...before.confirmation!,expectedVersion:saved.version,customerConfirmedTotal:'200000',evidenceNote:'TEST later quote remains unadopted',confirmedAt:new Date().toISOString()}),randomUUID());
+  const confirmation=QuotationConfirmationSchema.parse({...before.confirmation!,expectedVersion:saved.version,customerConfirmedTotal:'200000',
+   workbenchPricing:{field:'customerUnitPrice',value:'200000'},evidenceNote:'TEST later quote remains unadopted',confirmedAt:new Date().toISOString()});
+  await expect(quote.confirm(f.root,resource,confirmation,randomUUID())).rejects.toMatchObject({statusCode:403});
+  await quote.confirm(f.people['sample-designer']!,resource,confirmation,randomUUID());
   await expect(service.publish(x.primary,x.orderId,{...x.input,source:{kind:'new',row:{name:'wash',unit:'件',specification:'',supplier:'TEST',consumption:'1',unitPrice:'100001'}}},randomUUID())).rejects.toMatchObject({statusCode:409});
   const published=await service.publish(x.primary,x.orderId,x.input,randomUUID());expect(published.budgetVersion).toBe(3);
   const row=(await f.db.query('SELECT * FROM digital_budget_versions WHERE production_order_id=$1 AND version=3',[x.orderId])).rows[0];expect(row.quote_version).toBe(oldBudget.quote_version);expect(row.confirmed_quote_total).toBe(oldBudget.confirmed_quote_total);
