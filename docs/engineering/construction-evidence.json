@@ -1,185 +1,125 @@
 {
   "version": 1,
-  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
-  "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
+  "base": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
   "risk": "full",
+  "sourceFingerprint": "10322db119dbc01fc4d07e43813229fdf93f9e3a75e1589fa8590e52a51045ca",
   "rules": [
     {
-      "rule": "合同补缺只读原文档，首次补齐只生成原版，历史原请求不接管新合同。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
+      "rule": "原大货产前准备组只有授权报价目的地时，桌面在原位置直达；其余组、手机入口及 AuthGate 沿用原规则。",
+      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G6。",
       "writes": [
-        "apps/api/src/sourcing/sourcing-contract-service.ts#supplement",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#prepareForApproval",
-        "apps/api/src/tools/repositories.ts#IdempotencyRepository",
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
+        "apps/web/src/components.tsx#DesktopNavigation",
+        "tests/unit/finance-navigation-hierarchy.test.ts#desktop preparation quotation navigation"
       ],
       "reads": [
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#getCurrent",
-        "apps/api/src/sourcing/sourcing-contract-content.ts",
-        "apps/web/src/sourcing-workspace-page.tsx"
+        "apps/web/src/App.tsx#DigitalQuotationPage",
+        "apps/web/src/components.tsx#MobilePrimaryNavigation",
+        "apps/web/src/components.tsx#preparationNavigation",
+        "apps/web/src/digital-quotation-panel.tsx#readQuotationList"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/public-tools-postgres.test.ts"
+        "tests/unit/finance-navigation-hierarchy.test.ts#preserves legacy routes and the requested group order",
+        "tests/unit/platform-modules.test.ts#moves IE into product development",
+        "tests/unit/platform-modules.test.ts#exposes PMC read modules"
       ],
       "newTests": [
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
+        "tests/unit/finance-navigation-hierarchy.test.ts#renders one original quotation link",
+        "tests/unit/finance-navigation-hierarchy.test.ts#preserves the hidden desktop preparation group",
+        "tests/unit/finance-navigation-hierarchy.test.ts#keeps the original disclosure"
       ],
-      "initialization": "继续使用原幂等和合同文档表，不迁移或回填。已存版本按同 case 和原文档 ID 读取。既无可信 ID 又无唯一关联只给待核，不以当前版本代填；原通用调用仍可接管超时键。",
-      "dateAndPermission": "有效本单跟单/Root 的原数据权限，当前授权优先。超 24 小时的完成回执不可覆盖，未证实完成不自动重做；保存缺项未齐时无生成。",
-      "expectation": "同键并发仅一次生成原版。过期、异内容、无权和旧版本待核不生成 B；原 PDF 指针、SHA、合同回执和时钟保持一致。唯一冲突只回读原 information_revision 0。",
+      "initialization": "沿用原 Shell 岗位状态与已授权入口列表。直达用原 basePath、activeKey／name 和浏览器原生链接；空或多个走现有组渲染。",
+      "dateAndPermission": "无日期、报价、数量或岗位规则变更；跟单和 PMC 沿各自授权资料，仓管原 AuthGate 拒绝；单击只读取同一路由。",
+      "expectation": "原组顺序、移动更多和相邻组不变。一个授权目标仅一 Tab 停靠、可见焦点与一次 Enter，报价页 aria-current，返回原 URL，无写入。",
       "checks": [
-        "replay",
-        "compatibility"
-      ]
-    },
-    {
-      "rule": "三条转厂发起入口与两条决定入口沿原审批，重放不触发合同或大货同步。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
-      "writes": [
-        "apps/api/src/sourcing/sourcing-service.ts#requestFactoryChange",
-        "apps/api/src/sourcing/sourcing-service.ts#decideFactoryChange",
-        "apps/api/src/sourcing/sourcing-service.ts#applyFactoryChange",
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts#syncBulkSourcing",
-        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts",
-        "apps/api/src/production-platform/contract-business-ready.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-factory-change-routes.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/g2-contract-transfer-replay-postgres.test.ts"
-      ],
-      "initialization": "沿原事务、待办和审批顺序。已保存摘要原样返回，显式保留两类旧决定命名空间并拒绝异决议重用。新转厂真正建立新合同的首次请求才有目标。",
-      "dateAndPermission": "原跟单、管理、老板及拒绝/转交分支不变；原授权不足不得读敏感回执。原业务时间和大货同步只走原首次处理位置。",
-      "expectation": "七种原业务分支，生成/同步/待办调用、实际合同、附件、任务、事件、时钟及准备快照。过期管理直接办理重放不再次立申请或生成新合同。",
-      "checks": [
-        "replay",
-        "compatibility"
-      ]
-    },
-    {
-      "rule": "数字补号和外发改款只将本事务实际准备的确切目标交给提交者，原回执形状不改。",
-      "source": "Eric 审核达兴数字生产系统 G1–G9 施工与验收单 G2 2a–2c；docs/requirements/sourcing-supplier-production-v1.0.md。",
-      "writes": [
-        "apps/api/src/production-platform/identity-service.ts#correctNumbers",
-        "apps/api/src/sourcing/sourcing-service.ts#reviseStyles",
-        "apps/api/src/sourcing/sourcing-service.ts#reviseDigitalNumbersWithClient",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#generateChangedNumberDocument",
-        "apps/api/src/sourcing/sourcing-contract-service.ts#resumePendingContracts",
-        "apps/api/src/server.ts",
-        "tests/integration/g2-number-style-replay-postgres.test.ts",
-        "scripts/ci/full-gate-risk-map.mjs"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/current-merchandiser.ts",
-        "apps/api/src/sourcing/sourcing-contract-recovery.ts",
-        "apps/api/migrations/0240_digital_merchandiser_handover.sql"
-      ],
-      "oldTests": [
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/g2-number-style-replay-postgres.test.ts"
-      ],
-      "initialization": "不改 PO 写者，留待 G8。数字单回执仍存原表；外层自持事务不抢先生成，G1 只接真实提交文档。生产原唯一索引限制每母单仅一个外发子单，双 PO + 另一母单是可实际办理的对照。",
-      "dateAndPermission": "签名原岗位按当前身份、母单归属和准备关联发布。设计师仅能内部完成本次原合同，公开 GET 权限不放开。按 G1 原归属和受控时钟，Root 权限由既有权威验证。",
-      "expectation": "真实 PATCH/POST 稳定回执，不生成 B；无变化、冲突、借用事务回退与提交边界。G1 续办准确设计师文档，公开合同请求仍 403；人工原入口仍可生成当前版；两个新真库文件映射至 Full，并用仓库原分离时钟夹具配置。非数字合同沿原四参数函数契约。",
-      "checks": [
-        "replay",
-        "compatibility",
-        "api-typecheck",
-        "preflight"
+        "g6-desktop-navigation",
+        "g6-compiled-web",
+        "g6-compiled-browser"
       ]
     }
   ],
   "checks": [
     {
-      "id": "replay",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.config.ts /tmp/dx-g2-evidence/hosted-repair/replay.json tests/integration/g2-contract-transfer-replay-postgres.test.ts tests/integration/g2-number-style-replay-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts -t G2 original|resumes pending work by document ID",
+      "id": "g6-desktop-navigation",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/finance-navigation-hierarchy.test.ts tests/unit/platform-modules.test.ts --reporter=default --reporter=json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 G2 原 HTTP / SQL 事实和既有老板审批精准续办回归。原 G2 提交上的公共幂等八项及静态二十四项仍为原 Head 记录，不重复。",
-      "startedAt": "2026-11-26T16:57:35Z",
-      "endedAt": "2026-11-26T16:58:12Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/replay.log",
-      "logSha256": "851f2b0c4c4df17508be3ef86c56bed8653773699e7464cdb24f87b32bdf38fa",
-      "passed": 13,
+      "context": "Node 22.22.2 / Vitest 4.1.10；原桌面顺序和统一权限测试，加同渲染器一个、零个、两个目的地分支及非报价回退；没有隔离数据库依赖。",
+      "testedHead": "6b65a615de1fc9fdb0cc838e13ca56d125b244b7",
+      "sourceFingerprint": "2987bc534408db980a669c0137c66af54ed55e826e960f76ca32ff0579a885e3",
+      "startedAt": "2026-11-26T16:33:14Z",
+      "endedAt": "2026-11-26T16:33:18Z",
+      "log": "/tmp/dx-g6-evidence.UHEBPu/navigation.log",
+      "logSha256": "b8c0afb8fe4dcb814ad6d077c0385f810b61b37f99875c6b259c2bf468d29b72",
+      "passed": 19,
       "failed": 0,
-      "skipped": 6,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "897bec330c0aa740c2283bf4fdc2afb07f7254df6ae0d0e897b0d4204be272e9"
+          "sha256": "62dca3e39d78f3e6a6c1fd86998fedb430da6d75fe9d96aecd7561640f225d1b"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/finance-navigation-hierarchy.test.ts",
+        "tests/unit/platform-modules.test.ts"
+      ],
+      "inputFingerprint": "eb0cf9d360cb6fb0ef787c38a6b1ed2a99ad3e3a0a36071a536e4fdfa01047dc"
     },
     {
-      "id": "compatibility",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_clock_test node /tmp/dx-g2-evidence/hosted-repair/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g2-evidence/hosted-repair/compatibility.json tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts -t keeps approval successful|applies transfer delivery|freezes increased-price delivery|rolls back a late transfer|binds both authorized merchandisers|G1 |bounded pages",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10，隔离 PostgreSQL 16.14，回环端口 55437、低权限账号、受管 schema 与精确清理，独立主库 dx_rework_ci 与时钟库 dx_rework_acceptance_clock_test，串行 suites。 原 G1 竞态、外发合同和转厂定向历史用例，其他测试故意 name-filter。",
-      "startedAt": "2026-11-26T16:58:12Z",
-      "endedAt": "2026-11-26T16:58:43Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/compatibility.log",
-      "logSha256": "8608f2c84589a300a0333f46f1d85d329f1899b81edcdcd141cedb34e54fa7d2",
-      "passed": 15,
-      "failed": 0,
-      "skipped": 156,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "fda4f2f9930f069f27f29f554b0668261e660fc76cdf513b67343999305893ff"
-        }
-      ]
-    },
-    {
-      "id": "api-typecheck",
-      "command": "npm run typecheck --workspace @dx-rework/api",
+      "id": "g6-compiled-web",
       "kind": "command",
+      "command": "npm run typecheck --workspace @dx-rework/web && npm run build --workspace @dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2 / npm 10.9.9，API TypeScript。",
-      "startedAt": "2026-11-26T16:57:52Z",
-      "endedAt": "2026-11-26T16:58:07Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/api-typecheck.log",
-      "logSha256": "c25d8b530b44c32e441fbfb6e384df25da4afe445b769d1ae78d0fb5a8607cd7"
+      "context": "原 workspace Web 类型检查及 Vite 构建。",
+      "testedHead": "6b65a615de1fc9fdb0cc838e13ca56d125b244b7",
+      "sourceFingerprint": "2987bc534408db980a669c0137c66af54ed55e826e960f76ca32ff0579a885e3",
+      "startedAt": "2026-11-26T16:33:14Z",
+      "endedAt": "2026-11-26T16:33:51Z",
+      "log": "/tmp/dx-g6-evidence.UHEBPu/build.log",
+      "logSha256": "64ea7487cd202e17e43d1b2a34de07bddb2e27d1c227cb00a4e4fe12e9ccb511",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c2f57cfb3a31ab1c050c403f7eb12dce11d2f164d799d810ca9863328ce33740"
     },
     {
-      "id": "preflight",
-      "command": "node --test --test-name-pattern=cheap CI preflight|reviewed responsibility sources scripts/ci/pr-gate-controller.test.mjs",
-      "kind": "tests",
+      "id": "g6-compiled-browser",
+      "kind": "command",
+      "command": "node /tmp/dx-g6-evidence.UHEBPu/browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3642d210701de56011640f3a74840424dad5d76a",
-      "sourceFingerprint": "582aa636ada05e64d669f0166db2f03f5dcaa699bdfe51ee8a022e5d7e8a5706",
-      "context": "Node 22.22.2，原仓库预检，涵盖风险与 Gate 配置。",
-      "startedAt": "2026-11-26T16:57:52Z",
-      "endedAt": "2026-11-26T16:57:53Z",
-      "log": "/tmp/dx-g2-evidence/hosted-repair/preflight.log",
-      "logSha256": "1d1afc861a355bf78a549db3c745d4c8eede29a7bb63a4a5e6b14839a4735938",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 0
+      "context": "Chromium 读取本地原生产编译产物，使用明确的 TEST 角色和报价读响应，无真身份或业务写入。桌面邻接组焦点、反向 Tab、一次 Enter、active、回退，PMC 原只读入口，仓管无菜单且原 AuthGate 拒绝直链，移动原更多。",
+      "testedHead": "6b65a615de1fc9fdb0cc838e13ca56d125b244b7",
+      "sourceFingerprint": "2987bc534408db980a669c0137c66af54ed55e826e960f76ca32ff0579a885e3",
+      "startedAt": "2026-11-26T16:34:20Z",
+      "endedAt": "2026-11-26T16:34:24Z",
+      "log": "/tmp/dx-g6-evidence.UHEBPu/browser.log",
+      "logSha256": "ef3d0cb2108f6d3652f88aab2f104e57ca8a414f157600d928fd8015a9cf473a",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        ".node-version",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c2f57cfb3a31ab1c050c403f7eb12dce11d2f164d799d810ca9863328ce33740"
     }
   ]
 }
