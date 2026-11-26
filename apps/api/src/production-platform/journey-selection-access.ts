@@ -133,9 +133,12 @@ export async function readTechnicalTaskListPage(db:PoolClient,actor:TrustedActor
      WHERE route.production_order_id=o.production_order_id AND route.preparation_id=t.route_instance_id
       AND route.route_schema_version=2 AND route.secondary_craft<>'无')`:''}
     AND ($11 AND t.state='completed' OR NOT $11 AND t.state IN ('pending','ready','blocked'))
-    AND ($12='' OR strpos(lower(COALESCE(o.design_style_no,s.design_style_no,'')),lower($12))>0 OR EXISTS(
+    AND ($12='' OR strpos(lower(COALESCE(o.design_style_no,'')),lower($12))>0
+     OR strpos(lower(COALESCE(s.design_style_no,'')),lower($12))>0 OR EXISTS(
       SELECT 1 FROM digital_production_po_lines po WHERE po.production_order_id=o.production_order_id
-       AND strpos(lower(COALESCE(po.po_number,po.formal_style_no,'')),lower($12))>0))
+       AND (strpos(lower(COALESCE(po.po_number,'')),lower($12))>0
+        OR strpos(lower(COALESCE(po.formal_style_no,'')),lower($12))>0
+        OR strpos(lower(COALESCE(po.temporary_style_no,'')),lower($12))>0)))
     ${scene?`AND EXISTS(SELECT 1 FROM acceptance_sla_clock_resources scene
        WHERE scene.scenario_id=$13 AND ((scene.resource_kind='order' AND scene.resource_id=a.production_order_id)
         OR (scene.resource_kind='source' AND a.production_order_id IS NULL AND scene.resource_id=a.source_id)))`:''}`:'';

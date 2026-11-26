@@ -7,7 +7,7 @@ import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import type {WarehouseNativeTaskQuery} from '@dx-rework/contracts/production-readiness';
 import {useEffect,useState} from 'react';
 import {createWebUrls} from '../url-contract.js';
-import {digitalRequest} from './digital-production-api.js';
+import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {digitalTaskDisplayStatus} from './digital-workspace-copy.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {ListPagination} from './list-pagination.js';
@@ -43,7 +43,8 @@ export function WarehouseNativeTaskTable({initial,onFilter,returnTo}:{
   const controller=new AbortController();
   void digitalRequest<NativePage>('warehouse/native-tasks?'+parameter,'GET',undefined,undefined,{signal:controller.signal})
    .then(data=>{if(!controller.signal.aborted)setView({key,data});})
-   .catch(reason=>{if(!controller.signal.aborted)setError({key,message:reason instanceof Error?reason.message:'原仓库任务读取失败'});});
+   .catch(reason=>{if(!controller.signal.aborted)setError({key,message:reason instanceof DigitalRequestError&&reason.status===404
+    ?'当前服务未开放原仓库任务列表。':reason instanceof Error?reason.message:'原仓库任务读取失败'});});
   return()=>controller.abort();
  },[key,parameter]);
  const apply=()=>onFilter({...initial,search:search.trim(),page:1});
@@ -66,7 +67,11 @@ export function WarehouseNativeTaskTable({initial,onFilter,returnTo}:{
    {key:'state',header:'状态',renderCell:row=>digitalTaskDisplayStatus(row,row.state==='completed')},
    {key:'taskId',header:'办理',renderCell:row=>{
     const href=taskHref(row,returnTo,initial.kind);
-    return href?<Link type="inherit" href={href}>{row.state==='completed'||!row.canExecute?'查看原任务':'进入原任务'}</Link>:null;
+    return <div className="pattern-actions">
+     {href&&<Link type="inherit" href={href}>{row.state==='completed'||!row.canExecute?'查看原任务':'进入原任务'}</Link>}
+     {initial.kind==='dispatch'&&row.orderId&&
+      <Link type="inherit" href={digitalChildDetailHref(`/ui/digital-production?bulk=${row.orderId}&warehouseMaterials=1`,returnTo,urls.base)}>本单发料</Link>}
+    </div>;
    }},
   ]}/></div>}
   <ListPagination page={initial.page} total={exact?.total??null} totalPages={exact?Math.max(1,Math.ceil(exact.total/15)):null}

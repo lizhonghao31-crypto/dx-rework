@@ -71,7 +71,7 @@ export type WarehouseReceiptWorkItem={
  activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string}[];
 };
 export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
- id:string;resource:PreparationResource;orderNumber:string|null;customerCode:string|null;orderRush?:true;
+ id:string;resource:PreparationResource;orderNumber:string|null;issuedOrderNumber?:string|null;customerCode:string|null;orderRush?:true;
  poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
 };
 export type WarehouseReceiptPage={items:WarehouseReceiptListItem[];page:number;total:number};

@@ -29,6 +29,9 @@ export function digitalDetailRoute(search: string): DigitalDetailRoute {
   const warehouseCraft=warehouseCraftTarget(query);
   if(warehouseCraft===null||warehouseCraft&&(quality!==undefined||domains.filter(kind=>query.has(kind)).length!==1||query.has('originalEvent')))
     return {kind:'invalid',message:'原仓库工艺收发入口无效，请从仓库中心重新打开'};
+  if(query.has('warehouseMaterials')&&(query.getAll('warehouseMaterials').length!==1||query.get('warehouseMaterials')!=='1'||
+    !query.has('bulk')||domains.filter(kind=>query.has(kind)).length!==1||query.has('originalEvent')))
+    return {kind:'invalid',message:'原仓库发料入口无效，请从仓库中心重新打开'};
   for (const kind of domains) {
     if (!query.has(kind)) continue;
     const id = query.get(kind);

@@ -17,12 +17,14 @@ import { createClientRequestId } from "./client-request-id.js";
 import { createWebUrls } from "../url-contract.js";
 import { bulkCuttingDetailHref, productionWorkspaceDomainHref } from "./digital-detail-route.js";
 import {TaskPlanTargets,BulkCuttingPlanTargets} from './task-plan-targets.js';
-export function BulkPreparationPanel({orderId,onClose,taskId,onChanged,readonly=false}:{orderId:string;onClose:()=>void;taskId?:string;onChanged?:()=>void;readonly?:boolean}){
+export function BulkPreparationPanel({orderId,onClose,taskId,onChanged,readonly=false,warehouseMaterials=false}:{
+ orderId:string;onClose:()=>void;taskId?:string;onChanged?:()=>void;readonly?:boolean;warehouseMaterials?:boolean;
+}){
  const [sheet,setSheet]=useState<BulkPreparationSheet|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[people,setPeople]=useState<Array<{id:string;displayName:string;roles:string[]}>>([]);
  const [pattern,setPattern]=useState(''),[warehouse,setWarehouse]=useState(''),[cutting,setCutting]=useState('');
  const writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null),base=`orders/${orderId}/bulk-preparation`;
  const apply=(next:BulkPreparationSheet)=>{setSheet(next);setPattern(next.dispatch.patternWorkerId??'');setWarehouse(next.dispatch.warehouseWorkerId??'');setCutting(next.dispatch.cuttingWorkerId??'');};
- useEffect(()=>{let live=true;void digitalRequest<BulkPreparationSheet>(base).then(async next=>{if(!live)return;apply(next);if(next.canDispatchPattern||next.canDispatchWarehouse){const list=await digitalRequest<typeof people>('access/candidates');if(live)setPeople(list);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[base]);
+ useEffect(()=>{let live=true;void digitalRequest<BulkPreparationSheet>(base).then(async next=>{if(!live)return;apply(next);if(!warehouseMaterials&&(next.canDispatchPattern||next.canDispatchWarehouse)){const list=await digitalRequest<typeof people>('access/candidates');if(live)setPeople(list);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[base,warehouseMaterials]);
  const focusedLine=useRef<string|null>(null);
  useEffect(()=>{const query=new URLSearchParams(window.location.search),line=query.get("line"),key=`${orderId}:${line}`;if(query.getAll("line").length===1&&focusedLine.current!==key&&sheet?.cutting.lines.some(item=>item.lineId===line)){const frame=requestAnimationFrame(()=>{const target=document.getElementById(`bulk-po-line-${line}`);if(target){target.scrollIntoView({block:"center"});target.focus();focusedLine.current=key;}});return()=>cancelAnimationFrame(frame);}},[sheet,orderId]);
  const readTask=sheet?.tasks.find(task=>task.taskId===taskId);
@@ -32,6 +34,14 @@ export function BulkPreparationPanel({orderId,onClose,taskId,onChanged,readonly=
  const saveWithReceipt=async(path:string,body:unknown,method='POST')=>{if(writing.current)return false;writing.current=true;setBusy(true);setError('');const payload=JSON.stringify([path,body]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{apply(await digitalRequest<BulkPreparationSheet>(base+path,method,body,pending.current.key));pending.current=null;onChanged?.();return true;}catch(e){setError(e instanceof Error?e.message:'办理失败');return false;}finally{writing.current=false;setBusy(false);}};
  const save=async(path:string,body:unknown,method='POST')=>{await saveWithReceipt(path,body,method);};
  const select=(label:string,role:string,value:string,set:(v:string)=>void)=><label>{label}<SearchableSelect value={value} onChange={e=>set(e.target.value)}><option value="">待指派</option>{people.filter(p=>hasRequiredWarehouseRole(p.roles,role)).map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</SearchableSelect></label>;
+ if(warehouseMaterials)return <Surface><Button disabled={busy} onClick={onClose}>返回仓库</Button>
+  <h2>仓库实际发料</h2>{error&&<p role="alert">{error}</p>}
+  {sheet&&<><p>{sheet.reference?.designStyleNo}</p>
+   {!sheet.materials?.canDispatch&&<p>{!sheet.instructionValid?'待有效制单':!sheet.ownerApproved?'待当前工厂批准':'当前账号或订单状态不允许发料'}</p>}
+   {sheet.materials?.canDispatch&&!sheet.materials.items.length&&<p>当前制单没有可登记的发料项目，请核对原验布与制单。</p>}
+   <BulkMaterialsPanel sheet={sheet} busy={busy} readonly={readonly} save={saveWithReceipt} initiallyOpen/>
+  </>}
+ </Surface>;
  return <Surface className="bulk-preparation-reference"><div className="pattern-actions">{!taskId&&<Button disabled={busy} onClick={onClose}>返回</Button>}<Button disabled={busy} onClick={()=>void (async()=>{if(await canLeaveInternalPage())await digitalRequest<BulkPreparationSheet>(base).then(apply).catch(e=>setError(e.message));})()}>刷新</Button></div><h2>{taskId?(readTask?.taskKind==='warehouse_preshrink'?'仓库预缩办理':'大货纸样与唛架办理'):'大货产前准备'}</h2>{error&&<p role="alert">{error}</p>}{sheet&&<>
  <div ref={readRef} className="bulk-preparation-reference-layout"><aside className="bulk-preparation-reference-source"><h3>{reference?.designStyleNo??"本轮订单资料"}</h3>{styleImageUrl?<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(styleImageUrl)} target="_blank" rel="noreferrer"><img src={createWebUrls(import.meta.env.BASE_URL).pageUrl(styleImageUrl)} alt={reference?.designStyleNo+"款图"}/></a>:<div className="bulk-preparation-picture-empty">暂无可见款图</div>}<dl><dt>客户</dt><dd>{reference?.customerCode??"未登记"}</dd><dt>采用开发轮次</dt><dd>{sheet.adoptedRound??"未登记"}</dd><dt>当前开发轮次</dt><dd>{sheet.sourceRound??"未登记"}</dd><dt>有效制单</dt><dd>{sheet.instructionValid?`版本 ${sheet.instructionVersion}`:sheet.instructionVersion?`版本 ${sheet.instructionVersion}（当前失效）`:"未发布"}</dd></dl></aside><section className="bulk-preparation-reference-conditions"><h3>产前前置事实</h3><div><span>客户样板：{sheet.customerConfirmed?"已确认":"未确认"}</span><span>原外发老板审批：{sheet.ownerApproved?"已批准":"未批准"}</span><span>有效制单：{sheet.instructionValid?`版本 ${sheet.instructionVersion}`:"待核对发布"}</span></div>
  {sheet.reasons.map(reason=><p key={reason}>{reason}</p>)}<p>预缩：{sheet.preshrink??'待明确'}。纸样、唛架与预缩全部满足后自动释放整款开裁。</p>

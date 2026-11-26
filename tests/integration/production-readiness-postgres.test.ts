@@ -39,12 +39,16 @@ import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-
 import Fastify from 'fastify';
 import {AuthService} from '../../apps/api/src/auth/service.js';
 import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
-import {AcceptanceDingTalkProvider} from '../../apps/api/src/auth/acceptance-provider.js';
+import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from '../../apps/api/src/auth/acceptance-provider.js';
 import {mintAcceptanceControlCode} from '../../apps/api/src/auth/acceptance-control.js';
 import {registerAcceptanceClockRoutes} from '../../apps/api/src/acceptance-clock/routes.js';
 import {registerTodoRoutes} from '../../apps/api/src/todos/routes.js';
 import sharp from 'sharp';
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createServer} from 'node:net';
+import {setTimeout as delay} from 'node:timers/promises';
 import {writeFile} from 'node:fs/promises';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerProductionReadinessRoutes} from '../../apps/api/src/production-platform/production-readiness-routes.js';
@@ -1128,6 +1132,61 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const patternOrders=new PatternRoomOrderService(fixture.db,new TodoProjectionService(new TodoService(fixture.db)),{ordersEnabled:true});
   return {f:fixture,db:fixture.db,patternOrders,orderTimeRequests:new OrderTimeRequestService(fixture.db,orderTimeNativeExecutor(fixture.db,true,patternOrders))};
  };
+ it('R1 exposes numbered options and warehouse routes through normal API startup',async()=>{
+  const dbUrl=new URL(url!);
+  const schema=(await f.db.query<{schema:string}>('SELECT current_schema() AS schema')).rows[0]!.schema;
+  dbUrl.searchParams.set('options',`-c search_path=${schema}`);
+  const labSecret=randomBytes(32).toString('base64url');
+  for(const enabled of [false,true]){
+   const socket=createServer().listen(0,'127.0.0.1');
+   await once(socket,'listening');
+   const address=socket.address();
+   if(!address||typeof address==='string')throw Error('TEST expected a loopback server address');
+   const {port}=address;
+   await new Promise<void>((resolve,reject)=>socket.close(error=>error?reject(error):resolve()));
+   const server=spawn(process.execPath,['--import','tsx','apps/api/src/server.ts'],{env:{
+    PATH:process.env.PATH,NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),DATABASE_URL:dbUrl.toString(),
+    DINGTALK_CORP_ID:'anchor-test',DINGTALK_H5_APP_KEY:'TEST',DINGTALK_H5_APP_SECRET:'TEST',
+    DINGTALK_WEB_CLIENT_ID:'TEST',DINGTALK_WEB_CLIENT_SECRET:'TEST',DINGTALK_QR_REDIRECT_URI:'https://example.test/callback',
+    ROOT_DINGTALK_USER_ID:'uat-root',SESSION_SECRET:randomBytes(32).toString('base64url'),ACCEPTANCE_LAB_ENABLED:'true',
+    ACCEPTANCE_LAB_SECRET:labSecret,
+    DIGITAL_PRODUCTION_ENABLED:'true',DIGITAL_PRODUCTION_CREATION_ENABLED:'true',
+    DIGITAL_WORKBENCH_NUMBERED_CREATION_ENABLED:String(enabled),TODO_RUNTIME_ENABLED:'false',
+    TODO_DELIVERY_ENABLED:'false',TODO_TIMING_ENABLED:'false',
+   },stdio:['ignore','ignore','pipe']});
+   const exited=once(server,'exit');
+   let stderr='';
+   server.stderr?.on('data',chunk=>{stderr+=String(chunk);});
+   const origin=`http://127.0.0.1:${port}`;
+   const route=(path:string,headers?:HeadersInit)=>fetch(`${origin}/digital-production/${path}`,{headers,signal:AbortSignal.timeout(3000)});
+   const login=async(alias:string)=>{
+    const response=await fetch(origin+'/auth/mobile',{method:'POST',headers:{'content-type':'application/json'},
+     body:JSON.stringify({code:mintAcceptanceLoginCode(alias,labSecret)}),signal:AbortSignal.timeout(3000)});
+    expect(response.status).toBe(200);
+    return {cookie:response.headers.getSetCookie().find(cookie=>cookie.startsWith('dx_rework_session='))!.split(';',1)[0]!};
+   };
+   try{
+    let online=false;
+    for(let attempt=0;attempt<120&&!online&&server.exitCode===null;attempt++){
+     online=await fetch(origin+'/health/live',{signal:AbortSignal.timeout(500)}).then(r=>r.ok,()=>false);
+     if(!online)await delay(100);
+    }
+    if(!online)throw Error(`TEST normal API did not start: ${stderr}`);
+    const designer=await login('sample-designer'),warehouse=await login('warehouse');
+    const options=await (await route('options',designer)).json();
+    expect(options).toMatchObject({creationEnabled:true});
+    expect(options.workbenchNumberedCreation).toBe(enabled?true:undefined);
+    expect((await route('sources/numbered-drafts/receipt',designer)).status).toBe(enabled?400:404);
+    expect((await route('warehouse/receipts',warehouse)).status).toBe(enabled?200:404);
+    const craft=await route(`orders/${randomUUID()}/factory-flow/warehouse-craft`,warehouse);
+    expect(craft.status).toBe(404);
+    if(enabled)expect(await craft.text()).toContain('资料不存在或不在授权范围');
+   }finally{
+    server.kill('SIGTERM');
+    await exited;
+   }
+  }
+ },testExecutionConfig.correctnessTimeoutMs);
  it('X3 guards native accessory issues and receipt corrections using only the current original lot and adopted demand',async()=>{
   const own=await businessAnchorFixture(url!);
   try{
@@ -1179,6 +1238,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(await preparation.warehouseReceiptWork(warehouse,resource)).toMatchObject([{received:{quantity:'500',unit:'米'},activeBatches:[{ref:preorderReceipt}]}]);
     const listed=await preparation.warehouseReceipts(warehouse,{page:1,search:accessory.name,status:'open'});
     expect(listed.items).toEqual([expect.objectContaining({resource,materialId:accessory.materialId,received:{quantity:'500',unit:'米'}})]);
+    const numbered=listed.items[0]!.issuedOrderNumber;
+    expect(numbered).toBeTruthy();
+    for(const search of [numbered!,numbered!+'-po1',numbered!+'-po2']){
+     expect(await preparation.warehouseReceipts(warehouse,{page:1,search,status:'open'}))
+      .toEqual({page:1,total:1,items:listed.items});
+    }
+    expect(await preparation.warehouseReceipts(warehouse,{page:2,search:numbered!+'-PO2',status:'open'}))
+     .toEqual({page:2,total:1,items:[]});
+    await expect(preparation.warehouseReceipts(own.people.merchandiser!,{page:1,search:numbered!+'-PO2',status:'open'}))
+     .rejects.toMatchObject({statusCode:403});
     await bulk.dispatchMaterials(warehouse,id,{supplierId:own.supplierId,instructionVersion,occurredAt:now,note:'TEST original source receipt reused',
      items:[{materialId:scope.id,quantity:300,unit:'米',scope:{scopeRef:'whole',lineId:null,allocations:[{receipt:preorderReceipt!,quantity:'300'}]}}]},randomUUID());
     await expect(preparation.recordWarehouseReceiptBatch(warehouse,resource,{...batch,expectedReceiptVersion:1,replaces:preorderReceipt,quantity:'299'},randomUUID())).rejects.toMatchObject({statusCode:409});
