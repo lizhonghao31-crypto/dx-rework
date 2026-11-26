@@ -200,6 +200,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const [failed]=await documents(manualCase);
    expect(failed).toMatchObject({status:'generation_failed',failure_reason:unavailable,pdf_attachment_id:null});
 
+   const deletedCase=await pendingApproval(service);
+   generation.mockRejectedValueOnce(new Error('TEST leave the archived contract pending'));
+   await approve(deletedCase,randomUUID());
+   const archived=await documents(deletedCase);
+   await service.deleteByRoot({...f.root,authorizationCapability:'sourcing:delete'},deletedCase,randomUUID());
+
    generation.mockClear();
    await f.contracts.resumePendingContracts();
    expect(generation).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
@@ -207,6 +213,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }),startupCase,pending.id,expect.objectContaining({recoveryVersion:pending.version,signal:expect.any(AbortSignal)}));
    expect(await documents(startupCase)).toEqual([expect.objectContaining({id:pending.id,status:'ready',pdf_attachment_id:expect.any(String)})]);
    expect(await documents(manualCase)).toEqual([failed]);
+   expect(archived).toEqual([expect.objectContaining({status:'generation_pending'})]);
+   expect(await documents(deletedCase)).toEqual(archived);
 
    generation.mockClear();
    expect(await manual(manualCase)).toMatchObject({sourcingContractDocumentId:failed.id,status:'ready'});

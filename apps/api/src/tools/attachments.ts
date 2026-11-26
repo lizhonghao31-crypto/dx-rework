@@ -10,6 +10,7 @@ import type {
   UploadIntentResponse,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { contractRecoveryDatabase } from "../platform/contract-recovery-database.js";
 import { InvalidStoredFileError, validateStoredFileContent } from "./file-content-validation.js";
 import {TechnicalPlotUploadSchema} from '@dx-rework/contracts/digital-development-technical';
 import {validateOpaquePlotContent} from './plot-file-content.js';
@@ -178,7 +179,7 @@ export class AttachmentService {
   }
 
   async readContractContentImage(sourcingCaseId: string, attachmentId: string, signal?: AbortSignal): Promise<{bytes:Buffer;sha256:string}> {
-    const row = (await this.pool.query<AttachmentRow>(`SELECT a.* FROM attachments a
+    const row = (await contractRecoveryDatabase(this.pool, signal).query<AttachmentRow>(`SELECT a.* FROM attachments a
       WHERE a.attachment_id=$1 AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
         AND (a.entity_type='sourcing_case' AND a.entity_id=$2 OR a.entity_type='sourcing_contract_document' AND EXISTS(
           SELECT 1 FROM sourcing_contract_documents d WHERE d.sourcing_contract_document_id::text=a.entity_id AND d.sourcing_case_id=$2::uuid))`,[attachmentId,sourcingCaseId])).rows[0];
@@ -479,7 +480,7 @@ export class AttachmentService {
   }
 
   async reusableContractPdf(documentId: string, staged: StagedContractPdf, signal?: AbortSignal): Promise<string | null> {
-    const existing = (await this.pool.query<AttachmentRow>(
+    const existing = (await contractRecoveryDatabase(this.pool, signal).query<AttachmentRow>(
       `SELECT * FROM attachments WHERE entity_type='sourcing_contract_document' AND entity_id=$1
         AND mime_type='application/pdf' AND sha256=$2 AND status='ready'`,
       [documentId, staged.sha256],

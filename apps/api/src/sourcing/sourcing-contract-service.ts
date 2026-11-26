@@ -5,6 +5,7 @@ import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./curre
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import type { AcceptanceClockRuntime } from "../acceptance-clock/runtime.js";
+import { acceptanceClockLockKey } from "../acceptance-clock/repository.js";
 import { renderRecoveryContract } from "./sourcing-contract-recovery-render.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -16,6 +17,7 @@ import type {
   SupplementSourcingContract,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { connectContractRecovery, contractRecoveryDatabase, contractRecoveryTimeouts } from "../platform/contract-recovery-database.js";
 import { SourcingContractManagementService, canRefreshContractInformation } from "./sourcing-contract-management-service.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
@@ -76,15 +78,21 @@ type RecoveryOptions = Readonly<{
   stop?: () => boolean;
   budgetMs?: number;
   jobTimeoutMs?: number;
+  signal?: AbortSignal;
   report?: (fields: Record<string, unknown>, message: string) => void;
 }>;
 type GenerationOptions = Readonly<{
   recoveryVersion: number;
   signal: AbortSignal;
   report?: RecoveryOptions["report"];
+  clock?: Readonly<{ scenarioId: string; runtime: AcceptanceClockRuntime }>;
 }>;
 const staleGeneration = `document.status='generating'
   AND COALESCE(document.generation_lease_until,document.updated_at+INTERVAL '5 minutes') <= clock_timestamp()`;
+function transientPublicationError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error) || typeof error.code !== "string") return false;
+  return error.code.startsWith("08") || ["55P03", "57014", "40001", "40P01"].includes(error.code);
+}
 
 const iso = (value: Date | string): string => value instanceof Date
   ? value.toISOString() : new Date(value).toISOString();
@@ -117,7 +125,9 @@ export class SourcingContractService {
 
   async resumePendingContracts(batchSize = 50, options: RecoveryOptions = {}) {
     const started = performance.now();
-    const batch = await this.database.query<RecoveryCandidate>(
+    const scanSignal = options.signal ?? AbortSignal.timeout(30_000);
+    const db = contractRecoveryDatabase(this.database, scanSignal);
+    const batch = await db.query<RecoveryCandidate>(
       `SELECT document.sourcing_contract_document_id AS document_id, document.sourcing_case_id AS case_id,
          document.contract_version AS version, document.prepared_at::text AS prepared_at,
          extract(epoch FROM (clock_timestamp()-document.prepared_at))*1000 AS waiting_ms
@@ -137,33 +147,36 @@ export class SourcingContractService {
     let advanced = 0;
     let ready = 0;
     for (const candidate of batch.rows) {
-      if (options.stop?.() || performance.now() - started >= (options.budgetMs ?? 30_000)) break;
+      if (scanSignal.aborted || options.stop?.() || performance.now() - started >= (options.budgetMs ?? 30_000)) break;
       cursor = { prepared_at: candidate.prepared_at, document_id: candidate.document_id };
       advanced++;
       const refs = { caseId: candidate.case_id, documentId: candidate.document_id, version: candidate.version };
       try {
-        const identity = await this.recoveryIdentity(candidate);
+        const identity = await this.recoveryIdentity(db, candidate);
         if (!identity) {
           options.report?.(refs, "contract recovery requires the original authorized identity and order binding");
           continue;
         }
-        if (identity.scenarioId && !options.acceptanceClock) {
-          options.report?.(refs, "contract recovery requires the verified Acceptance clock");
-          continue;
+        let clock: GenerationOptions["clock"];
+        if (identity.scenarioId) {
+          const runtime = options.acceptanceClock;
+          if (!runtime || !await runtime.isUat(identity.actor.actorId, db)) {
+            options.report?.(refs, "contract recovery requires the verified Acceptance clock and actor");
+            continue;
+          }
+          runtime.assertEnabled();
+          clock = { scenarioId: identity.scenarioId, runtime };
         }
         if (options.stop?.()) break;
-        const run = async () => {
-          if (options.stop?.()) return;
-          return this.generateIfReady(identity.actor, candidate.case_id, candidate.document_id, {
-            recoveryVersion: candidate.version, signal: AbortSignal.timeout(options.jobTimeoutMs ?? 240_000),
-            ...(options.report ? { report: options.report } : {}),
-          });
-        };
-        const result = identity.scenarioId
-          ? await options.acceptanceClock!.run(identity.scenarioId, identity.actor, run)
-          : await run();
-        if (result?.item?.status === "ready") ready++;
+        const jobTimeout = AbortSignal.timeout(options.jobTimeoutMs ?? 240_000);
+        const signal = options.signal ? AbortSignal.any([options.signal, jobTimeout]) : jobTimeout;
+        const result = await this.generateIfReady(identity.actor, candidate.case_id, candidate.document_id, {
+          recoveryVersion: candidate.version, signal,
+          ...(clock ? { clock } : {}), ...(options.report ? { report: options.report } : {}),
+        });
+        if (result.item?.status === "ready") ready++;
       } catch (error) {
+        if (options.signal?.aborted) break;
         options.report?.({ ...refs, code: error instanceof ApplicationError ? error.code : "RECOVERY_FAILED" }, "contract recovery could not finish");
       }
     }
@@ -171,8 +184,8 @@ export class SourcingContractService {
     return { cursor, candidates: batch.rows.length, advanced, ready, waitingMs: Number(batch.rows[0]?.waiting_ms ?? 0) };
   }
 
-  private async recoveryIdentity(candidate: RecoveryCandidate): Promise<{ actor: TrustedActorContext; scenarioId: string | null } | null> {
-    const row = (await this.database.query<{
+  private async recoveryIdentity(db: Pick<Pool, "query">, candidate: RecoveryCandidate): Promise<{ actor: TrustedActorContext; scenarioId: string | null } | null> {
+    const row = (await db.query<{
       actor_id: string; capability: string; generation: string | null; order_count: number; scenario_id: string | null;
     }>(`SELECT COALESCE(event.actor_id,document.prepared_by) AS actor_id,
          COALESCE(event.authorization_capability,'sourcing:contract:record') AS capability,
@@ -200,7 +213,7 @@ export class SourcingContractService {
        WHERE document.sourcing_contract_document_id=$1 AND source.deleted_at IS NULL
          AND user_account.enabled AND NOT user_account.manual_access_disabled`, [candidate.document_id])).rows[0];
     if (!row || row.order_count > 1 || (row.generation === "digital_production_v1" && row.order_count !== 1)) return null;
-    const roles = (await this.database.query<{ roles: string[] }>(
+    const roles = (await db.query<{ roles: string[] }>(
       "SELECT access_authorized_actor_roles($1,$2) AS roles, access_authorized_actor_roles($1,$3) AS reader_roles",
       [row.actor_id, row.capability, READ_CAPABILITY],
     )).rows[0]?.roles;
@@ -376,9 +389,10 @@ export class SourcingContractService {
     actor: TrustedActorContext,
     sourcingCaseId: string,
     sourcingContractDocumentId?:string,
+    db: Pick<Pool, "query"> = this.database,
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
-    const result = await this.database.query<ContractRow>(
+    const result = await db.query<ContractRow>(
       `SELECT document.*,source_case.created_by,
               EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned,
               EXISTS(SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_contract_document_id=document.sourcing_contract_document_id) AS reconciled,
@@ -390,7 +404,7 @@ export class SourcingContractService {
        ORDER BY document.contract_version DESC LIMIT 1`,
       [sourcingCaseId,sourcingContractDocumentId??null],
     );
-    return { item: result.rows[0] ? await this.dto(result.rows[0], actor) : null };
+    return { item: result.rows[0] ? await this.dto(result.rows[0], actor, db) : null };
   }
 
   async supplement(
@@ -479,8 +493,9 @@ export class SourcingContractService {
   ): Promise<SourcingContractStateResponse> {
     const attemptId = randomUUID();
     const signal = recovery?.signal;
+    const db = contractRecoveryDatabase(this.database, signal);
     signal?.throwIfAborted();
-    const claimed = await this.database.query<ContractRow>(
+    const claimed = await db.query<ContractRow>(
       `UPDATE sourcing_contract_documents document
        SET status='generating',failure_reason=NULL,generation_attempt_id=$4,
            generation_lease_until=clock_timestamp()+INTERVAL '5 minutes'
@@ -500,15 +515,15 @@ export class SourcingContractService {
       [sourcingCaseId, sourcingContractDocumentId ?? null, recovery?.recoveryVersion ?? null, attemptId],
     );
     const row = claimed.rows[0];
-    if (!row) return this.getCurrent(actor, sourcingCaseId, sourcingContractDocumentId);
+    if (!row) return this.getCurrent(actor, sourcingCaseId, sourcingContractDocumentId, db);
     const documentId = row.sourcing_contract_document_id;
-    const read = () => this.getCurrent(actor, sourcingCaseId, documentId);
+    const read = () => this.getCurrent(actor, sourcingCaseId, documentId, db);
     const refs = { caseId: sourcingCaseId, documentId, version: Number(row.contract_version), attemptId };
     recovery?.report?.(refs, "contract generation claimed");
 
     // Loading frozen facts is separate from rendering so transient DB reads
     // leave the lease recoverable, without asserting an actual PDF failure.
-    const content = await loadContractContent(this.database, documentId);
+    const content = await loadContractContent(db, documentId);
     let pdf: Buffer;
     let fingerprint: string;
     let staged: ReturnType<AttachmentService["stageContractPdf"]>;
@@ -520,13 +535,13 @@ export class SourcingContractService {
       staged = this.attachments.stageContractPdf(`${row.contract_number}.pdf`, pdf);
     } catch (error) {
       if (signal?.aborted) throw signal.reason;
-      if (await this.failGeneration(sourcingCaseId, documentId, attemptId, error)) throw error;
+      if (await this.failGeneration(db, sourcingCaseId, documentId, attemptId, error)) throw error;
       recovery?.report?.(refs, "contract generation ownership lost after render failure");
       return read();
     }
     const reusableAttachmentId = await this.attachments.reusableContractPdf(documentId, staged, signal);
     if (!reusableAttachmentId) {
-      const recorded = await this.database.query(
+      const recorded = await db.query(
         `INSERT INTO sourcing_contract_generation_staging(generation_attempt_id,sourcing_contract_document_id,object_key,sha256)
          SELECT $3, sourcing_contract_document_id, $4, $5 FROM sourcing_contract_documents
          WHERE sourcing_case_id=$1 AND sourcing_contract_document_id=$2 AND generation_attempt_id=$3 AND status='generating'`,
@@ -542,14 +557,15 @@ export class SourcingContractService {
         // A failed object-store acknowledgement may have written the private
         // object. Keep its durable identity for reconciliation.
         if (signal?.aborted) throw signal.reason;
-        if (await this.failGeneration(sourcingCaseId, documentId, attemptId, error)) throw error;
+        if (await this.failGeneration(db, sourcingCaseId, documentId, attemptId, error)) throw error;
         recovery?.report?.(refs, "contract generation ownership lost after storage failure");
         return read();
       }
     }
 
     signal?.throwIfAborted();
-    const client = await this.database.connect();
+    const connection = signal ? await connectContractRecovery(this.database, signal) : null;
+    const client = connection?.client ?? await this.database.connect();
     let commitAttempted = false;
     let publicationStarted = false;
     let destroyConnection = false;
@@ -557,6 +573,22 @@ export class SourcingContractService {
     let transactionError: unknown;
     try {
       await client.query("BEGIN");
+      if (signal) {
+        await client.query(contractRecoveryTimeouts);
+      }
+      if (recovery?.clock) {
+        const held = (await client.query<{ held: boolean }>(
+          `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS held
+           WHERE EXISTS (
+             SELECT 1 FROM digital_production_child_links link
+             JOIN acceptance_sla_clock_resources scene ON scene.resource_kind='order' AND scene.resource_id=link.production_order_id
+             WHERE link.module='sourcing' AND link.child_id=$2 AND scene.scenario_id=$3)`,
+          [acceptanceClockLockKey(recovery.clock.scenarioId), sourcingCaseId, recovery.clock.scenarioId],
+        )).rows[0]?.held;
+        if (!held || !await recovery.clock.runtime.isUat(actor.actorId, client)) {
+          throw new ApplicationError("ACCEPTANCE_ISOLATION", "合同恢复缺少可用的原场景锁或验收身份", 409);
+        }
+      }
       await lockDigitalSourcingHandover(client, sourcingCaseId, actor);
       const liveCase = await client.query(
         "SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
@@ -573,7 +605,7 @@ export class SourcingContractService {
         signal?.throwIfAborted();
         publicationStarted = true;
         const attachmentId = reusableAttachmentId ?? await this.attachments.publishContractPdf(client, actor, documentId, staged);
-        await client.query(
+        const published = await client.query(
           `UPDATE sourcing_contract_documents
            SET status='ready', snapshot_fingerprint=$4, pdf_attachment_id=$5, pdf_sha256=$6,
                generated_at=COALESCE(generated_at,CURRENT_TIMESTAMP), failure_reason=NULL,
@@ -581,6 +613,7 @@ export class SourcingContractService {
            WHERE sourcing_case_id=$1 AND sourcing_contract_document_id=$2 AND generation_attempt_id=$3 AND status='generating'`,
           [sourcingCaseId, documentId, attemptId, fingerprint, attachmentId, staged.sha256],
         );
+        if (published.rowCount !== 1) throw new Error("Contract publication lost its document claim");
         if (!reusableAttachmentId) {
           await client.query("UPDATE sourcing_contract_generation_staging SET published_attachment_id=$2 WHERE generation_attempt_id=$1", [attemptId, attachmentId]);
         }
@@ -597,13 +630,16 @@ export class SourcingContractService {
     } catch (error) {
       transactionError = error;
       destroyConnection = commitAttempted;
-      await client.query("ROLLBACK").catch(() => { destroyConnection = true; });
-    } finally { client.release(destroyConnection); }
+      if (!signal?.aborted) await client.query("ROLLBACK").catch(() => { destroyConnection = true; });
+    } finally {
+      if (connection) connection.release(destroyConnection);
+      else client.release(destroyConnection);
+    }
 
     if (commitAttempted && transactionError) {
       // The document's immutable pointer (and the staging key, when used)
       // resolve a lost COMMIT acknowledgement on a fresh pool checkout.
-      const committed = await this.database.query(
+      const committed = await db.query(
         `SELECT 1 FROM sourcing_contract_documents document JOIN attachments file ON file.attachment_id=document.pdf_attachment_id
          WHERE document.sourcing_case_id=$1 AND document.sourcing_contract_document_id=$2 AND document.status='ready'
            AND document.pdf_sha256=$3 AND (file.object_key=$4 OR file.attachment_id=$5::uuid)`,
@@ -616,22 +652,22 @@ export class SourcingContractService {
       throw transactionError;
     }
     if (transactionError) {
-      if (publicationStarted && !destroyConnection && !signal?.aborted
-        && await this.failGeneration(sourcingCaseId, documentId, attemptId, transactionError, "合同正式就绪未提交，请核对后重试")) {
-        if (!reusableAttachmentId) await this.discardContractStaging(attemptId, staged.objectKey);
+      if (publicationStarted && !destroyConnection && !signal?.aborted && !transientPublicationError(transactionError)
+        && await this.failGeneration(db, sourcingCaseId, documentId, attemptId, transactionError, "合同正式就绪未提交，请核对后重试")) {
+        if (!reusableAttachmentId) await this.discardContractStaging(db, attemptId, staged.objectKey);
         throw transactionError;
       }
       // Interruption and uncertain database reads retain staging for reconciliation.
       throw transactionError;
     }
-    if (lost && !reusableAttachmentId) await this.discardContractStaging(attemptId, staged.objectKey);
+    if (lost && !reusableAttachmentId) await this.discardContractStaging(db, attemptId, staged.objectKey);
     recovery?.report?.(refs, lost ? "contract generation ownership lost before publication" : "contract generation published");
     return read();
   }
 
-  private async failGeneration(caseId: string, documentId: string, attemptId: string, error: unknown, message?: string): Promise<boolean> {
+  private async failGeneration(db: Pick<Pool, "query">, caseId: string, documentId: string, attemptId: string, error: unknown, message?: string): Promise<boolean> {
     const reason = message ?? (error instanceof Error ? error.message.slice(0,500) : "合同PDF生成失败");
-    const result = await this.database.query(
+    const result = await db.query(
       `UPDATE sourcing_contract_documents document
        SET status='generation_failed',failure_reason=$4,generation_attempt_id=NULL,generation_lease_until=NULL
        FROM sourcing_cases source_case
@@ -642,9 +678,9 @@ export class SourcingContractService {
     return result.rowCount === 1;
   }
 
-  private async discardContractStaging(attemptId: string, objectKey: string): Promise<void> {
+  private async discardContractStaging(db: Pick<Pool, "query">, attemptId: string, objectKey: string): Promise<void> {
     try {
-      const unattached = await this.database.query(
+      const unattached = await db.query(
         `SELECT 1 FROM sourcing_contract_generation_staging stage
          JOIN sourcing_contract_documents document USING(sourcing_contract_document_id)
          WHERE stage.generation_attempt_id=$1 AND stage.object_key=$2 AND stage.published_attachment_id IS NULL
@@ -654,7 +690,7 @@ export class SourcingContractService {
       );
       if (unattached.rowCount !== 1) return;
       await this.attachments.discardStagedContractPdf(objectKey);
-      await this.database.query("UPDATE sourcing_contract_generation_staging SET discarded_at=clock_timestamp() WHERE generation_attempt_id=$1", [attemptId]);
+      await db.query("UPDATE sourcing_contract_generation_staging SET discarded_at=clock_timestamp() WHERE generation_attempt_id=$1", [attemptId]);
     } catch {
       process.emitWarning("Unpublished contract object remains in the staging inventory", { code: "CONTRACT_STAGING_CLEANUP_FAILED" });
     }
@@ -714,8 +750,8 @@ export class SourcingContractService {
     }
   }
 
-  private async dto(row: ContractRow, actor: TrustedActorContext): Promise<SourcingContractDocument> {
-    const currentMerchandiser=await effectiveSourcingMerchandiser(this.database,row.sourcing_case_id,row.created_by);
+  private async dto(row: ContractRow, actor: TrustedActorContext, db: Pick<Pool, "query">): Promise<SourcingContractDocument> {
+    const currentMerchandiser=await effectiveSourcingMerchandiser(db,row.sourcing_case_id,row.created_by);
     return {
       sourcingContractDocumentId: row.sourcing_contract_document_id,
       sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
@@ -730,11 +766,11 @@ export class SourcingContractService {
       failureReason: row.failure_reason,
       preparedAt: iso(row.prepared_at),
       generatedAt: row.generated_at ? iso(row.generated_at) : null,
-      canSupplement: await memberCanWriteModule(this.database, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
+      canSupplement: await memberCanWriteModule(db, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
         || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === currentMerchandiser)),
       canEditContent: row.status === "ready" && canEditContractContent(actor,row.reconciled !== false),
       canRefreshInformation: row.status !== "generating" && canRefreshContractInformation(actor,currentMerchandiser,row.returned === true)
-        && (actor.actorRoles.includes(ROOT_ROLE) || await memberCanWriteModule(this.database,actor.actorId,"sourcing")),
+        && (actor.actorRoles.includes(ROOT_ROLE) || await memberCanWriteModule(db,actor.actorId,"sourcing")),
     };
   }
 }
