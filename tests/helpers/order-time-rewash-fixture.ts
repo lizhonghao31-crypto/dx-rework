@@ -82,6 +82,25 @@ export async function admittedOrderFixture(f:Awaited<ReturnType<typeof businessA
    return {scene,orderId,sourceId:source.sourceId,requests,washing,repo,resource,command};
  });
 }
+/** Shared TEST preparation for a real after-receipt washing path. Each
+ * caller still creates and checks its own exact warehouse batches. */
+export async function nativeReturnedFactoryFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,{orderId,lineId,caseId}:{orderId:string;lineId:string;caseId:string}){
+ const receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+ // The original warehouse entry requires explicit dispatch and factory
+ // return in this exact scope before there can be a received batch for rewash.
+ const occurredAt=businessNow().toISOString(),businessDate=beijingCalendarDate(new Date(occurredAt));
+ const flow=new FactoryFlowService(f.db),dispatch=await flow.read(f.root,orderId);
+ await flow.dispatch(receiver,orderId,{expectedRevision:dispatch.revision,occurredAt,supplierId:f.supplierId,note:'TEST after-receipt rewash original warehouse dispatch'},randomUUID());
+ const qc=await flow.read(f.root,orderId);
+ await flow.productionQc(f.root,orderId,{expectedRevision:qc.revision,factoryDecisionId:null,occurredAt,checks:[{lineId,result:'合格',problem:''}],note:'TEST original factory QC before shipment'},randomUUID());
+ const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[caseId])).rows[0]!.production_order_id;
+ const reporting=new ProductionReportingService(f.db);
+ await reporting.report(f.root,productionId,{position:1,factoryDecisionId:null,businessDate,quantity:2},randomUUID());
+ await reporting.execute(f.root,productionId,'complete',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
+ await reporting.execute(f.root,productionId,'ship',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
+ const service=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
+ return {receiver,service,productionId};
+}
 export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,mode:'factory'|'after_receipt'){
  const {scene,orderId,lineId,ready,requests,washing,repo,resource,command}=await admittedFrameworkProductionFixture(f);
  return f.runtime.run(scene,f.root,async()=>{
@@ -99,21 +118,8 @@ export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof 
     const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,orderId);
     await flow.dispatch(f.root,orderId,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST real original dispatch'},randomUUID());
    }else{
-    const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
-    // The original warehouse entry requires explicit dispatch and factory
-    // return in this exact scope before there can be a received batch for rewash.
-    const occurredAt=businessNow().toISOString(),businessDate=beijingCalendarDate(new Date(occurredAt));
-    const flow=new FactoryFlowService(f.db),dispatch=await flow.read(f.root,orderId);
-    await flow.dispatch(warehouse,orderId,{expectedRevision:dispatch.revision,occurredAt,supplierId:f.supplierId,note:'TEST after-receipt rewash original warehouse dispatch'},randomUUID());
-    const qc=await flow.read(f.root,orderId);
-    await flow.productionQc(f.root,orderId,{expectedRevision:qc.revision,factoryDecisionId:null,occurredAt,checks:[{lineId,result:'合格',problem:''}],note:'TEST original factory QC before shipment'},randomUUID());
-    const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.production_order_id;
-    const reporting=new ProductionReportingService(f.db);
-    await reporting.report(f.root,productionId,{position:1,factoryDecisionId:null,businessDate,quantity:2},randomUUID());
-    await reporting.execute(f.root,productionId,'complete',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
-    await reporting.execute(f.root,productionId,'ship',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
-    const receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
-    const receiptId=(await receiving.create(warehouse,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID())).value.receiptId;
+    const {receiver,service,productionId}=await nativeReturnedFactoryFixture(f,{orderId,lineId,caseId:ready.caseId});
+    const receiptId=(await service.create(receiver,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]},randomUUID())).value.receiptId;
     const receipt=(await garmentQuality(f.db,orderId)).find(row=>row.receiptId===receiptId)!;
     await new GarmentQualityService(f.db).record(f.root,orderId,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:2,occurredAt:'2026-11-17T08:00:00.000Z',problem:''},randomUUID());
    }
