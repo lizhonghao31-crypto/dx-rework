@@ -30,16 +30,29 @@ import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
 const conflict=(message:string):never=>{throw new ApplicationError('PREPARATION_CONFLICT',message,409);};
 type PreorderRecipient={actorId:string;handover:PreparationMaterialFact;evidence:ReadonlySet<string>};
+function scopedApplicabilityConfirmations(rows:PreparationMaterialFact[],actorId:string,leader:boolean,originalMerch:boolean){
+ return rows.map(row=>{
+  if(!row.preorderApplicabilityConfirmation||leader||originalMerch&&row.recordedBy===actorId)return row;
+  const hidden={...row};delete hidden.preorderApplicabilityConfirmation;return hidden;
+ });
+}
 function preorderRecipientRows(rows:PreparationMaterialFact[],scope:PreorderRecipient,history=false){
  return rows.flatMap(row=>{
   if(row.kind==='design_handover')return row.recordId===scope.handover.recordId&&row.version===scope.handover.version?[row]:[];
   const own=row.recordedBy===scope.actorId;
   if(row.kind!=='material_investment'||history&&!own)return [];
-  return [{...row,note:own?row.note:'',evidenceIds:row.evidenceIds.filter(id=>scope.evidence.has(id))}];
+  const shown={...row,note:own?row.note:'',evidenceIds:row.evidenceIds.filter(id=>scope.evidence.has(id))};
+  if(shown.preorderApplicabilityConfirmation){
+   const evidenceIds=shown.preorderApplicabilityConfirmation.evidenceIds.filter(id=>scope.evidence.has(id));
+   if(own&&evidenceIds.length)shown.preorderApplicabilityConfirmation={...shown.preorderApplicabilityConfirmation,evidenceIds};
+   else delete shown.preorderApplicabilityConfirmation;
+  }
+  return [shown];
  });
 }
 async function preorderRecipientScope(db:PreparationDB,actorId:string,handover:PreparationMaterialFact,history:PreparationMaterialFact[]):Promise<PreorderRecipient>{
- const priorIds=history.filter(row=>row.kind==='material_investment'&&row.recordedBy===actorId).flatMap(row=>row.evidenceIds);
+ const priorIds=history.filter(row=>row.kind==='material_investment'&&row.recordedBy===actorId)
+  .flatMap(row=>[...row.evidenceIds,...(row.preorderApplicabilityConfirmation?.evidenceIds??[])]);
  const own=priorIds.length?(await db.query<{attachment_id:string}>(
   "SELECT attachment_id FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2 AND entity_type='digital_preparation' AND entity_id=$3 AND status='ready'",
   [priorIds,actorId,handover.resource.id])).rows:[];
@@ -86,9 +99,10 @@ export class ProductionReadinessService{
   const preorderRecipient=handover&&preorderDraftOrder(sourceDocument?.document)&&(sourceDocument?.status==='draft'||numberedPreorder)
     ?await preorderRecipientScope(db,actor.actorId,handover,history):null;
   if(recipientOnly&&originalPreorderMerch&&!merch&&(!numberedPreorder||!preorderRecipient))digitalForbidden();
+  const scoped=(rows:PreparationMaterialFact[])=>scopedApplicabilityConfirmations(rows,actor.actorId,leader,originalPreorderMerch);
   return {context,policy,responsibility,preorderRecipient,
-   history:preorderRecipient?preorderRecipientRows(history,preorderRecipient,true):history,
-   facts:preorderRecipient?preorderRecipientRows(facts,preorderRecipient):facts,
+   history:preorderRecipient?preorderRecipientRows(scoped(history),preorderRecipient,true):scoped(history),
+   facts:preorderRecipient?preorderRecipientRows(scoped(facts),preorderRecipient):scoped(facts),
    leader,designer,merch,originalPreorderMerch,warehouse,color};
  }
  async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
@@ -279,8 +293,10 @@ export class ProductionReadinessService{
    if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
    if(prior){
     const response=prior.response as ProductionReadinessState,scope=a.preorderRecipient;
+    const scoped=(rows:PreparationMaterialFact[])=>scopedApplicabilityConfirmations(rows,actor.actorId,a.leader,a.originalPreorderMerch);
     if(!this.transactionClient)await db.query('COMMIT');
-    return scope?{...response,history:preorderRecipientRows(response.history,scope,true),facts:preorderRecipientRows(response.facts,scope)}:response;
+    return {...response,history:scope?preorderRecipientRows(scoped(response.history),scope,true):scoped(response.history),
+     facts:scope?preorderRecipientRows(scoped(response.facts),scope):scoped(response.facts)};
    }
    await work(db,a);
    if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);await new BulkPreparationService(this.database).sync(db,actor,a.context.orderId);}
@@ -488,7 +504,7 @@ export class ProductionReadinessService{
  async canDownload(actor:TrustedActorContext,resource:PreparationResource,attachmentId:string){
   const a=await this.access(this.database,actor,resource);
   if(a.preorderRecipient)return a.preorderRecipient.evidence.has(attachmentId);
-  if(a.history.some(f=>f.evidenceIds.includes(attachmentId)))return true;
+  if(a.history.some(f=>f.evidenceIds.includes(attachmentId)||f.preorderApplicabilityConfirmation?.evidenceIds.includes(attachmentId)))return true;
   if(!a.context.orderId)return false;
   return Boolean((await this.database.query(`SELECT 1 FROM digital_instruction_deliveries WHERE production_order_id=$1 AND $2=ANY(evidence_ids)
    UNION ALL SELECT 1 FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 AND $2=ANY(r.evidence_ids)`,[a.context.orderId,attachmentId])).rowCount);

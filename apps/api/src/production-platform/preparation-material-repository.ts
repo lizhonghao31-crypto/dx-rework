@@ -9,7 +9,7 @@ import {businessNow,acceptanceBusinessContext} from '../acceptance-clock/busines
 import {digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {deriveStyleLabelOccurrences} from './style-label-evidence.js';
-import {originalPreorderDemandBalance,projectPreorderInvestmentApplicability,readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
+import {originalPreorderDemandBalance,PREORDER_APPLICABILITY_EVENT,projectPreorderInvestmentApplicability,readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 
 export type PreparationDB=Pick<Pool|PoolClient,'query'>;
@@ -137,9 +137,14 @@ export async function attachCurrentPreorderApplicability(db:PreparationDB,histor
 
 export async function preparationMaterialHistory(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>):Promise<PreparationMaterialFact[]>{
  if(!await preparationAvailable(db))return [];
- const rows=(await db.query(`SELECT m.*,u.display_name FROM digital_preparation_material_versions m LEFT JOIN app_users u ON u.id=m.actor_id
-  WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)
-  ORDER BY recorded_at DESC,version DESC,record_id`,[context.orderId,context.sourceId])).rows;
+ const rows=(await db.query(`SELECT m.*,u.display_name,proof.after_state AS applicability_confirmation
+  FROM digital_preparation_material_versions m LEFT JOIN app_users u ON u.id=m.actor_id
+  LEFT JOIN audit_events proof ON m.kind='material_investment' AND proof.id=(m.body->>'preorderApplicabilityConfirmationId')::uuid
+   AND proof.action=$3 AND proof.entity_type='digital_preparation' AND proof.entity_id=$2::uuid::text AND proof.actor_id=m.actor_id
+   AND proof.after_state->'investment'->>'recordId'=m.record_id::text
+   AND proof.after_state->'investment'->>'version'=m.body->>'preorderApplicabilityAnchorVersion'
+  WHERE (m.resource_kind='order' AND m.resource_id=$1) OR (m.resource_kind='source' AND m.resource_id=$2::uuid)
+  ORDER BY m.recorded_at DESC,m.version DESC,m.record_id`,[context.orderId,context.sourceId,PREORDER_APPLICABILITY_EVENT])).rows;
  const result:PreparationMaterialFact[]=[];
  const orderInstruction=context.orderId&&rows.some(row=>row.kind==='design_handover'&&row.body.orderInstructionVersion!==undefined||row.resource_kind==='order'&&row.body.warehouseReceipt)
   ?await directInvestmentInstruction(db,context.orderId):null;
@@ -161,7 +166,9 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
    }
   }
   if(row.body.evidenceIds?.length){const ready=(await db.query("SELECT count(*)::int AS n FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready'",[row.body.evidenceIds])).rows[0].n;if(ready!==row.body.evidenceIds.length)missing.push('原凭证已失效或尚未完成上传');}
-  result.push({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,recordId:row.record_id,version:row.version,resource:{kind:row.resource_kind,id:row.resource_id},occurredAt:preparationIso(row.occurred_at),recordedAt:preparationIso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:row.display_name??'',valid:!missing.length,invalidReasons:missing});
+  const proof=row.applicability_confirmation;
+  result.push({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,recordId:row.record_id,version:row.version,resource:{kind:row.resource_kind,id:row.resource_id},occurredAt:preparationIso(row.occurred_at),recordedAt:preparationIso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:row.display_name??'',valid:!missing.length,invalidReasons:missing,
+   ...(proof?{preorderApplicabilityConfirmation:{confirmedAt:proof.confirmedAt,evidenceIds:proof.sameMaterialEvidenceIds}}:{})});
  }
  return attachCurrentPreorderApplicability(db,result,context.sourceId,receiptSource);
 }

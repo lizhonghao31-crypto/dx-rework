@@ -1416,7 +1416,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const applied=await service.confirmPreorderMaterial(merch,original.resource,payload,key);
     expect(applied.preorderApplicabilityCandidates).toBeUndefined();
     expect(applied.facts.find(row=>row.kind==='design_handover')).toMatchObject({valid:true,recordId:original.handover.recordId,occurredAt:started});
-    expect(applied.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:fact.recordId,version:fact.version+1,occurredAt:investedAt});
+    expect(applied.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:fact.recordId,version:fact.version+1,occurredAt:investedAt,
+     evidenceIds:fact.evidenceIds,preorderApplicabilityConfirmation:{confirmedAt:confirmationAt,evidenceIds:[file]}});
+    expect(applied.history.find(row=>row.recordId===fact.recordId&&row.version===fact.version)).not.toHaveProperty('preorderApplicabilityConfirmation');
+    expect(await service.canDownload(merch,original.resource,file)).toBe(true);
+    expect(await service.canDownload(merch,original.resource,await f.image(merch))).toBe(false);
+    expect(await service.canDownload(warehouse,original.resource,file)).toBe(false);
+    expect((await service.read(warehouse,original.resource)).history.some(row=>row.preorderApplicabilityConfirmation)).toBe(false);
     expect((await service.confirmPreorderMaterial(merch,original.resource,payload,key)).facts).toEqual(applied.facts);
     expect((await service.warehouseReceiptWork(warehouse,original.resource)).filter(row=>row.materialId===materialId)).toMatchObject([{activeBatches:[{ref:acceptedBatch}],received:{quantity:'490',unit:'米'},purchase:{investedAt}}]);
     expect((await service.warehouseReceipts(warehouse,{page:1,search:original.orderNumber!,status:'open'})).items).toContainEqual(

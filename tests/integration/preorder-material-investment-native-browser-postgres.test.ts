@@ -2,10 +2,11 @@ import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
 import type {ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
@@ -569,5 +570,108 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await history.locator('article').filter({hasText:'TEST 原正式制单交接'}).locator(`a[href$="/attachments/${original.attachmentId}"]`).waitFor();
    expect((await page.request.get(h.base+readinessPath+'/attachments/'+original.attachmentId,{maxRedirects:0})).status()).toBe(302);
   }finally{await merchTab.close();}
+ });
+ it('keeps the open original investment inputs after confirmation and reads only its authorized proof',async()=>{
+  const original=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-r4-investment-confirmation-')),
+   {fullApp:true,orderTimeFlow:true,orderTimeModel:true,workbenchNumberedCreation:true,merchandiserWorkbench:true});
+  const f=original.f,root=f.root,merch=f.people.merchandiser!,owner=f.people['sample-designer']!,warehouse=f.people.warehouse!;
+  const roles=(await f.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows;
+  const designer={...owner,authorizationCapabilities:roles.map(row=>row.capability)};
+  const identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true,original.patternOrders);
+  const readiness=new ProductionReadinessService(f.db),at='2026-11-19T04:00:00.000Z';
+  try{
+   await prepareRewashSettings(f);
+   const scene=await f.scene(at),settings=await identity.orderNumberSettings(root);
+   await identity.saveOrderNumberSettings(root,{...settings.values,expectedVersion:settings.version,designers:[{userId:designer.actorId,code:'LH'}]},randomUUID());
+   const basis=await f.runtime.run(scene,designer,async()=>{
+    const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
+     numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P02'}},randomUUID());
+    const supplierName='TEST 原厂原布供应商';
+    const supplier=await f.access.createSupplier(root,CreateSupplierSchema.parse({supplierCode:'TEST-R4-BROWSER-PROOF',supplierName,
+     supplierType:'fabric',changeReason:'TEST exact original signed receipt proof'}));
+    const base=initialDevelopmentDocument(),materialId=base.materials[0]!.materialId;
+    const document={...base,materials:[{...base.materials[0]!,name:'TEST 原布补规格',quantity:'520米',specification:'',supplier:supplierName,supplierReference:supplier}],
+     files:[{attachmentId:await f.image(designer),kind:'款图' as const}],productionPlanning:{craftSteps:[],preshrink:false},
+     customerOrderDraft:{withOrder:true as const,stage:'preorder' as const,order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',
+       designStyleNo:orderNumber!,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,primaryMerchandiserId:merch.actorId,
+       lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}};
+    const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
+    await forms.publishPreorder(designer,sourceId,saved.version,randomUUID());
+    return {sourceId,orderNumber:orderNumber!,materialId};
+   });
+   const purchase=await f.runtime.run(scene,merch,async()=>{
+    const saved=await readiness.record(merch,{kind:'source',id:basis.sourceId},{kind:'material_investment',scopeRef:'whole',state:'ready',expectedVersion:0,
+     occurredAt:at,note:'TEST 原实投不重写',quantities:[{lineId:null,materialId:basis.materialId,name:'TEST 原布补规格',quantity:520,unit:'米'}],
+     evidenceIds:[await f.image(merch)],sourceDocumentVersion:null,recipientId:null},randomUUID());
+    return saved.facts.find(row=>row.kind==='material_investment')!;
+   });
+   const order=await f.runtime.run(scene,designer,()=>identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',
+    designStyleNo:basis.orderNumber,orderDate:'2026-11-19',requiresColorMatching:false,primaryMerchandiserId:merch.actorId,
+    productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:basis.orderNumber+'-PO',color:'黑',customerWarehouseArrivalDate:'2027-05-30',sizes:[{size:'M',quantity:2}]}],
+   }),randomUUID(),basis.sourceId));
+   await f.advance(scene,'2026-11-20T04:00:00.000Z');
+   await f.runtime.run(scene,designer,async()=>{
+    const current=await forms.read(designer,basis.sourceId);
+    await forms.save(designer,basis.sourceId,{expectedVersion:current.version,document:{...current.document!,materials:current.document!.materials.map(row=>
+     row.materialId===basis.materialId?{...row,specification:'TEST 补齐原实购布规格'}:row)}},randomUUID());
+   });
+   const orderId=order.productionOrderId,resource={kind:'order' as const,id:orderId};
+   await f.runtime.run(scene,root,async()=>{
+    const state=await readiness.read(root,resource);
+    await readiness.assign(root,resource,{expectedVersion:state.responsibility.version,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,
+     colorConfirmationRole:null,reason:'TEST 仓管可以读原物料但不取得本跟单证明'},randomUUID());
+   });
+   original.setCollectionScene(scene);
+   const path=`/api/digital-production/orders/${orderId}/production-readiness`;
+   const tab=await original.open(merch.actorId,1165,{},`/ui/digital-production?materialOrder=${orderId}&materialKind=material_investment`);
+   try{
+    const page=tab.page,investment=page.getByRole('group',{name:'投面辅料',exact:true});
+    const quantity=investment.getByLabel('实际数量'),note=investment.getByLabel('本次情况 / 订正原因');
+    await quantity.fill('521');await note.fill('TEST 保留确认前的未保存订正');
+    const confirmation=page.getByRole('group',{name:'确认原已投材料补齐资料'});
+    await confirmation.getByLabel('本次补齐的原材料').selectOption(basis.materialId);
+    await tab.context.route('https://private.example.test/**',async route=>{
+     const request=route.request();if(request.method()!=='POST')return route.abort();
+     const form=await new Response(request.postDataBuffer(),{headers:{'content-type':request.headers()['content-type']!}}).formData();
+     const key=String(form.get('key')),file=form.get('file') as File,bytes=new Uint8Array(await file.arrayBuffer());
+     const sha256=createHash('sha256').update(bytes).digest('hex');
+     expect(f.storage.signed.some(grant=>grant.method==='POST'&&grant.objectKey===key)).toBe(true);
+     expect(sha256).toBe(form.get('x-oss-meta-sha256'));
+     await f.storage.writeImmutable(key,bytes,{mimeType:file.type,sha256});
+     await route.fulfill({status:204,headers:{'access-control-allow-origin':'*'}});
+    });
+    await confirmation.getByLabel('原实物凭证').setInputFiles({name:'TEST-original-proof.png',mimeType:'image/png',
+     buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64')});
+    await confirmation.getByRole('button',{name:'上传原实物凭证'}).click();
+    await confirmation.getByText('原实物凭证已就绪',{exact:true}).waitFor();
+    await confirmation.getByLabel('同一实际材料确认说明').fill('TEST 确认原采购没有换布');
+    const savedProof=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===path+'/material-investment/confirm-applicability');
+    await confirmation.getByRole('button',{name:'确认采用原实际投料',exact:true}).click();
+    const confirmationReply=await savedProof,updated=await confirmationReply.json() as ProductionReadinessState;
+    expect(confirmationReply.status(),await confirmationReply.text()).toBe(200);
+    const proofId=confirmationReply.request().postDataJSON().evidenceIds[0];
+    expect(updated.facts.find(row=>row.kind==='material_investment')).toMatchObject({recordId:purchase.recordId,version:2,
+     evidenceIds:purchase.evidenceIds,occurredAt:at,preorderApplicabilityConfirmation:{evidenceIds:[proofId]}});
+    expect(await quantity.inputValue()).toBe('521');expect(await note.inputValue()).toBe('TEST 保留确认前的未保存订正');
+    await page.getByText(/^原记录与历史版本/).click();
+    const attachment=page.getByRole('link',{name:'查看补齐确认凭证1',exact:true}),href=await attachment.getAttribute('href');
+    expect(href).toBe(path+'/attachments/'+proofId);
+    expect((await page.request.get(original.base+href,{maxRedirects:0})).status()).toBe(302);
+    const subsequent=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===path+'/materials');
+    await investment.getByRole('button',{name:'保存本项记录',exact:true}).click();
+    const submission=await subsequent;
+    expect(submission.request().postDataJSON()).toMatchObject({expectedVersion:2,note:'TEST 保留确认前的未保存订正'});
+    expect(submission.status(),await submission.text()).toBe(200);
+    expect((await submission.json() as ProductionReadinessState).history.find(row=>row.recordId===purchase.recordId&&row.version===1)).toMatchObject({
+     evidenceIds:purchase.evidenceIds,quantities:purchase.quantities,occurredAt:at});
+    const scoped=await original.open(warehouse.actorId,1165,{},'/ui/my-tasks');
+    try{
+     const visible=await scoped.context.request.get(original.base+path);
+     expect(visible.status()).toBe(200);
+     expect((await visible.json() as ProductionReadinessState).history.some(row=>row.preorderApplicabilityConfirmation)).toBe(false);
+     expect((await scoped.context.request.get(original.base+href,{maxRedirects:0})).status()).toBe(403);
+    }finally{await scoped.close();}
+   }finally{await tab.close();}
+  }finally{original.setCollectionScene(undefined);await original.writeEvidence();await original.dispose();}
  });
 });
