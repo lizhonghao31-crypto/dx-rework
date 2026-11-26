@@ -201,6 +201,24 @@ export const sourcingContractFingerprint = (snapshot: ContractPdfSnapshot): stri
     return imageBytes ? {...facts,imageSha256:line.imageSha256 ?? createHash("sha256").update(imageBytes).digest("hex")} : facts;
   })})).digest("hex");
 
+export async function normalizeSourcingContractSnapshotImages(snapshot: ContractPdfSnapshot): Promise<ContractPdfSnapshot> {
+  const images = new Map<string, Buffer>();
+  const lines: ContractPdfLine[] = [];
+  for (const line of snapshot.lines) {
+    if (!line.imageBytes || !line.imageAttachmentId) {
+      lines.push(line);
+      continue;
+    }
+    let bytes = images.get(line.imageAttachmentId);
+    if (!bytes) {
+      bytes = await normalizeSourcingContractImage(line.imageBytes);
+      images.set(line.imageAttachmentId, bytes);
+    }
+    lines.push({ ...line, imageBytes: bytes });
+  }
+  return { ...snapshot, lines };
+}
+
 type StructuredContractLayout = "v2" | "v3";
 
 const renderStructuredContractPdf = async (

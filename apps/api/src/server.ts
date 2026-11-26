@@ -71,6 +71,7 @@ import { RuntimeOperationalMonitor } from "./platform/runtime-observability.js";
 import { ReceivingService } from "./receiving/receiving-service.js";
 import { SourcingService } from "./sourcing/sourcing-service.js";
 import { SourcingContractService } from "./sourcing/sourcing-contract-service.js";
+import { SourcingContractRecovery } from "./sourcing/sourcing-contract-recovery.js";
 import { SourcingContractReturnService } from "./sourcing/sourcing-contract-return-service.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
@@ -193,7 +194,6 @@ const cuttingService = new CuttingService(database);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure,{allowLegacyStyleInput:true});
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments,undefined,undefined,todoProjection);
-await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
   (diagnostic): void => { app.log.warn({ factoryChangeFailure: diagnostic }, "factory change request failed"); },
@@ -506,11 +506,15 @@ const runAttachmentCleanup = async (): Promise<void> => {
 };
 
 let shuttingDown = false;
+const sourcingContractRecovery = new SourcingContractRecovery(
+  sourcingContractService, app.log, process.env.SOURCING_CONTRACT_AUTO_RECOVERY_ENABLED === "true", acceptanceClock,
+);
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, "graceful shutdown started");
   if (attachmentCleanupTimer) clearInterval(attachmentCleanupTimer);
+  await sourcingContractRecovery.stop();
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await digitalNotificationRuntime?.stop();
@@ -524,6 +528,7 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  sourcingContractRecovery.start();
   runtimeOperationalMonitor.start();
   todoRuntime.start();
   digitalNotificationRuntime?.start();
@@ -536,6 +541,7 @@ try {
   attachmentCleanupTimer.unref();
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");
+  await sourcingContractRecovery.stop();
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await digitalNotificationRuntime?.stop();

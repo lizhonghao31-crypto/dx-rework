@@ -297,10 +297,10 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     await response.body?.cancel();
   }
 
-  async delete(name: string): Promise<void> {
+  async delete(name: string, signal?: AbortSignal): Promise<void> {
     const response = await this.fetchImpl(
       this.presign(name, { method: "DELETE", expires: INTERNAL_REQUEST_TTL_SECONDS }),
-      { method: "DELETE" },
+      { method: "DELETE", ...(signal ? { signal } : {}) },
     );
     if (response.status === 404) return;
     this.ensureSuccess(response);

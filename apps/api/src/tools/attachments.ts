@@ -51,6 +51,12 @@ export type AttachmentCleanupResult = Readonly<{
 }>;
 
 type AttachmentWriteGuard = (client: PoolClient) => Promise<void>;
+type StagedContractPdf = Readonly<{
+  objectKey: string;
+  filename: string;
+  sizeBytes: number;
+  sha256: string;
+}>;
 
 export class AttachmentService {
   private readonly activeFinalizationsByActor = new Map<string, number>();
@@ -171,13 +177,13 @@ export class AttachmentService {
     return this.readVerifiedSourcingImage(row);
   }
 
-  async readContractContentImage(sourcingCaseId: string, attachmentId: string): Promise<{bytes:Buffer;sha256:string}> {
+  async readContractContentImage(sourcingCaseId: string, attachmentId: string, signal?: AbortSignal): Promise<{bytes:Buffer;sha256:string}> {
     const row = (await this.pool.query<AttachmentRow>(`SELECT a.* FROM attachments a
       WHERE a.attachment_id=$1 AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
         AND (a.entity_type='sourcing_case' AND a.entity_id=$2 OR a.entity_type='sourcing_contract_document' AND EXISTS(
           SELECT 1 FROM sourcing_contract_documents d WHERE d.sourcing_contract_document_id::text=a.entity_id AND d.sourcing_case_id=$2::uuid))`,[attachmentId,sourcingCaseId])).rows[0];
     if (!row) throw new ApplicationError("ATTACHMENT_NOT_READY","合同款图不存在或不属于本订单",409);
-    return this.readVerifiedSourcingImage(row);
+    return this.readVerifiedSourcingImage(row, signal);
   }
 
   async readUnboundSourcingImage(client: Pick<PoolClient, "query">, actorId: string, attachmentId: string): Promise<{ bytes: Buffer; sha256: string; filename: string }> {
@@ -189,8 +195,10 @@ export class AttachmentService {
     return {...await this.readVerifiedSourcingImage(row),filename:row.original_filename};
   }
 
-  private async readVerifiedSourcingImage(row: AttachmentRow): Promise<{ bytes: Buffer; sha256: string }> {
-    const bytes = Buffer.from(await this.storageCall(() => this.storage.readBytes(row.object_key,this.options.maxUploadBytes)));
+  private async readVerifiedSourcingImage(row: AttachmentRow, signal?: AbortSignal): Promise<{ bytes: Buffer; sha256: string }> {
+    signal?.throwIfAborted();
+    const bytes = Buffer.from(await this.storageCall(() => this.storage.readBytes(row.object_key,this.options.maxUploadBytes,signal)));
+    signal?.throwIfAborted();
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (bytes.byteLength !== Number(row.size_bytes) || sha256 !== row.sha256) {
       throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH","合同款图校验失败",422);
@@ -451,6 +459,65 @@ export class AttachmentService {
     } finally {
       client.release();
     }
+  }
+
+  stageContractPdf(filename: string, content: Uint8Array): StagedContractPdf {
+    const sizeBytes = content.byteLength;
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    if (sizeBytes < 1 || sizeBytes > this.options.maxUploadBytes) {
+      throw new ApplicationError("VALIDATION_ERROR", "Generated file exceeds the configured size limit", 413);
+    }
+    this.validate({ filename, mimeType: "application/pdf", sizeBytes, sha256 });
+    return { objectKey: createPrivateObjectKey(this.options.prefix, filename), filename, sizeBytes, sha256 };
+  }
+
+  async writeContractPdf(staged: StagedContractPdf, content: Uint8Array, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    await this.storageCall(() => this.storage.writeImmutable(staged.objectKey, content, {
+      mimeType: "application/pdf", sha256: staged.sha256, ...(signal ? { signal } : {}),
+    }));
+  }
+
+  async reusableContractPdf(documentId: string, staged: StagedContractPdf, signal?: AbortSignal): Promise<string | null> {
+    const existing = (await this.pool.query<AttachmentRow>(
+      `SELECT * FROM attachments WHERE entity_type='sourcing_contract_document' AND entity_id=$1
+        AND mime_type='application/pdf' AND sha256=$2 AND status='ready'`,
+      [documentId, staged.sha256],
+    )).rows[0];
+    if (!existing) return null;
+    const metadata = await this.storageCall(() => this.storage.head(existing.object_key, signal));
+    if (metadata.sizeBytes !== staged.sizeBytes || metadata.mimeType !== "application/pdf"
+      || (metadata.sha256 !== undefined && metadata.sha256 !== staged.sha256)) {
+      throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "合同原件存储校验失败，请核对后重试", 422);
+    }
+    if (metadata.sha256 === undefined) {
+      const bytes = await this.storageCall(() => this.storage.readBytes(existing.object_key, this.options.maxUploadBytes, signal));
+      if (createHash("sha256").update(bytes).digest("hex") !== staged.sha256) {
+        throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "合同原件存储校验失败，请核对后重试", 422);
+      }
+    }
+    return existing.attachment_id;
+  }
+
+  /** Registers a private PDF only inside the owning document's publication transaction. */
+  async publishContractPdf(client: PoolClient, actor: TrustedActorContext, documentId: string, staged: StagedContractPdf): Promise<string> {
+    const attachmentId = randomUUID();
+    await client.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,entity_type,entity_id,status,ready_at
+       ) VALUES($1,$2,$3,'application/pdf',$4,$5,$6,'sourcing_contract_document',$7,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, staged.objectKey, staged.filename, staged.sizeBytes, staged.sha256, actor.actorId, documentId],
+    );
+    await this.events.append(client, actor, {
+      action: "attachment.generated", entityType: "attachment", entityId: attachmentId,
+      after: { boundEntityType: "sourcing_contract_document", boundEntityId: documentId,
+        mimeType: "application/pdf", sizeBytes: staged.sizeBytes, sha256: staged.sha256 },
+    });
+    return attachmentId;
+  }
+
+  async discardStagedContractPdf(objectKey: string): Promise<void> {
+    await this.storage.deleteObject(objectKey, AbortSignal.timeout(5_000));
   }
 
   /** Read-only identity, behind the same ownership/binding check as downloading. */

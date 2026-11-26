@@ -202,7 +202,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 
    generation.mockClear();
    await f.contracts.resumePendingContracts();
-   expect(generation).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({requestId:`sourcing-contract-resume:${pending.id}`}),startupCase,pending.id);
+   expect(generation).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    actorId:owner.actorId,actorRoles:['owner_group'],requestId:`sourcing-contract-resume:${pending.id}`,
+   }),startupCase,pending.id,expect.objectContaining({recoveryVersion:pending.version,signal:expect.any(AbortSignal)}));
    expect(await documents(startupCase)).toEqual([expect.objectContaining({id:pending.id,status:'ready',pdf_attachment_id:expect.any(String)})]);
    expect(await documents(manualCase)).toEqual([failed]);
 

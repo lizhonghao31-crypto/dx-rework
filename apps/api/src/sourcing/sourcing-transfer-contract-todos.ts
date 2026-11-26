@@ -83,8 +83,17 @@ export class SourcingTransferContractTodos {
     return { current, recipients, tasks };
   }
 
-  async synchronize(client: PoolClient, actor: TrustedActorContext, caseId: string, options: { historical?: boolean } = {}) {
+  async synchronize(client: PoolClient, actor: TrustedActorContext, caseId: string, options: { historical?: boolean; documentId?: string } = {}) {
     await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [caseId]);
+    if (options.documentId) {
+      const candidate = (await client.query<{ id: string }>(
+        `SELECT document.sourcing_contract_document_id AS id FROM sourcing_contract_documents document
+         JOIN sourcing_approval_snapshots approved ON approved.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id
+           AND approved.sourcing_decision_id=document.sourcing_decision_id
+         WHERE document.sourcing_case_id=$1 ORDER BY document.contract_version DESC LIMIT 1`, [caseId],
+      )).rows[0];
+      if (candidate?.id !== options.documentId) return { createdTodoIds: [] as string[] };
+    }
     const { current, recipients, tasks } = await this.inspect(client, caseId);
     // An unfinished new PDF must not invalidate a still-actionable older version.
     if (!current?.return_cycle_id || current.status !== "ready" || !current.pdf_attachment_id)
