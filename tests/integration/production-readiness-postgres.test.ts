@@ -1242,12 +1242,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(listed.items).toEqual([expect.objectContaining({resource,materialId:accessory.materialId,received:{quantity:'500',unit:'米'}})]);
     const numbered=listed.items[0]!.issuedOrderNumber;
     expect(numbered).toBeTruthy();
+    const expectedOpen=[listed.items[0],expect.objectContaining({resource,kind:'fabric_receipt',
+     invested:{quantity:'520',unit:'米'},received:{quantity:'500',unit:'米'},balance:expect.objectContaining({procurementRemaining:'20'})})];
     for(const search of [numbered!,numbered!+'-po1',numbered!+'-po2']){
-     expect(await preparation.warehouseReceipts(warehouse,{page:1,search,status:'open'}))
-      .toEqual({page:1,total:1,items:listed.items});
+     const found=await preparation.warehouseReceipts(warehouse,{page:1,search,status:'open'});
+     expect(found).toEqual({page:1,total:2,items:expect.arrayContaining(expectedOpen)});
+     expect(found.items).toHaveLength(2);
     }
     expect(await preparation.warehouseReceipts(warehouse,{page:2,search:numbered!+'-PO2',status:'open'}))
-     .toEqual({page:2,total:1,items:[]});
+     .toEqual({page:2,total:2,items:[]});
     await expect(preparation.warehouseReceipts(own.people.merchandiser!,{page:1,search:numbered!+'-PO2',status:'open'}))
      .rejects.toMatchObject({statusCode:403});
     await bulk.dispatchMaterials(warehouse,id,{supplierId:own.supplierId,instructionVersion,occurredAt:now,note:'TEST original source receipt reused',
