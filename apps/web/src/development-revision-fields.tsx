@@ -28,8 +28,8 @@ function OriginalCommentChoice({sourceId,value,edit,disabled}:{sourceId:string;v
 export function DevelopmentRevisionFields({value,onChange,disabled,sourceId}:{value:RevisionFields;onChange:(value:RevisionFields)=>void;disabled:boolean;sourceId?:string}){
  const edit=(patch:Partial<RevisionFields>)=>onChange({...value,...patch});
  return <fieldset disabled={disabled}><legend>第 {value.basedOnRound+1} 轮修改依据</legend>
-  <label>修改来源<select value={value.origin} onChange={event=>edit({origin:event.target.value as RevisionFields['origin'],customerComment:'',internalProblem:'',customerCommentRef:undefined})}><option>客户新增要求</option><option>未达原要求</option><option>内部发现</option></select></label>
-  {value.origin!=='内部发现'&&sourceId&&<OriginalCommentChoice sourceId={sourceId} value={value} edit={edit} disabled={disabled}/>}
+  <label>修改来源<select value={value.origin} onChange={event=>edit({origin:event.target.value as RevisionFields['origin'],customerComment:'',internalProblem:'',customerCommentRef:undefined,repeatOriginalComment:undefined})}><option>客户新增要求</option><option>未达原要求</option><option>内部发现</option></select></label>
+  {value.origin!=='内部发现'&&sourceId&&!value.repeatOriginalComment&&<OriginalCommentChoice sourceId={sourceId} value={value} edit={edit} disabled={disabled}/>}
   {value.origin==='内部发现'?<label>内部问题 *<textarea value={value.internalProblem} required maxLength={4000} onChange={event=>edit({internalProblem:event.target.value})}/></label>:<label>客户原评语 *<textarea value={value.customerComment} readOnly={Boolean(value.customerCommentRef)} required maxLength={4000} onChange={event=>edit({customerComment:event.target.value})}/></label>}
   <label>补充说明<textarea value={value.explanation} maxLength={4000} onChange={event=>edit({explanation:event.target.value})}/></label>
   <label>本轮交付<select value={value.outputKind} onChange={event=>edit({outputKind:event.target.value as RevisionFields['outputKind']})}><option>整件样板</option><option>工艺布片</option></select></label>

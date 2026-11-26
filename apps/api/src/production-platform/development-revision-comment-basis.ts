@@ -1,5 +1,5 @@
 import type {PoolClient} from 'pg';
-import {DevelopmentRevisionCommentRefSchema,type DevelopmentRevisionCommentRef,type TechnicalFinalComment} from '@dx-rework/contracts/digital-development-technical';
+import {DevelopmentRevisionCommentRefSchema,type DevelopmentRevisionCommentRef,type TechnicalFinalComment,type DevelopmentCommentRevisionLink} from '@dx-rework/contracts/digital-development-technical';
 
 /** Internal lookup for an already authorized original comment. Callers still
  * have to check the current actor and real parent/root document relationship.
@@ -34,4 +34,34 @@ export async function revisionCommentImages(db:Pick<PoolClient,'query'>,original
    WHERE b.source_id=$1::uuid AND b.attachment_id=a.attachment_id) OR EXISTS (SELECT 1 FROM digital_development_inherited_files f
    WHERE f.source_id=$1::uuid AND f.original_source_id::text=a.entity_id AND f.attachment_id=a.attachment_id))
   ORDER BY selected.position`,[original.ref.sourceId,original.evidenceRefs])).rows;
+}
+
+/** The original comment's owning designer can recover the same current target.
+ * Adoptions never grant access to other comments, sources or documents. */
+export async function developmentCommentRevisionLinks(db:Pick<PoolClient,'query'>,sourceId:string,round:number,scope:string){
+ if(!await developmentRevisionCommentAdoptionReady(db))return [];
+ return (await db.query<DevelopmentCommentRevisionLink>(`SELECT DISTINCT ON(adoption.comment_id)
+   adoption.comment_id AS "commentId",adoption.source_id AS "sourceId",adoption.round_number AS "roundNumber",
+   CASE WHEN document.status='published' THEN 'published' ELSE 'draft' END AS status,request.request_id AS "timeRequestId"
+  FROM digital_development_revision_comment_adoptions adoption
+  JOIN digital_development_documents document ON document.source_id=adoption.source_id
+  LEFT JOIN LATERAL(
+   SELECT request_id FROM digital_order_time_requests t WHERE t.source_id=adoption.source_id
+    AND t.operation_json->>'kind'='development_publish' AND t.state IN ('pending','needs_designer','returned')
+   ORDER BY t.version DESC,t.request_id LIMIT 1
+  ) request ON document.status<>'published'
+  WHERE adoption.based_on_source_id=$1 AND adoption.based_on_round=$2 AND adoption.based_on_scope=$3
+  ORDER BY adoption.comment_id,COALESCE((to_jsonb(adoption)->>'adoption_number')::int,1) DESC`,[sourceId,round,scope])).rows;
+}
+
+export async function readRepeatedDevelopmentCommentIntent(db:Pick<PoolClient,'query'>,sourceId:string,round:number){
+ if(!await developmentRevisionCommentAdoptionReady(db))return null;
+ const {rows:[record]}=await db.query<DevelopmentRevisionCommentRef&{previousRoundNumber:number}>(`SELECT based_on_source_id AS "sourceId",
+  based_on_round AS "roundNumber",based_on_scope AS "scopeRef",comment_id AS "commentId",comment_version AS version,round_number AS "previousRoundNumber"
+  FROM digital_development_revision_comment_adoptions a WHERE source_id=$1 AND round_number<=$2 AND to_jsonb(a)->>'adoption_number' IS NOT NULL
+  ORDER BY round_number DESC LIMIT 1`,[sourceId,round]);
+ if(!record)return null;
+ const {previousRoundNumber,...ref}=record,basis=await readDevelopmentRevisionCommentBasis(db,ref);
+ const latest=(await developmentCommentRevisionLinks(db,ref.sourceId,ref.roundNumber,ref.scopeRef)).find(row=>row.commentId===ref.commentId);
+ return basis&&latest?{ref,text:basis.text,evidenceRefs:basis.evidenceRefs,previousRoundNumber,latest}:null;
 }

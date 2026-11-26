@@ -1,3 +1,4 @@
+import {RevisionCommentIntentContext,type RevisionCommentIntent} from './development-revision-comment-intent.js';
 import {Link} from '@astryxdesign/core/Link';
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {Dialog} from '@astryxdesign/core/Dialog';
@@ -128,6 +129,7 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
   const prior=DESIGNER_ORDER_AREAS.find(key=>key===area);
   return prior==='development'?'document':prior??null;
  });
+ const [commentIntent,setCommentIntent]=useState<RevisionCommentIntent|null>(null);
  const [recordRefresh,setRecordRefresh]=useState(0);
  const [savedBasics,setSavedBasics]=useState<{version:number;round:number;value:DevelopmentWorkbenchBasics}|null>(null);
  const [records,setRecords]=useState<OrderJourney|null>(null),[recordError,setRecordError]=useState<Error|null>(null);
@@ -180,7 +182,9 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
   ?<DigitalReadFailure error={recordError} onRetry={reloadRecords} retryLabel="重试读取原记录"/>
   :exactRecords?render(exactRecords):<p role="status">正在读取本单授权记录…</p>;
 
- return <div className="designer-order-workbench">
+ return <RevisionCommentIntentContext.Provider value={{target:commentIntent,start:setCommentIntent,
+  clear:intent=>setCommentIntent(current=>current===intent?null:current)}}>
+  <div className="designer-order-workbench">
   <header className="dx-production-panel designer-order-identity">
    <Button label="返回来源" size="sm" onClick={onClose}/>
    <h1>本单资料</h1>
@@ -234,7 +238,7 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
     relatedOriginals={(stage,returnTo)=><RelatedWorkbenchDocuments journey={journey} stage={stage} returnTo={returnTo}/>}/>;
   }))}
   {region('history',readResult(journey=><CockpitOperationLog order={journey} embedded/>))}
- </div>;
+ </div></RevisionCommentIntentContext.Provider>;
 }
 
 function CurrentDevelopmentAreas({sourceId,actorId,revision,changed,region,sheet,returnToHandover,confirmation}:{

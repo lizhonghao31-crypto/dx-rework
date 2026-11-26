@@ -1,10 +1,11 @@
+import {RevisionCommentIntentContext} from './development-revision-comment-intent.js';
 import {CustomerCommentTimeFields,customerCommentTimeFromForm} from './customer-comment-time-fields.js';
 import {DevelopmentMakingUpgradeFields,makingUpgradeFromForm} from './development-making-upgrade.js';
 import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
 import {createClientRequestId} from './client-request-id.js';
 import {DevelopmentSizeTemplateTools} from './development-size-template-tools.js';
 import {DevelopmentTechnicalBasis} from './development-technical-basis.js';
-import {useEffect,useId,useRef,useState} from 'react';
+import {useContext,useEffect,useId,useRef,useState} from 'react';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {TextArea} from '@astryxdesign/core/TextArea';
@@ -85,11 +86,12 @@ export function DevelopmentFinalFeedback({controller,direct=false}:{controller:C
 function WorkbenchFinalFeedback({controller,technical}:{controller:Controller;technical:DevelopmentTechnicalState}){
  const [text,setText]=useState(''),[confirm,setConfirm]=useState(false),[notice,setNotice]=useState('');
  const pending=useRef<{input:string;version:number;final:boolean}|null>(null);
- const titleId=useId();
- const {busy,uncertainWrite,run,readError,writeOutcome}=controller;
+ const titleId=useId(),revisionIntent=useContext(RevisionCommentIntentContext);
+ const {state,busy,uncertainWrite,run,readError,writeOutcome}=controller;
  const comments=technical.comments.filter(item=>item.roundNumber===technical.roundNumber&&item.scopeRef===technical.scopeRef);
  const latest=comments[0],lastFinal=comments.find(item=>item.isFinal);
- const shown=latest?[latest,...(lastFinal&&lastFinal!==latest?[lastFinal]:[])]:[];
+ const eligible=comments.filter(item=>item.decision==='changes_required'||!item.isFinal&&item.decision==='noted');
+ const shown=[...new Map([latest,lastFinal,...eligible].flatMap(item=>item?[[item.commentId,item] as const]:[])).values()];
  const locked=busy||uncertainWrite||Boolean(readError),canSave=!locked&&Boolean(text.trim());
  useEffect(()=>{
   const record=pending.current;
@@ -109,14 +111,36 @@ function WorkbenchFinalFeedback({controller,technical}:{controller:Controller;te
  };
  return <section className="development-technical-feedback" aria-label="客户意见">
   <h3>客户意见</h3>
-  {shown.length?shown.map(item=><article key={item.commentId}>
+  {technical.inheritedRevisionComment&&(()=>{
+   const original=technical.inheritedRevisionComment,sourceId=state?.sheet.sourceId;
+   return <article><h4>本单采用的原客户评语</h4><p>{original.text}</p>
+    {sourceId===original.latest.sourceId&&original.latest.status==='published'&&revisionIntent&&state?.sheet.canRevise?
+     <AstryxButton type="button" variant="secondary" label="再次发起" isDisabled={locked}
+      onClick={()=>revisionIntent.start({ref:original.ref,text:original.text,evidenceRefs:original.evidenceRefs,
+       repeatBase:{sourceId,roundNumber:original.previousRoundNumber}})}/>:
+     <a href={controller.urls.pageUrl(original.latest.timeRequestId?
+       `ui/digital-production?timeRequest=${original.latest.timeRequestId}`:
+       `ui/digital-production?workspace=designer&section=workspace&area=development&development=${original.latest.sourceId}&round=${original.latest.roundNumber}`)}>
+       {original.latest.status==='published'?'查看最新复版结果':'继续最新复版'}</a>}
+   </article>;
+  })()}
+  {shown.length?shown.map(item=>{const linked=technical.revisionCommentLinks?.find(value=>value.commentId===item.commentId);return <article key={item.commentId}>
    <h4>{item.isFinal?`本轮最终批复 · ${item.decision==='approved'?'认可本轮样板':'需修改'}`:'普通意见'}</h4>
    <p>{item.text}</p>
    <p>登记：{at(item.recordedAt)}{(item.occurredDate||item.occurredAt)&&<> · 实际发生：{item.occurredDate??at(item.occurredAt!)}</>}</p>
    {item.evidenceRefs.length>0&&<ul>{item.evidenceRefs.map((id,index)=><li key={id}>
     <a href={controller.urls.apiUrl(`digital-production/${controller.base.replace('/execution','')}/development/attachments/${id}`)}>查看意见附件 {index+1}</a>
    </li>)}</ul>}
-  </article>):<p>本轮暂无已登记的客户意见。</p>}
+   {linked&&<a href={controller.urls.pageUrl(linked.timeRequestId?
+    `ui/digital-production?timeRequest=${linked.timeRequestId}`:
+    `ui/digital-production?workspace=designer&section=workspace&area=development&development=${linked.sourceId}&round=${linked.roundNumber}`)}>
+    {linked.status==='published'?'查看复版结果':linked.timeRequestId?'查看复版时效审批':'继续原复版单'}</a>}
+   {!linked&&revisionIntent&&state?.sheet.canRevise&&eligible.includes(item)&&<AstryxButton type="button" variant="secondary"
+    label="发起复版" isDisabled={locked} onClick={()=>revisionIntent.start({
+     ref:{sourceId:state.sheet.sourceId,roundNumber:item.roundNumber,scopeRef:item.scopeRef,commentId:item.commentId,version:item.version},
+     text:item.text,evidenceRefs:item.evidenceRefs,
+    })}/>}
+  </article>;}):<p>本轮暂无已登记的客户意见。</p>}
   {technical.canRecordComment?<div className="development-technical-editor">
    <TextArea label="评语原意" value={text} maxLength={4000} isDisabled={locked} onChange={value=>{setText(value);setNotice('');}}/>
    <label>补充依据<input aria-label="补充依据" type="file" disabled={locked} multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event=>{

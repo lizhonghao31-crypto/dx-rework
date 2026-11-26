@@ -1,3 +1,4 @@
+import {RevisionCommentIntentContext,type RevisionCommentIntent} from './development-revision-comment-intent.js';
 import {DevelopmentAccessoryForecastForm,DevelopmentMaterialEventForm} from './development-material-event-form.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {useOrderTimeApplication} from './order-time-application.js';
@@ -16,7 +17,7 @@ import { DevelopmentExecutionPanel } from "./digital-development-execution-panel
 import { confirmInApp } from "./system-dialog.js";
 import { DevelopmentPrint } from "./digital-development-print.js";
 import {developmentPrintAttachmentMime,useDevelopmentPrint} from "./development-print-preview.js";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DevelopmentDocument, DevelopmentMaterialEvent, DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { initialDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs, attachDevelopmentCraftFile } from "./digital-development-editing.js";
@@ -59,6 +60,9 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
   const [roundsRead,setRoundsRead]=useState(false);
   const [revisionReceipt,setRevisionReceipt]=useState('');
+  const commentIntent=useContext(RevisionCommentIntentContext);
+  const [revisionComment,setRevisionComment]=useState<RevisionCommentIntent|null>(null);
+  const applyingComment=useRef<RevisionCommentIntent|null>(null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);
   const revisionAttempt=useRef(new SubmissionAttempt());
@@ -93,23 +97,56 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     catch(reason){setError(reason instanceof Error?reason.message:"操作失败");return false;}finally{writing.current=false;setBusy(false);}
   };
   const beginRevision=()=>{
+    setRevisionComment(null);setPatternChoice(null);
     const draft=rounds.draft;installDocument(editableDevelopmentDocument(draft?.payload.document??sheet!.document!));
     setRevision(draft?{...draft.payload}:{basedOnRound:sheet!.latestRoundNumber??1,origin:"客户新增要求",customerComment:"",internalProblem:"",explanation:`参考第${sheet!.roundNumber??1}轮资料`,categories:["其他"],affectedNodes:["车板"],outputKind:"整件样板"});
     setDraftVersion(draft?.version??0);setDirty(!draft);
   };
-  const submitAdoptedRevision=async(input?:{expectedDraftVersion:number;basedOnRound:number;revision:DevelopmentRevision})=>{
+  useEffect(()=>{
+    const intent=commentIntent?.target;
+    if(!intent||!roundsRead||!sheet?.canRevise||sheet.status!=='published'||
+       (intent.repeatBase?intent.repeatBase.sourceId!==sourceId:intent.ref.sourceId!==sourceId||intent.ref.roundNumber!==(sheet.roundNumber??1))||busy||pendingRevision||writing.current||applyingComment.current===intent)return;
+    applyingComment.current=intent;
+    void (async()=>{
+      if(dirty&&!await confirmInApp('有未保存的修改，确定改用这条原客户评语？')){
+        commentIntent.clear(intent);return;
+      }
+      if(writing.current)return;
+      beginRevision();
+      setRevision(current=>current?{...current,origin:'客户新增要求',internalProblem:'',
+        customerComment:intent.text,customerCommentRef:intent.ref,...(intent.repeatBase?{repeatOriginalComment:intent.repeatBase}:{})}:null);
+      setRevisionComment(intent);setDirty(true);
+      commentIntent.clear(intent);
+      requestAnimationFrame(()=>{
+        const form=window.document.getElementById('development-revision');
+        form?.scrollIntoView({block:'start'});form?.focus({preventScroll:true});
+      });
+    })();
+  },[commentIntent,roundsRead,sheet,sourceId,busy,pendingRevision,dirty]);
+  const submitAdoptedRevision=async(input?:{expectedDraftVersion:number;basedOnRound:number;revision:DevelopmentRevision;
+    publishCurrent?:true;expectedBasisVersion?:number;patternOrder?:DevelopmentPatternChoice})=>{
     if(writing.current||input&&revisionAttempt.current.hasPending)return;
     writing.current=true;setBusy(true);setError('');setRevisionReceipt('');
     try{
       const key=input?createClientRequestId():undefined,actor=sessionCacheVersion();
       const send=async()=>{
         if(actor!==sessionCacheVersion())throw new SubmissionRequestError('登录身份已变化，请使用原账号核对。','FORBIDDEN',403);
-        let result:{sourceId:string;roundNumber:number};
+        let result:{sourceId:string;roundNumber:number;status?:'published'|'draft'|'needs_time_request'|'needs_inputs';
+          documentVersion?:number;reason?:string;patternOrder?:DevelopmentPatternChoice};
         try{result=await digitalRequest(`${base}/round-publish`,'POST',input,key);}
         catch(reason){if(reason instanceof DigitalRequestError&&!reason.resultUnknown)throw new SubmissionRequestError(reason.message,reason.code,reason.status??500);throw reason;}
         if(!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(result?.sourceId??'')||!Number.isSafeInteger(result?.roundNumber)||result.roundNumber!==(result.sourceId===sourceId?input!.basedOnRound+1:1))throw Error('未确认本轮复版的正式回执');
         revisionAttempt.current.markConfirmed();setRevision(null);setDirty(false);previews.saved();
-        if(result.sourceId!==sourceId){window.location.assign(urls.pageUrl(`ui/digital-production?development=${result.sourceId}`));return;}
+        if(result.sourceId!==sourceId){
+          if(result.status==='needs_time_request'&&result.documentVersion){
+            setRevisionReceipt('独立复版单已保留，尚未发布。请沿原时效申请继续。');
+            await timeApplication.inspect({kind:'development_publish',sourceId:result.sourceId,
+              input:{expectedVersion:result.documentVersion,...(result.patternOrder?{patternOrder:result.patternOrder}:{})}},true);
+            return;
+          }
+          if(result.status==='needs_inputs'){setRevisionReceipt(`独立复版单尚未发布。${result.reason??'请补齐本次实际前置。'}`);return;}
+          window.location.assign(urls.pageUrl(`ui/digital-production?development=${result.sourceId}`));return;
+        }
         setRevisionReceipt('本轮复版已发布，正在读取原版单。');
         setSelectedRound(result.roundNumber);
         const location=new URL(window.location.href);location.searchParams.set('round',String(result.roundNumber));window.history.replaceState(window.history.state,'',location);
@@ -125,11 +162,24 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     }finally{writing.current=false;setBusy(false);}
   };
   const revisionAction=async(publish:boolean)=>{
-    if(publish&&revision?.customerCommentRef){await submitAdoptedRevision({expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound,revision:{...revision,document}});return;}
+    if(publish&&revision?.customerCommentRef){
+      await submitAdoptedRevision({expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound,revision:{...revision,document},
+        ...(revisionComment&&sheet?{publishCurrent:true as const,expectedBasisVersion:sheet.version,...(patternChoice?{patternOrder:patternChoice}:{})}:{})});return;
+    }
     if(!revision||writing.current)return;writing.current=true;setBusy(true);setError("");
-    const body=publish?{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}:{expectedDraftVersion:draftVersion,revision:{...revision,document}};
-    const path=`${base}/${publish?"round-publish":"round-draft"}`,payload=JSON.stringify([path,body]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
-    try{if(publish&&revision.origin==='内部发现'&&!await timeApplication.inspect({kind:'development_revision',sourceId,input:{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}},Boolean(sheet?.orderTimeEnabled)))return;
+    try{
+      let version=draftVersion;
+      if(publish&&dirty){
+        const draftBody={expectedDraftVersion:version,revision:{...revision,document}};
+        const draftPath=base+'/round-draft',draftSignature=JSON.stringify([draftPath,draftBody,'PUT']);
+        if(operation.current?.payload!==draftSignature)operation.current={payload:draftSignature,key:createClientRequestId()};
+        const saved=await digitalRequest<{draftVersion:number}>(draftPath,'PUT',draftBody,operation.current.key);
+        version=saved.draftVersion;setDraftVersion(version);setDirty(false);operation.current=null;
+      }
+      const body=publish?{expectedDraftVersion:version,basedOnRound:revision.basedOnRound}:{expectedDraftVersion:version,revision:{...revision,document}};
+      const path=`${base}/${publish?"round-publish":"round-draft"}`,payload=JSON.stringify([path,body]);
+      if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
+      if(publish&&revision.origin==='内部发现'&&!await timeApplication.inspect({kind:'development_revision',sourceId,input:{expectedDraftVersion:version,basedOnRound:revision.basedOnRound}},Boolean(sheet?.orderTimeEnabled)))return;
       const response=await digitalRequest<{draftVersion?:number;sourceId?:string}>(path,publish?"POST":"PUT",body,operation.current.key);operation.current=null;setDirty(false);previews.saved();
       if(publish&&response.sourceId&&response.sourceId!==sourceId){
         setRevision(null);setDirty(false);window.location.assign(urls.pageUrl(`ui/digital-production?development=${response.sourceId}`));return;
@@ -166,11 +216,12 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   };
   const readonly=embedded||pendingRevision|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
   const imageUrl=(id:string)=>previews.url(id,urls.apiUrl(`digital-production/${base}/attachments/${id}`));
+  const originalCommentImageUrl=(id:string)=>revisionComment?urls.apiUrl(`digital-production/sources/${revisionComment.ref.sourceId}/development/attachments/${id}`):imageUrl(id);
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)):[];
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
-  const publish=()=>{if(!validate(true))return;if(dirty&&!revision?.customerCommentRef){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
+  const publish=()=>{if(!validate(true))return;if(dirty&&!revision){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);applySheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:sheet?.roundNumber??1},Boolean(sheet?.document));
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
@@ -184,7 +235,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":pendingRevision?'复版提交结果待确认':error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {directRevision&&<Button variant="primary" disabled={busy} title={rounds.draft?'继续修订草稿':undefined} onClick={beginRevision}>编辑版单</Button>}
-      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
+      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)||Boolean(revisionComment&&sheet?.independentRevisions&&revision?.outputKind==="整件样板"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
       {pendingRevision&&!busy&&<Button onClick={()=>void submitAdoptedRevision()}>使用原内容核对复版提交</Button>}
       <Button disabled={!savedPrint||dirty||busy||print.busy} onClick={()=>void print.preview(printMime)}>{print.busy?"正在准备打印…":"打印 / 保存 PDF"}</Button>
     </DocumentToolbar>
@@ -198,7 +249,15 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
 
 
       <form onSubmit={event=>{event.preventDefault();save();}}>
-        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy||pendingRevision} {...(directEdit?{sourceId}:{})} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
+        {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision">{revisionComment?.ref.commentId===revision.customerCommentRef?.commentId&&Boolean(revisionComment?.evidenceRefs.length)&&
+          <ul aria-label="已带出的原客户意见附件">{revisionComment?.evidenceRefs.map((id,index)=><li key={id}>
+            <a href={urls.apiUrl(`digital-production/${base}/attachments/${id}`)}>原意见附件 {index+1}</a>
+          </li>)}</ul>}
+          <DevelopmentRevisionFields value={revision} disabled={busy||pendingRevision} {...(directEdit?{sourceId}:{})} onChange={value=>{setRevision(value);setDirty(true);}}/>
+          {revisionComment&&sheet.independentRevisions&&revision.origin!=='内部发现'&&revision.outputKind==='整件样板'&&
+            <DevelopmentPatternLink busy={busy||pendingRevision} preparing selectedCategoryId={document.patternCategoryId??''}
+              onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/>}
+         </section>}
         <DevelopmentDocumentFields designerInput={directEdit&&!readonly} fixedCraft={sheet.timelineSchemaVersion===2} materialFactsReadonly={directEdit||Boolean(sheet.materialForecastOnly)} {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
       </form>
       {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet}/>}

@@ -1315,6 +1315,10 @@
     {
       "version": "0314_sourcing_adopt_confirmed_ie_basis",
       "checksum": "c01f37f79a1b98b9dfbe59f578c922ac083c50d36c3bf8e39541479f93867617"
+    },
+    {
+      "version": "0315_development_comment_revision_lineage",
+      "checksum": "d4cda855dcf22b3068205f94b0f079dfed07a910ae38be18fc643eaa2c6fe082"
     }
   ]
 }

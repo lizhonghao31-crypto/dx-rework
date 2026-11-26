@@ -76,32 +76,72 @@ export class DevelopmentRoundService {
  async publish(actor:TrustedActorContext,sourceId:string,raw:z.input<typeof PublishDevelopmentRevisionSchema>,key:string){
   const input=PublishDevelopmentRevisionSchema.parse(raw);
   return this.command(actor,sourceId,'publish',key,input,async db=>{
+   if(input.publishCurrent&&input.revision?.customerCommentRef){
+    const contentHash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const repeated=await db.query(`SELECT response FROM digital_production_commands
+     WHERE actor_id=$1 AND command=$2 AND payload_hash=$3 ORDER BY key LIMIT 1`,
+    [actor.actorId,`development-round:${sourceId}:publish`,contentHash]);
+    if(repeated.rows[0])return repeated.rows[0].response;
+   }
    const draft=(await db.query('SELECT * FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];
    if((draft?.version??0)!==input.expectedDraftVersion||draft&&draft.based_on_round!==input.basedOnRound)fail('复版草稿已变化，请刷新后发布');
    const submitted=input.revision??(draft?DevelopmentRevisionSchema.parse(draft.payload):fail('请先读取本轮复版资料'));
    const sheet=await this.forms().read(actor,sourceId,db);
+   if(input.publishCurrent&&input.expectedBasisVersion!==sheet.version)fail('续版依据已更新，请读取当前版单后再发布');
    let revision=input.revision?{...submitted,document:developmentRevisionForSave(submitted.document,sheet.document!)}:submitted;
-   const ref=revision.customerCommentRef;
+   const ref=revision.customerCommentRef,repeat=revision.repeatOriginalComment;
+   let adoptionNumber=1;
    if(ref){
     if(!await developmentRevisionCommentAdoptionReady(db))fail('本轮客户评语引用功能尚未就绪');
-    if(ref.sourceId!==sourceId||ref.roundNumber!==input.basedOnRound||ref.roundNumber!==(sheet.roundNumber??1))fail('请选择本单当前轮次的客户评语');
     if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const previous=(await db.query<{source_id:string;round_number:number;sequence:number|null}>(`SELECT a.source_id,a.round_number,
+     (to_jsonb(a)->>'adoption_number')::int AS sequence FROM digital_development_revision_comment_adoptions a
+     WHERE a.comment_id=$1 ORDER BY COALESCE((to_jsonb(a)->>'adoption_number')::int,1) DESC LIMIT 1`,[ref.commentId])).rows[0];
+    if(repeat){
+     if(!input.publishCurrent||!previous?.sequence||repeat.sourceId!==sourceId||previous.source_id!==sourceId||
+       previous.round_number!==repeat.roundNumber||(sheet.roundNumber??1)!==input.basedOnRound||sheet.status!=='published')
+       return fail('再次发起须从同条评语最近一次实际发布的复版结果办理');
+     adoptionNumber=previous.sequence+1;
+    }else{
+     if(ref.sourceId!==sourceId||ref.roundNumber!==input.basedOnRound||ref.roundNumber!==(sheet.roundNumber??1))
+      fail('请选择本单当前轮次的客户评语');
+     if(previous)fail('此版客户评语已建立复版，请打开原复版单');
+    }
     const original=await readDevelopmentRevisionCommentBasis(db,ref)??fail('原客户评语已不可用，请重新核对');
     if(original.decision!=='changes_required'&&(original.final||original.decision!=='noted'))fail('本条客户意见未要求修改，不能作为复版依据');
-    if((await db.query('SELECT 1 FROM digital_development_revision_comment_adoptions WHERE comment_id=$1',[ref.commentId])).rowCount)fail('此版客户评语已建立复版，请打开原复版单');
     revision={...revision,customerComment:original.text};
    }
    if(input.revision)await this.forms().bindFiles(db,actor,sourceId,revision.document);
-   const publish=()=>this.publishWithClient(db,actor,sourceId,revision);
+   const publish=()=>this.publishWithClient(db,actor,sourceId,revision,undefined,undefined,input.publishCurrent===true);
    // A customer revision creates a separate inactive draft. Its original
    // publication later runs the same first-effective check as any new source.
    const result=revision.origin!=='内部发现'?await publish():await automaticOrderTime(this.database,db,actor,{kind:'development_revision',sourceId,input},publish,result=>({kind:'source',id:result.sourceId}));
-   if(ref)await db.query(`INSERT INTO digital_development_revision_comment_adoptions(source_id,round_number,based_on_source_id,based_on_round,based_on_scope,comment_id,comment_version,adopted_by)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[result.sourceId,result.roundNumber,sourceId,ref.roundNumber,ref.scopeRef,ref.commentId,ref.version,actor.actorId]);
-   if(draft)await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);return result;
+   if(ref)await db.query(`INSERT INTO digital_development_revision_comment_adoptions(source_id,round_number,based_on_source_id,based_on_round,based_on_scope,comment_id,comment_version,adopted_by${repeat?',adoption_number,previous_source_id,previous_round_number':''})
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8${repeat?',$9,$10,$11':''})`,[result.sourceId,result.roundNumber,ref.sourceId,ref.roundNumber,ref.scopeRef,
+     ref.commentId,ref.version,actor.actorId,...(repeat?[adoptionNumber,repeat.sourceId,repeat.roundNumber]:[])]);
+   if(draft)await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);
+   if(!input.publishCurrent||result.sourceId===sourceId)return result;
+   const first=new DigitalDevelopmentService(this.database,this.enabled,this.patternOrders).inTransaction(db);
+   const row=await first.read(actor,result.sourceId,db);
+   const patternOrder=revision.outputKind==='工艺布片'?undefined:input.patternOrder;
+   if(this.patternOrders&&revision.outputKind==='整件样板'&&!patternOrder)fail('请核对本次独立复版的打板品类与执行价');
+   const firstKey=createHash('sha256').update(`independent-development:${result.sourceId}:${row.version}`).digest('hex');
+   await db.query('SAVEPOINT independent_first_publication');
+   try{
+    const published=await first.publish(actor,result.sourceId,row.version,firstKey,patternOrder);
+    if(published.status!=='published'||!published.taskId)fail('未取得独立复版原生发布和任务回执');
+    await db.query('RELEASE SAVEPOINT independent_first_publication');
+    return {...result,status:'published' as const,documentVersion:published.version};
+   }catch(error){
+    await db.query('ROLLBACK TO SAVEPOINT independent_first_publication');
+    await db.query('RELEASE SAVEPOINT independent_first_publication');
+    if(!(error instanceof ApplicationError)||!['ORDER_TIME_REQUEST_REQUIRED','ORDER_TIME_INPUT_REQUIRED'].includes(error.code))throw error;
+    return {...result,status:error.code==='ORDER_TIME_REQUEST_REQUIRED'?'needs_time_request' as const:'needs_inputs' as const,
+     documentVersion:row.version,reason:error.message,...(patternOrder?{patternOrder}:{})};
+   }
   });
  }
- async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
+ async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string,directPublication=false){
   if(!this.enabled)digitalForbidden();
   const rawBasis=await developmentDocumentRow(db,sourceId);
   if(rawBasis)input={...input,document:withDevelopmentMaterialLineTotals({...input.document,
@@ -154,7 +194,7 @@ export class DevelopmentRoundService {
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');
   if(input.origin!=='内部发现'&&!returnTaskId&&!patternReworkRoundId&&await developmentSlaPlan(db,sourceId)){
     await this.forms().bindFiles(db,actor,sourceId,input.document);
-    return createIndependentDevelopmentRevision(db,actor,sourceId,input);
+    return createIndependentDevelopmentRevision(db,actor,sourceId,input,undefined,directPublication);
   }
   const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
   const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,deferred?2:savedPlan?.route_schema_version);

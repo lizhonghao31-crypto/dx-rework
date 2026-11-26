@@ -1,3 +1,4 @@
+import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
@@ -477,6 +478,42 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query('SELECT effective FROM digital_order_time_subjects WHERE source_id=$1',[result.sourceId])).rows[0].effective).toBe(true);
    expect((await f.db.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[row.photo])).rows[0]).toEqual({entity_type:'digital_development',entity_id:row.sourceId});
    expect((await f.db.query('SELECT DISTINCT order_id FROM pattern_room_attachment_bindings WHERE attachment_id=$1',[row.photo])).rowCount).toBe(2);
+  });
+ });
+ it('Acceptance R3 keeps a true short-deadline revision on one original approval and publishes the same independent source',async()=>{
+  const scene=await f.scene('2027-04-01T13:30:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2027-04-10');
+   if(row.operation.kind!=='development_publish'||!row.operation.input.patternOrder)throw Error('TEST source execution price');
+   const patternOrder=row.operation.input.patternOrder;
+   await forms.publish(row.actor,row.sourceId,1,randomUUID(),patternOrder);
+   const sheet=await forms.read(row.actor,row.sourceId),rounds=new DevelopmentRoundService(f.db,true,native);
+   const comment=await new DevelopmentTechnicalService(f.db,true).recordComment(row.actor,row.sourceId,{
+    roundNumber:1,scopeRef:'整款',expectedVersion:0,decision:'changes_required',isFinal:false,
+    text:'TEST 客户要求真实重做',evidenceNote:'TEST 客户发回信息',evidenceRefs:[],occurredAt:null,
+   },randomUUID());
+   const revision={basedOnRound:1,origin:'客户新增要求' as const,customerComment:'TEST 客户要求真实重做',internalProblem:'',
+    explanation:'TEST 只冻结独立复版原资料',categories:['其他' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const,
+    customerCommentRef:{sourceId:row.sourceId,roundNumber:1,scopeRef:'整款',commentId:comment.commentId,version:comment.version},
+    document:{...sheet.document!,returnDate:'2027-04-01',instructions:'TEST 新版最终内容'}};
+   const originalHold=await new OrderTimePlanRepository(f.db).current({kind:'source',id:row.sourceId});
+   const body={expectedDraftVersion:0,basedOnRound:1,expectedBasisVersion:sheet.version,publishCurrent:true as const,patternOrder,revision};
+   const result=await rounds.publish(row.actor,row.sourceId,body,randomUUID());
+   expect(result).toMatchObject({status:'needs_time_request',documentVersion:1});
+   expect(await rounds.publish(row.actor,row.sourceId,body,randomUUID())).toEqual(result);
+   expect(await forms.read(row.actor,result.sourceId)).toMatchObject({status:'draft'});
+   expect((await f.db.query('SELECT 1 FROM digital_production_task_access WHERE source_id=$1',[result.sourceId])).rowCount).toBe(0);
+   expect((await f.db.query('SELECT 1 FROM digital_development_first_publications WHERE source_id=$1',[result.sourceId])).rowCount).toBe(0);
+   const operation={kind:'development_publish' as const,sourceId:result.sourceId,input:{expectedVersion:1,patternOrder}};
+   const checked=await requests.check(row.actor,operation);
+   expect(checked.feasibility).toBe('insufficient');
+   const requested=await requests.submit(row.actor,{operation,fingerprint:checked.fingerprint,reason:'TEST 本次独立复版真实短交期'},randomUUID());
+   const available=await requests.read(f.root,requested.requestId);
+   await requests.apply(f.root,requested.requestId,{expectedVersion:available.version,fingerprint:available.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   expect(await forms.read(row.actor,result.sourceId)).toMatchObject({status:'published',document:{instructions:'TEST 新版最终内容'}});
+   expect((await f.db.query("SELECT 1 FROM digital_production_task_access WHERE source_id=$1 AND task_kind='development_materials'",[result.sourceId])).rowCount).toBe(1);
+   expect((await f.db.query('SELECT 1 FROM digital_development_first_publications WHERE source_id=$1',[result.sourceId])).rowCount).toBe(1);
+   expect(await new OrderTimePlanRepository(f.db).current({kind:'source',id:row.sourceId})).toEqual(originalHold);
   });
  });
  it('applies a saved internal craft change and its per-order quota together while retaining the real completed material and old responsibility',async()=>{
