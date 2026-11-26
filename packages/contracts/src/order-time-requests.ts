@@ -48,6 +48,20 @@ export const OrderTimeCheckResultSchema=z.object({
  canRequest:z.boolean(),canApply:z.boolean(),sourceVersion:z.record(z.string(),z.unknown()),
 }).strict();
 export type OrderTimeCheckResult=z.infer<typeof OrderTimeCheckResultSchema>;
+/** A separately comparable PO gap already rules out automatic instruction
+ * publication, even while the aggregate still needs other inputs to adopt. */
+export function instructionConfirmedGaps(check:Pick<OrderTimeCheckResult,'framework'|'factoryCommitments'>){
+ return {
+  milestones:check.framework?.milestones.filter(row=>row.scopeRef.startsWith('po:')&&row.status==='insufficient'&&row.target.at!==null&&row.lateMinutes!==null)??[],
+  factories:check.factoryCommitments?.filter(row=>row.status==='insufficient'&&row.plannedReceipt!==null&&row.lateMinutes!==null)??[],
+ };
+}
+export function instructionTimeInsufficient(check:Pick<OrderTimeCheckResult,'feasibility'|'framework'|'factoryCommitments'>){
+ if(check.feasibility==='insufficient')return true;
+ if(check.feasibility!=='unknown')return false;
+ const {milestones,factories}=instructionConfirmedGaps(check);
+ return milestones.length+factories.length>0;
+}
 export const OrderTimeRequestReadSchema=z.object({requestId:z.string().uuid(),version:z.number().int().positive(),state:OrderTimeRequestStateSchema,operation:OrderTimeOperationSchema,requestedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict(),designerId:z.string().uuid(),reason:z.string(),returnReason:z.string().nullable(),appliedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict().nullable(),result:z.object({orderId:z.string().uuid().nullable(),lateMinutes:z.number().nullable()}).strict().nullable(),check:OrderTimeCheckResultSchema,canWithdraw:z.boolean()}).strict();
 export type OrderTimeRequestRead=z.infer<typeof OrderTimeRequestReadSchema>;
 

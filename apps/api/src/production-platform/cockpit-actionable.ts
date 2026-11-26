@@ -2,6 +2,7 @@ import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
 import type {Pool,PoolClient} from 'pg';
 import type {CockpitActionableTodo} from '@dx-rework/contracts/digital-production-journey';
 import {instructionErrors,instructionMatchesTechnicalSizes,type InstructionDocument} from '@dx-rework/contracts/production-instruction';
+import {instructionTimeInsufficient} from '@dx-rework/contracts/order-time-requests';
 import {publishedTechnicalArtifact} from './development-technical-repository.js';
 import {preparationSupplement} from './preparation-todos.js';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
@@ -318,8 +319,8 @@ export async function readCockpitInstructionActions(database:Pool,db:PoolClient,
     expectedVersion:row.version,orderVersion:row.orderVersion,...(expectedReadinessRevision?{expectedReadinessRevision}:{})}};
    try{
     const check=await loadOrderTimeOperation(database,client,actor,operation,time,{},[],[],'cockpit-instruction-read');
+    if(instructionTimeInsufficient(check.check))return;
     forecastUnknown=check.check.feasibility==='unknown';
-    if(check.check.feasibility==='insufficient')return;
    }catch(error){
     if(!(error instanceof ApplicationError)||![403,409,422].includes(error.statusCode))throw error;
     unavailable.add(row.motherId);return;

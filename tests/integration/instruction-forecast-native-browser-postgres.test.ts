@@ -3,10 +3,16 @@ import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {instructionTimeInsufficient,OrderTimeCheckResultSchema} from '@dx-rework/contracts/order-time-requests';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {admittedOrderFixture} from '../helpers/order-time-rewash-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
+import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
@@ -199,6 +205,76 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const routed=(await f.db.query("SELECT request_id,state FROM digital_order_time_requests WHERE operation_json->>'kind'='instruction_publish' AND operation_json->>'orderId'=$1",[item.orderId])).rows;
    expect(routed).toEqual([{request_id:handoffId,state:'needs_designer'}]);
    expect(await snapshot(item.orderId,item.sourceId)).toEqual(before);
+  }finally{await tab.close();}
+ });
+ it('blocks one native instruction for a proved B PO gap while A stays unknown and retains the original handoff',async()=>{
+  const f=h.f,settings=new OrderTimeSettingsService(f.db,true,true),previous=await settings.read(f.root);
+  const forms=new DigitalDevelopmentService(f.db,true,h.patternOrders),identity=new DigitalProductionIdentityService(f.db,true),main=f.people.merchandiser!,scene=await f.scene('2026-11-17T08:00:00.000Z'),style='TEST-mixed-'+randomUUID();
+  const template=await f.runtime.run(legacy.scene,f.root,async()=> (await forms.read(f.root,legacy.sourceId)).document!);
+  await settings.save(f.root,{expectedVersion:previous.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const item=await f.runtime.run(scene,f.root,async()=>{
+   // A migrated pre-rule line never had a customer promise. Preserve it as
+   // missing at creation, never overwrite a real current date or its guard.
+   const order=await historicalDigitalOrder(f.db,f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,
+    designStyleNo:style,orderDate:'2026-11-17',primaryMerchandiserId:main.actorId,productionPlanning:{craftSteps:[],preshrink:false},lines:[
+     {formalPoNo:style+'-A',color:'黑',customerWarehouseArrivalDate:null,sizes:[{size:'M',quantity:2}]},
+     {formalPoNo:style+'-B',color:'白',customerWarehouseArrivalDate:'2027-03-03',sizes:[{size:'M',quantity:2}]},
+    ]}),{slaBeforePreparation:true,scenarioOwnedPreparation:true});
+   const source=await identity.createSource(f.root,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const draft=await forms.save(f.root,source.sourceId,{expectedVersion:0,document:{...template,orderDate:null,returnDate:null,files:[{attachmentId:await f.image(f.root),kind:'款图'}]}},randomUUID());
+   const price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   await forms.publish(f.root,source.sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+   const orderId=order.productionOrderId;
+   await identity.attachSource(f.root,orderId,source.sourceId,randomUUID());
+   const current=await service().read(main,orderId);
+   await service().save(main,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,sourceRound:current.sourceRound,
+    document:{...current.document,styleName:'TEST two PO mixed forecast',category:'上衣',date:'2026-11-17',preshrink:'无需预缩',secondaryCraft:'无',craftSteps:[]}},randomUUID());
+   await productionReadinessFixture(f.db,f.root,orderId,f.people['pattern-room-worker']!.actorId,f.people.warehouse!);
+   return {orderId,sourceId:source.sourceId,scene,bLine:order.lines[1]!.lineId};
+  });
+  const operation=await request(item);
+  await f.advance(item.scene,'2027-03-04T08:00:00.000Z');
+  const prior=await snapshot(item.orderId,item.sourceId);
+  h.setCollectionScene(item.scene);
+  const path=`/api/digital-production/orders/${item.orderId}/instruction/publish`;
+  const tab=await h.open(main.actorId,1165,{},`/ui/digital-production?instruction=${item.orderId}`);
+  try{
+   const preview=await tab.context.request.post(h.base+'/api/digital-production/order-time/check',{data:{operation}});
+   expect(preview.status(),await preview.text()).toBe(200);
+   const check=OrderTimeCheckResultSchema.parse(await preview.json());
+   expect(check).toMatchObject({feasibility:'unknown',customerDates:[{po:style+'-A',date:null},{po:style+'-B',date:'2027-03-03'}],canApply:false,canRequest:false});
+   expect(check.framework?.milestones.find(row=>row.scopeRef===`po:${item.bLine}`&&row.key==='planned_shipment')).toMatchObject({status:'insufficient',lateMinutes:1500,planned:{at:'2027-03-04T17:00:00.000Z'}});
+   expect(check.coverage.join('；')).toContain(style+'-A的客户交期尚未填写');
+   expect(check.coverage.some(reason=>reason.includes(style+'-B')&&reason.includes('原目标 2027-03-03')&&reason.includes('1500 分钟'))).toBe(true);
+   expect(instructionTimeInsufficient(check)).toBe(true);
+   expect(await snapshot(item.orderId,item.sourceId)).toEqual(prior);
+   const before=await f.runtime.run(item.scene,f.root,()=>new DigitalJourneyQuery(f.db).read(f.root,item.orderId,undefined,true));
+   expect(before.actionableTodo?.items.some(row=>row.category==='instruction_publish')).not.toBe(true);
+   const rejected=tab.page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===path);
+   const handoff=tab.page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/digital-production/order-time/requests');
+   await tab.page.getByRole('button',{name:'发布有效制单',exact:true}).click();
+   const response=await rejected;expect(response.status()).toBe(409);
+   const error=(await response.json()).error;
+   expect(error.code).toBe('ORDER_TIME_REQUEST_REQUIRED');
+   expect(error.message).toContain(style+'-A');expect(error.message).toContain(style+'-B');
+   expect((await handoff).ok()).toBe(true);
+   await tab.page.waitForURL(url=>url.searchParams.has('timeRequest'));
+   const requestId=new URL(tab.page.url()).searchParams.get('timeRequest')!;
+   expect(h.requests.filter(row=>row.session===tab.session&&row.path===path&&row.method==='POST')).toHaveLength(1);
+   expect(await snapshot(item.orderId,item.sourceId)).toEqual(prior);
+   await f.runtime.run(item.scene,f.root,async()=>{
+    const needsDesigner=await h.orderTimeRequests!.read(f.root,requestId);
+    expect(needsDesigner.state).toBe('needs_designer');
+    expect(instructionTimeInsufficient(needsDesigner.check)).toBe(true);
+    const pending=await h.orderTimeRequests!.resubmit(f.root,requestId,{expectedVersion:needsDesigner.version,operation:needsDesigner.operation,fingerprint:needsDesigner.check.fingerprint,reason:'TEST 原设计师保持原两类依据'},randomUUID());
+    expect(pending.state).toBe('pending');
+    const manager=f.people['production-management']!;
+    const approval=await h.orderTimeRequests!.read(manager,requestId);
+    expect(approval.check.feasibility).toBe('unknown');
+    await expect(h.orderTimeRequests!.apply(manager,requestId,{expectedVersion:approval.version,fingerprint:approval.check.fingerprint,overrides:{},acceptLate:true},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_INPUT_REQUIRED',message:expect.stringContaining(style+'-A')});
+    expect((await h.orderTimeRequests!.read(manager,requestId)).state).toBe('pending');
+   });
+   expect(await snapshot(item.orderId,item.sourceId)).toEqual(prior);
   }finally{await tab.close();}
  });
 });

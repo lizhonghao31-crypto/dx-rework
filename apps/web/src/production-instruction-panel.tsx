@@ -3,6 +3,7 @@ import {useInstructionRecovery} from './use-instruction-recovery.js';
 import {instructionEnvelopeRequestBody,type InstructionRecoveryEnvelope} from './instruction-recovery-state.js';
 import {registerSessionInvalidator} from './auth-session.js';
 import {useOrderTimeApplication} from './order-time-application.js';
+import {instructionTimeInsufficient} from '@dx-rework/contracts/order-time-requests';
 import {PreparationWindows} from './production-readiness-panel.js';
 import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
@@ -204,7 +205,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
           try{
             const check=await timeApplication.readCheck(proposal);
             if(!current())return;
-            if(check.feasibility==='unknown')setPublicationForecast(['发布前预查：本单时效暂无法确认',...check.coverage].join('；'));
+            if(check.feasibility==='unknown')setPublicationForecast([instructionTimeInsufficient(check)?'发布前预查：已证实有时效缺口，另有依据待核':'发布前预查：本单时效暂无法确认',...check.coverage].join('；'));
           }catch(reason){if(current())setError('时效检查未返回，尚未提交；草稿保留。'+(reason instanceof Error?reason.message:''));return;}
         }
         if(!current())return;

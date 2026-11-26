@@ -2,7 +2,7 @@ import {developmentSourceLifecycle,preorderDraftOrder,workbenchPreorderPublicati
 import {orderTimeFactoryCommitments,outstandingFactoryCommitments} from './order-time-factory-commitments.js';
 import {publicationFormalInput} from './order-time-publication-intent.js';
 import {beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
-import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
+import {SERIES_MILESTONES,type SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {orderTimeCreated} from './order-time-created.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {frameworkScopeInputs,overlayFrameworkCompletion} from './order-time-framework-route.js';
@@ -16,7 +16,7 @@ import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-cl
 import type {SlaAnchor,SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {CraftStepChoicesSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
-import {OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
+import {instructionConfirmedGaps,OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 import {isDevelopmentMaterialPlaceholder,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
 import {ApplicationError} from '../platform/errors.js';
@@ -426,6 +426,14 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  }
  if(washing)check.washing=[...washing].map(([lineId,row])=>({lineId,label:row.label,version:row.version,document:row.document}));
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
+ if(operation.kind==='instruction_publish'&&check.feasibility==='unknown'){
+  const {milestones,factories}=instructionConfirmedGaps(check);
+  const poByScope=new Map(value.scopes.map((scope,index)=>[scope.scopeRef,dates[index]?.po||scope.lineId||scope.scopeRef]));
+  const gap=(label:string,date:string|null,minutes:number|null)=>`${label}${date?'（原目标 '+date+'）':''}已证实不足${minutes!==null&&minutes>=1?'，至少晚 '+Math.floor(minutes)+' 分钟':''}`;
+  const confirmed=[...milestones.map(row=>gap(`${poByScope.get(row.scopeRef)??row.scopeRef} ${SERIES_MILESTONES.find(item=>item.key===row.key)!.label}`,row.date,row.lateMinutes)),
+   ...factories.map(row=>gap(`${row.label} 工厂交货`,row.date,row.lateMinutes))];
+  if(confirmed.length)check.coverage=[...new Set([...confirmed,...check.coverage])];
+ }
  void database;
  const linkedApplicability={complete:Boolean(!sourceId||development)&&(!includesProduction||Boolean(production&&production.craftSteps!==null&&production.preshrink!==null)),parameterKeys:[...new Set([...value.work.map(work=>work.parameterKey),...extraSettings.keys()])]};
  return {operation,value,check,designerId,sourceId,orderId:order?.production_order_id??null,preorderPublication,progress,time,main,designer:Boolean(designer),manager:Boolean(manager),production,linkedApplicability};

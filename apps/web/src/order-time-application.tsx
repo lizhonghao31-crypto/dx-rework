@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
-import {OrderTimeCheckResultSchema,OrderTimeRequestReadSchema,type OrderTimeOperation,type OrderTimeCheckResult} from '@dx-rework/contracts/order-time-requests';
+import {instructionTimeInsufficient,OrderTimeCheckResultSchema,OrderTimeRequestReadSchema,type OrderTimeOperation,type OrderTimeCheckResult} from '@dx-rework/contracts/order-time-requests';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
 import {createClientRequestId} from './client-request-id.js';
 import {createWebUrls} from '../url-contract.js';
@@ -25,13 +25,14 @@ export function useOrderTimeApplication(onRequested?:()=>void){
  };
  const offer=async(operation:OrderTimeOperation,check:OrderTimeCheckResult)=>{
   const next={operation,check};setIntent(next);setError('');setReason('');
-  if(!check.canRequest&&!check.canApply&&check.feasibility==='insufficient'){
-   const note='工艺变更后时间不足，请原单设计师接续提交时效调整申请';setReason(note);await send(next,note);
+  const mixed=operation.kind==='instruction_publish'&&check.feasibility==='unknown'&&instructionTimeInsufficient(check);
+  if(!check.canRequest&&!check.canApply&&(check.feasibility==='insufficient'||mixed)){
+   const note=mixed?'本单已有可证实的时效缺口，另有依据待核，请原单设计师接续':'工艺变更后时间不足，请原单设计师接续提交时效调整申请';setReason(note);await send(next,note);
   }
  };
  const checkInstructionShortage=async(operation:Extract<OrderTimeOperation,{kind:'instruction_publish'}>,stillCurrent:()=>boolean)=>{
   const turn=++generation.current,check=await readCheck(operation);
-  if(!live.current||turn!==generation.current||!stillCurrent()||check.feasibility!=='insufficient')return false;
+  if(!live.current||turn!==generation.current||!stillCurrent()||!instructionTimeInsufficient(check))return false;
   if(pending.current)return true;
   await offer(operation,check);
   return true;
@@ -53,7 +54,7 @@ export function useOrderTimeApplication(onRequested?:()=>void){
  };
  const submit=()=>intent?send(intent,reason):Promise.resolve();
  const dialog=intent&&<section className="r5-time-application" aria-label="本单时效申请">
-  <h3>{intent.check.feasibility==='unknown'?'本单资料还没齐':'本单时间不足'}</h3>
+  <h3>{intent.check.feasibility==='unknown'?(intent.operation.kind==='instruction_publish'&&instructionTimeInsufficient(intent.check)?'本单已证实时效不足，另有依据待核':'本单资料还没齐'):'本单时间不足'}</h3>
   {intent.check.feasibility==='unknown'?<p>{intent.check.coverage.join('；')}</p>:<p>可用 {timeText(Math.max(0,intent.check.availableMinutes??0))}，当前安排{intent.check.forecastQuality==='lower_bound'?'至少':''}需要 {timeText(intent.check.requiredMinutes)}{intent.check.lateMinutes===0?'。':`，预计晚交 ${timeText(intent.check.lateMinutes)}。`}</p>}
   {error&&<p role="alert">{error}</p>}
   <label>申请说明<textarea aria-label="本单时效申请说明" maxLength={2000} disabled={busy||uncertain} value={reason} onChange={event=>setReason(event.target.value)}/></label>
