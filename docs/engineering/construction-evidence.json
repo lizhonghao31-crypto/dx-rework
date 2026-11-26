@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
+  "base": "a86a45fa31865731bcaf2c2358a05936495e016e",
   "risk": "full",
-  "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
+  "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -35,6 +35,8 @@
       "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 同单 A 明确资料未知而 B 在原 PO 可比目标下已证实不足，不写制单或正式时效。原申请可接续、未齐时仍不能采用，即使有原有晚期确认。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。",
       "checks": [
         "native",
+        "canonical",
+        "protocol",
         "static"
       ]
     },
@@ -66,7 +68,79 @@
       "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。 保持汇总未知和真实逐 PO 缺口两个维度，正式制单、预查重读、PMC 和原申请共享已核不足判定，现有正确性预算不变。",
       "checks": [
         "native",
+        "canonical",
+        "protocol",
         "static"
+      ]
+    },
+    {
+      "rule": "正常 API 启动接通原工艺、成衣 QC 同批返工已有入口；不改变来源定位、数量、原权限、重放或普通返工。",
+      "source": "模块体验02 审定施工方案 M02-02；原权限黄金源及原返工标准。 来源发布基座 a86a45fa 的 #1125 已通过原 Full，现据同一组合在 #1126 准确源码复测。",
+      "initialization": "标准 API 启动的原返工依赖启用同一个现有布尔项；无迁移、seed、回填。Acceptance 试单历史只读，测试使用独立测试库/业务 schema。",
+      "dateAndPermission": "原收货批次和 QC event 的工作时间不变。真实 QC 正向，仓管、同会话已撤权、错 QC/错 scope 反向；不新增角色能力。",
+      "writes": [
+        "apps/api/src/server.ts#originalCraftQuality",
+        "tests/acceptance/supplychain-settings-browser.ts#throughNormal",
+        "tests/helpers/normal-fixture-api.ts#normalFixtureApi",
+        "tests/integration/original-quality-rework-startup-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/app.ts#registerReworkRoutes",
+        "apps/api/src/rework/routes.ts#/rework-orders/craft-quality/drafts",
+        "apps/api/src/rework/routes.ts#/rework-orders/garment-quality/drafts",
+        "apps/web/src/garment-original-rework.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/original-quality-rework-startup-browser-postgres.test.ts"
+      ],
+      "expectation": "普通启动中两条原路由注册，按原来源只建一张。隔离真实单批与双批不更改原实收/合格/装箱，另测工艺；原仓库大套件两项已在未改基线重现，未计入成功或本次修改；真实 Acceptance 联验待合后。",
+      "checks": [
+        "inherited-native"
+      ]
+    },
+    {
+      "rule": "把新增原鉴权浏览器回归登记进既有长正确性预算，仍精确选入 PostgreSQL，不加 worker 或改变测试分类政策。",
+      "source": "Full 45883912914 非数据库实际断言与现行 canonical 选择规范；原 M02-02 施工授权。 来源发布基座 a86a45fa 的 #1125 已通过原 Full，现据同一组合在 #1126 准确源码复测。",
+      "initialization": "只把本新用例列入既有 test-suite-plan 注册表；无迁移、fixture 事实、权限、CI 工具或全局预算变更。",
+      "dateAndPermission": "原授权浏览器已经使用隔离 PostgreSQL；范围是同一规范下的长期测试配置，工作日期和权限不变。",
+      "writes": [
+        "scripts/test-suite-plan.mjs#LONG_CORRECTNESS_TESTS"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs#correctnessTimeoutMs",
+        "vitest.business-chain.config.ts#correctnessTimeoutMs"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts#runs every consumer of the original shared authenticated App browser"
+      ],
+      "expectation": "原 canonical 风险映射全文件 143/143，新增浏览器采用原长预算并原样覆盖同批返工 3 条。",
+      "checks": [
+        "inherited-native",
+        "canonical"
+      ]
+    },
+    {
+      "rule": "旧时效历史夹具保留原版本序列，使用显式当前 0316 原合同生成依赖，仍经原合同 ready 与发厂门禁验证。",
+      "source": "准确 Full 45883912914 PostgreSQL 旧固定时效两个串联发厂失败；未改发布基线 b7db88a3 两个同点 409 的定向对照。 来源发布基座 a86a45fa 的 #1125 已通过原 Full，现据同一组合在 #1126 准确源码复测。",
+      "initialization": "保留历史 0280/0281/0282，仅给会走现有 SourcingService 的隔离 schema 补当前真实 0316 合同生成领取字段和 staging，不写生产，不变迁移脚本。",
+      "dateAndPermission": "当前已审批原合同确实 ready 后仍以真实 QC 与末步骤发厂，核中间批及不合格拒绝、分批正例及幂等；未放松任何权限和合同门禁。",
+      "writes": [
+        "tests/integration/fixed-timeline-postgres.test.ts#0316_sourcing_contract_generation_attempts.sql"
+      ],
+      "reads": [
+        "apps/api/migrations/0316_sourcing_contract_generation_attempts.sql",
+        "apps/api/src/production-platform/factory-flow-service.ts#batchDispatch",
+        "apps/api/src/sourcing/sourcing-contract-service.ts#generateIfReady"
+      ],
+      "oldTests": [
+        "tests/integration/fixed-timeline-postgres.test.ts#terminal-only dispatch"
+      ],
+      "expectation": "同一旧套件 15/15，包含绣→印和印→绣两条旧红，原各发厂/QC/数量/重试断言均保留。新增一条原合同已就绪的断言。",
+      "checks": [
+        "inherited-native"
       ]
     }
   ],
@@ -74,39 +148,244 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/mixed-candidate/native.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "af6f22b8084aca0e04690faa48c56cc628f7fbfd",
-      "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
-      "context": "Actual Chromium original instruction and approval entry on isolated PostgreSQL; existing long correctness config. Covers mixed A-unknown/B-proved shortage, unchanged other requests and the original receiving journey.",
-      "startedAt": "2026-11-26T19:53:19.531985+00:00",
-      "endedAt": "2026-11-26T19:56:13.184666+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/mixed-candidate/native.log",
-      "logSha256": "132ffc3b20427b19952ca763619ff6632d0c3d3ec84a8dd99015f7bf59f3a6c5",
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确基座与候选，隔离 PostgreSQL、原页面 Chromium、现有长正确性配置；原制单及双 PO 和原申请历程。",
+      "startedAt": "2026-11-26T20:33:23.864824+00:00",
+      "endedAt": "2026-11-26T20:36:12.906257+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/native.log",
+      "logSha256": "fc0a043249235cdba42a5e7c105f66b73348d512eef661cb841cf98ffa64635b",
       "passed": 23,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0b9c9921bc93dfad196a54fd4c13b61ea3a4d735b2a6488d907f9e0a1284279c"
+          "sha256": "360326df3be3e0aadfd40e94a1f628f924839440d19afb532c11449f6fb61e51"
         }
       ]
     },
     {
-      "id": "static",
-      "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/mixed-candidate/static.sh",
+      "id": "inherited-native",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/inherited-native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "af6f22b8084aca0e04690faa48c56cc628f7fbfd",
-      "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
-      "context": "Node22/npm10 / original protocol, inventory, scoped ESLint, workspaces types and migration/secret static.",
-      "startedAt": "2026-11-26T19:53:14.063020+00:00",
-      "endedAt": "2026-11-26T19:54:12.870635+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/mixed-candidate/static.log",
-      "logSha256": "e6e34125ce2b20c9dcb5ff3b667b0111220e7000f7c919fb3f5892faaee9cf2d"
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确基座与候选，继续核 #1125 正常启动同批返工和原合同/末工艺分批发厂完整套件。",
+      "startedAt": "2026-11-26T20:33:23.864414+00:00",
+      "endedAt": "2026-11-26T20:34:50.504802+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/inherited-native.log",
+      "logSha256": "79c278dd3ce3d35f5a13d32c82563614c4fe3a83f057d6de09e536309b91fd69",
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "f85a23557d2be9f4ddc6fe1ea06a57bd0ae73dabaa37dfe3e492de1d64c6a805"
+        }
+      ]
+    },
+    {
+      "id": "canonical",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/canonical.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确候选的完整 canonical risk-map 用例，两项实际浏览器保留现有长正确性和正当浏览器准备。",
+      "startedAt": "2026-11-26T20:33:23.864440+00:00",
+      "endedAt": "2026-11-26T20:33:25.315077+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/canonical.log",
+      "logSha256": "fcd4bc0527a93f44016e1cde334e7a4f992a5943ccececd6f4620ae1018db4b9",
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "50322b7be6c619a8f6746e6ddd241bdb83609254e33b90bcff430ab809129cc2"
+        }
+      ]
+    },
+    {
+      "id": "protocol",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/protocol.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确候选的 CI 协议和时间来源清单回归，核原先两项 Light 报错均通过。",
+      "startedAt": "2026-11-26T20:33:23.865804+00:00",
+      "endedAt": "2026-11-26T20:33:31.570543+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/protocol.log",
+      "logSha256": "82a74044c544626afc092b9b6892afb746f6cf7e060416468711de225ca43143",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "82a74044c544626afc092b9b6892afb746f6cf7e060416468711de225ca43143"
+        }
+      ],
+      "passed": 285,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "static",
+      "kind": "command",
+      "command": "bash /workspace/scratch/m02-01-evidence/frozen/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1eb42f199ae5677e0466b56494cbf85c0caaeb5e",
+      "sourceFingerprint": "10c15b1233e1e113df963e2ce7796448d700d16ca7735d4566fe2471cf45e4ad",
+      "context": "准确候选 Node 22 / npm 10，以现有时间清单、改动 ESLint、工作区类型、迁移及 secret 静态检查。",
+      "startedAt": "2026-11-26T20:33:23.867238+00:00",
+      "endedAt": "2026-11-26T20:34:16.160284+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/frozen/static.log",
+      "logSha256": "b4ae7da76bd1da311aaa145e65a15fcbb5f91e41b0f5bc664c9a58d76b5d7ed7"
     }
-  ]
+  ],
+  "inheritedReleaseEvidence": {
+    "releaseBase": "a86a45fa31865731bcaf2c2358a05936495e016e",
+    "approvedPr": 1125,
+    "approvedHead": "63db6700d9fd1a36f0790709b995d41e5816ba6a",
+    "runId": 45887917405,
+    "jobId": 140153252641,
+    "attempt": 1,
+    "constructionSha256": "f8b06d3893efc54299d6c1868e535888e1f66cf99bfde4c5d313d089d253bcc8",
+    "note": "继承原始合并证据以审计，不把其旧基点日志冒充新候选；上面同范围绑定新候选复测。",
+    "originalRecord": {
+      "version": 1,
+      "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
+      "risk": "full",
+      "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
+      "rules": [
+        {
+          "rule": "正常 API 启动接通原工艺、成衣 QC 同批返工已有入口；不改变来源定位、数量、原权限、重放或普通返工。",
+          "source": "模块体验02 审定施工方案 M02-02；原权限黄金源及原返工标准。",
+          "initialization": "标准 API 启动的原返工依赖启用同一个现有布尔项；无迁移、seed、回填。Acceptance 试单历史只读，测试使用独立测试库/业务 schema。",
+          "dateAndPermission": "原收货批次和 QC event 的工作时间不变。真实 QC 正向，仓管、同会话已撤权、错 QC/错 scope 反向；不新增角色能力。",
+          "writes": [
+            "apps/api/src/server.ts#originalCraftQuality",
+            "tests/acceptance/supplychain-settings-browser.ts#throughNormal",
+            "tests/helpers/normal-fixture-api.ts#normalFixtureApi",
+            "tests/integration/original-quality-rework-startup-browser-postgres.test.ts"
+          ],
+          "reads": [
+            "apps/api/src/app.ts#registerReworkRoutes",
+            "apps/api/src/rework/routes.ts#/rework-orders/craft-quality/drafts",
+            "apps/api/src/rework/routes.ts#/rework-orders/garment-quality/drafts",
+            "apps/web/src/garment-original-rework.tsx"
+          ],
+          "oldTests": [
+            "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
+          ],
+          "newTests": [
+            "tests/integration/original-quality-rework-startup-browser-postgres.test.ts"
+          ],
+          "expectation": "普通启动中两条原路由注册，按原来源只建一张。隔离真实单批与双批不更改原实收/合格/装箱，另测工艺；原仓库大套件两项已在未改基线重现，未计入成功或本次修改；真实 Acceptance 联验待合后。",
+          "checks": [
+            "native"
+          ]
+        },
+        {
+          "rule": "把新增原鉴权浏览器回归登记进既有长正确性预算，仍精确选入 PostgreSQL，不加 worker 或改变测试分类政策。",
+          "source": "Full 45883912914 非数据库实际断言与现行 canonical 选择规范；原 M02-02 施工授权。",
+          "initialization": "只把本新用例列入既有 test-suite-plan 注册表；无迁移、fixture 事实、权限、CI 工具或全局预算变更。",
+          "dateAndPermission": "原授权浏览器已经使用隔离 PostgreSQL；范围是同一规范下的长期测试配置，工作日期和权限不变。",
+          "writes": [
+            "scripts/test-suite-plan.mjs#LONG_CORRECTNESS_TESTS"
+          ],
+          "reads": [
+            "scripts/test-execution-config.mjs#correctnessTimeoutMs",
+            "vitest.business-chain.config.ts#correctnessTimeoutMs"
+          ],
+          "oldTests": [
+            "tests/unit/full-gate-risk-map.test.ts#runs every consumer of the original shared authenticated App browser"
+          ],
+          "expectation": "原 canonical 风险映射全文件 143/143，新增浏览器采用原长预算并原样覆盖同批返工 3 条。",
+          "checks": [
+            "canonical",
+            "native"
+          ]
+        },
+        {
+          "rule": "旧时效历史夹具保留原版本序列，使用显式当前 0316 原合同生成依赖，仍经原合同 ready 与发厂门禁验证。",
+          "source": "准确 Full 45883912914 PostgreSQL 旧固定时效两个串联发厂失败；未改发布基线 b7db88a3 两个同点 409 的定向对照。",
+          "initialization": "保留历史 0280/0281/0282，仅给会走现有 SourcingService 的隔离 schema 补当前真实 0316 合同生成领取字段和 staging，不写生产，不变迁移脚本。",
+          "dateAndPermission": "当前已审批原合同确实 ready 后仍以真实 QC 与末步骤发厂，核中间批及不合格拒绝、分批正例及幂等；未放松任何权限和合同门禁。",
+          "writes": [
+            "tests/integration/fixed-timeline-postgres.test.ts#0316_sourcing_contract_generation_attempts.sql"
+          ],
+          "reads": [
+            "apps/api/migrations/0316_sourcing_contract_generation_attempts.sql",
+            "apps/api/src/production-platform/factory-flow-service.ts#batchDispatch",
+            "apps/api/src/sourcing/sourcing-contract-service.ts#generateIfReady"
+          ],
+          "oldTests": [
+            "tests/integration/fixed-timeline-postgres.test.ts#terminal-only dispatch"
+          ],
+          "expectation": "同一旧套件 15/15，包含绣→印和印→绣两条旧红，原各发厂/QC/数量/重试断言均保留。新增一条原合同已就绪的断言。",
+          "checks": [
+            "native"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "id": "native",
+          "kind": "tests",
+          "command": "bash /workspace/scratch/m02-02-evidence/contract-and-budget/native.sh",
+          "status": "passed",
+          "exitCode": 0,
+          "testedHead": "2c221cc2a7d7b1784bf3c9e626843821372eddb7",
+          "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
+          "context": "Node22 and isolated PostgreSQL with Chromium; existing long correctness config over normal server.ts QC plus original timeline full suite including 2 real contract/dispatch cases.",
+          "startedAt": "2026-11-26T19:53:40.720886+00:00",
+          "endedAt": "2026-11-26T19:54:40.801965+00:00",
+          "log": "/workspace/scratch/m02-02-evidence/contract-and-budget/native.log",
+          "logSha256": "f0a7672bc2d3d4042b301599b39d851e5b307ca8a8d618ebef350f19c542ed9f",
+          "passed": 18,
+          "failed": 0,
+          "skipped": 0,
+          "resultReports": [
+            {
+              "format": "vitest-json",
+              "sha256": "93ecc2c13ed59f77ea38336a75d004e4bcf7b81bff519e87443952184b56fd9d"
+            }
+          ]
+        },
+        {
+          "id": "canonical",
+          "kind": "tests",
+          "command": "bash /workspace/scratch/m02-02-evidence/contract-and-budget/canonical.sh",
+          "status": "passed",
+          "exitCode": 0,
+          "testedHead": "2c221cc2a7d7b1784bf3c9e626843821372eddb7",
+          "sourceFingerprint": "526d0fdc0722fcc972510e071c8f0ef7decc79d9972007b2f6739b21fde68f92",
+          "context": "Node22 / exact original canonical Full plan selects this browser suite using established long correctness config; entire risk mapping unit file.",
+          "startedAt": "2026-11-26T19:54:11.454025+00:00",
+          "endedAt": "2026-11-26T19:54:12.609758+00:00",
+          "log": "/workspace/scratch/m02-02-evidence/contract-and-budget/canonical.log",
+          "logSha256": "8b53f072e4bcb858e561fd2c4a6c8ed9ce010963fe278198d9505527b929ac86",
+          "passed": 143,
+          "failed": 0,
+          "skipped": 0,
+          "resultReports": [
+            {
+              "format": "vitest-json",
+              "sha256": "5898779dd510823dc0a9119ea125d39b5d59a8965b61da416cea0c86224ce95a"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
