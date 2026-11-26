@@ -122,6 +122,8 @@ Root 从原收货批次更正款号时，`receiving-service.ts` 在锁内核对�
 
 `cockpit-fixed-schedule.tsx`负责原目标差/独立责任/物理跨度的紧凑格式和可见live数值展示，不调用API、不持有授权缓存、不写时间或状态。原`CockpitDetail`测量真实七行视口并在同一网格约束单据/记录，不强制固定短包装高度或把资料藏在上排内部滚动。`components.tsx`仅聚合原授权导航；`production-display-context.ts`复用原本地返回地址验证，填报继续走原服务的权限/提交恢复。
 
+桌面 `DesktopNavigation` 在“大货产前准备”的授权目的地只有客户报价协作时，在原组位置提供直接链接。组无授权入口时隐藏，包含其他入口时沿原展开。报价页面沿原路由和岗位权限，移动端从原“更多”进入。
+
 ### R5-04：本单时间核心
 
 `order-time-plan.ts`保存一份本单用时/日历/提醒及完整原公司对应项，`fixed-work-definition.ts`把新格式映射到原work职责；没有新格式的旧快照保持原值。`fixed-timeline-targets.ts`共用原DAG及计时日历完成正反向运算，内含交接不重复、并行取必要分支最晚，`order-time-schedule.ts`仅把明确适用路线和临时条件交给它，不制造R或A。
