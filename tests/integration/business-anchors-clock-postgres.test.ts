@@ -335,7 +335,7 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
    await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const blockedBy=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
    const waiting=async()=>(await f.db.query(`SELECT pid FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))
-      AND wait_event_type='Lock' AND wait_event='advisory'`,[blockedBy])).rows;
+      AND application_name=$2 AND wait_event_type='Lock' AND wait_event='advisory'`,[blockedBy,f.db.options.application_name])).rows;
    recovery.start();
    await vi.waitFor(async()=>expect(await waiting()).toHaveLength(1),{timeout:5000,interval:30});
    const started=performance.now();
