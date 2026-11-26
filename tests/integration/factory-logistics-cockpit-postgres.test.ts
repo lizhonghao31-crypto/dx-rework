@@ -54,7 +54,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await flow.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST date-only logistics',
     ...(part===null?{}:{lines:[{lineId:state.lines[0]!.lineId,quantity:part}]})},randomUUID());
   }
-  const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id as string;
+  const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0]?.production_order_id as string;
+  if(!productionId&&dispatchParts?.length!==0)throw Error('TEST original production should exist after dispatch');
   return {...r,productionId,cuts,day:beijingCalendarDate(businessNow())};
  });
  let sundayScene:string,sundayReady:Awaited<ReturnType<typeof prepare>>;
@@ -250,6 +251,39 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await inspections()).find(row=>row.receiptId===receiveA)).toMatchObject({quantity:275,inspected:true,quantityVersion:revised.quantityVersion});
   });
  });
+ it('Acceptance R5 rejects the original no-selection receiving route before native dispatch and shipment',async()=>{
+  const ctx=await context('2026-11-25T09:00:00.000Z'),r=await prepare(ctx.run,1,false,500,[]);
+  await ctx.run(async()=>{
+   const closure=new ProductionClosureService(f.db),service=new ReceivingService(f.db,undefined,undefined,closure,{allowLegacyStyleInput:true});
+   const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+   const cut=r.cuts[0].cutting_order_id as string;
+   const style=(await f.db.query('SELECT formal_style_no FROM current_cutting_style_options WHERE cutting_order_id=$1',[cut])).rows[0]!.formal_style_no;
+   const body={documentQuantity:280,actualQuantity:280,attachmentIds:[await f.image(warehouse)]};
+   const counts=async()=>(await f.db.query(`SELECT (SELECT count(*)::int FROM receiving_receipts WHERE cutting_order_id=$1) AS receipts,
+    (SELECT count(*)::int FROM sourcing_production_receipt_links JOIN receiving_receipts USING(receipt_id) WHERE cutting_order_id=$1) AS links`,[cut])).rows[0];
+   await expect(service.create(warehouse,{...body,styleNo:style},randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(service.create(warehouse,{...body,cuttingOrderId:cut},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await counts()).toEqual({receipts:0,links:0});
+   const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
+   await flow.dispatch(warehouse,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST native actual dispatch'},randomUUID());
+   await expect(service.create(warehouse,{...body,cuttingOrderId:cut},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await counts()).toEqual({receipts:0,links:0});
+   const productionId=(await flow.read(f.root,r.id)).currentProduction!.productionId;
+   await ship({productionId,day:r.day},null,[500]);
+   const receipt=await service.create(warehouse,{...body,cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null},randomUUID());
+   expect(await counts()).toEqual({receipts:1,links:1});
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{received:280,remaining:220}}]);
+   const pending=await service.pending(warehouse,{page:1,search:'',status:'open'});
+   expect(pending.items).toContainEqual(expect.objectContaining({identity:expect.objectContaining({orderId:r.id}),balance:expect.objectContaining({received:280,remaining:220})}));
+   const update={cuttingOrderId:cut,receivingBatchId:receipt.value.receivingBatchId,source:'jiashun' as const,actualQuantity:220};
+   await expect(service.createRepeated(warehouse,{...update,productionOrderId:productionId,factoryDecisionId:randomUUID()},randomUUID())).rejects.toMatchObject({statusCode:409});
+   const last=await service.createRepeated(warehouse,{...update,productionOrderId:productionId,factoryDecisionId:null},randomUUID());
+   expect(await counts()).toEqual({receipts:2,links:2});
+   expect((await garmentQuality(f.db,r.id)).map(row=>row.receiptId).sort()).toEqual([receipt.value.receiptId,last.value.receiptId].sort());
+   expect((await service.pending(warehouse,{page:1,search:'',status:'collected'})).items.find(item=>item.identity.orderId===r.id)?.balance)
+    .toMatchObject({received:500,remaining:0});
+  });
+ },testExecutionConfig.correctnessTimeoutMs);
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{
   const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST current factory after full transfer',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory zero allocation'}));

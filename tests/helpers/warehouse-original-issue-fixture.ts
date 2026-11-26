@@ -14,10 +14,12 @@ import {TodoProjectionService} from '../../apps/api/src/todos/projection-service
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import type {businessAnchorFixture} from './business-anchor-fixture.js';
 import {prepareRewashSettings} from './order-time-rewash-fixture.js';
+import type {NativeTestFabricFixture} from './production-readiness-fixture.js';
 
 /** Actual publishes, assignment, approval and original investment. Caller
  * chooses when to exercise the warehouse's first real incoming batch. */
-export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{fabricPurchase?:boolean;receiptBeforeFormal?:boolean}){
+export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof businessAnchorFixture>>,options?:{fabricPurchase?:boolean;receiptBeforeFormal?:boolean;
+ fabricPurchaseQuantity?:number;exerciseFabric?:NativeTestFabricFixture}){
  await prepareRewashSettings(f);
  const root=f.root,warehouse=f.people.warehouse!,primary=f.people.merchandiser!;
  const capabilities=(await f.db.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='sample_designer'")).rows.map(row=>row.capability);
@@ -54,7 +56,7 @@ export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof 
   const now=businessNow().toISOString();
   await preparation.record(primary,source,{kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'partial',occurredAt:now,
    note:'TEST procurement is not available stock',quantities:[{lineId:null,materialId:accessory.materialId,name:accessory.name,quantity:520,unit:'米'},
-    ...(options?.fabricPurchase?[{lineId:null,materialId:material.materialId,name:material.name,quantity:520,unit:'米'}]:[])],
+    {lineId:null,materialId:material.materialId,name:material.name,quantity:options?.fabricPurchaseQuantity??520,unit:'米'}],
    evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
   const originalBatch=(task:Awaited<ReturnType<typeof preparation.warehouseReceiptWork>>[number])=>({kind:task.kind,scopeRef:task.scopeRef,materialId:task.materialId,lineId:task.lineId,unit:'米',supplierId:task.basis.supplierId,
    investment:task.purchase.original,materialFingerprint:task.basis.adoptedRef,expectedReceiptVersion:0,quantity:'500',occurredAt:now,
@@ -73,12 +75,20 @@ export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof 
    lines:[{formalPoNo:style+'-PO1',color:'黑',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:300}]},
     {formalPoNo:style+'-PO2',color:'白',customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:200}]}]}),randomUUID(),sourceId);
   const {id}=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true,preshrink:'无需预缩',designerActor:designer,
-   existingOrder:{orderId:order.productionOrderId,sourceId},adoptSourceMaterials:true});
+   existingOrder:{orderId:order.productionOrderId,sourceId},adoptSourceMaterials:true,nativeFabric:{nativeFabric:options?.exerciseFabric??(async({service,bulk,warehouse,orderId})=>{
+    const resource={kind:'order' as const,id:orderId};
+    const work=(await service.warehouseReceiptWork(warehouse,resource)).find(row=>row.materialId===material.materialId)!;
+    const state=await service.recordWarehouseReceiptBatch(warehouse,resource,originalBatch(work),randomUUID());
+    const lot=state.history.find(row=>row.warehouseReceipt?.materialId===material.materialId)!;
+    await bulk.reportFabric(warehouse,orderId,{expectedReportId:null,expectedReceiptVersion:0,material:material.name,
+     arrivedAt:lot.occurredAt,inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST real scoped lot inspection',
+     receiptBatches:[{materialId:material.materialId,receipt:{recordId:lot.recordId,version:lot.version}}]},randomUUID());
+   })}});
   const resource={kind:'order' as const,id};
   const before=await bulk.read(warehouse,id),scoped=before.materials!.items.find(item=>item.name===accessory.name)!;
   const tasks=await preparation.warehouseReceiptWork(warehouse,resource),work=tasks.find(item=>item.materialId===accessory.materialId)!;
   const batch=originalBatch(work),fabric=tasks.find(item=>item.materialId===material.materialId);
   return {scene,id,warehouse,primary,bulk,preparation,scope:scoped,resource,batch,work,accessory,now,instructionVersion:before.instructionVersion!,
-   fabricBatch:fabric?originalBatch(fabric):null,preorderReceipt};
+   fabricBatch:options?.fabricPurchase&&fabric?originalBatch(fabric):null,preorderReceipt};
  });
 }

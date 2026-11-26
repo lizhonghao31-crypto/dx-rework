@@ -31,7 +31,7 @@ import {readJourneyCandidateCohort} from './journey-snapshot-reads.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
 import {materialIssueOptions,freezeMaterialIssueBasis,originalMaterialIssueHistory,readMaterialIssueDestination} from './warehouse-material-issue.js';
 import {warehouseIssueFits} from './warehouse-issue-allocation.js';
-import {warehouseFabricReportLots} from './warehouse-fabric-report-lots.js';
+import {readWarehouseFabricInspection,warehouseFabricReportLots,warehouseFabricScopesCovered} from './warehouse-fabric-report-lots.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 type DB=Pick<Pool|PoolClient,"query">;
 const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION_CONFLICT",message,409);};
@@ -398,8 +398,19 @@ export class BulkPreparationService {
    if(!(await this.gates(db,id)).parallel)fail('旧路线保留原办理方式，不能自动套用新验布规则');
    let receiptRef:{recordId:string;version:number}|null=null;
    const adopted=await preparationAdoption(db,{kind:'order',id});
+   const now=businessNow().toISOString();
+   const inspection=adopted?await readWarehouseFabricInspection(db,id,input.inspectedAt??now,now):null;
    if(input.receiptBatches&&!adopted)fail('本单尚无可核的原验布及收料依据');
-   if(adopted){
+   if(inspection){
+    if(!inspection.evidence.eligible)fail(inspection.evidence.reasons.join('；'));
+    const currentReceipt=await currentPreparationMaterial(db,id,'fabric_receipt');
+    if((currentReceipt?.version??0)!==(input.expectedReceiptVersion??0))fail('实际到仓记录已变化，请刷新当前物料版本');
+    if(input.arrivedAt&&input.arrivedAt!==inspection.evidence.firstReceiptAt)fail('记录的到仓时间与原有效实收批次不符，不能从验布表订正到仓');
+    if(input.result||input.inspectedAt||input.receiptBatches){
+     const lots=input.receiptBatches&&input.inspectedAt?await warehouseFabricReportLots(db,id,input.receiptBatches,input.inspectedAt,now):null;
+     if(!lots||!warehouseFabricScopesCovered(inspection.scopes,lots))fail('验布须选择各适用物料及范围的本单当前实际批次，不能使用已订正或其它物料的批次');
+    }
+   }else if(adopted){
     const priorReceipt=await currentPreparationMaterial(db,id,'fabric_receipt');
     if((priorReceipt?.version??0)!==(input.expectedReceiptVersion??0))fail('实际到仓记录已变化，请刷新当前物料版本');
     if(input.receiptBatches&&(!priorReceipt||!input.inspectedAt||!await warehouseFabricReportLots(db,id,input.receiptBatches,input.inspectedAt,businessNow().toISOString())))
@@ -411,7 +422,8 @@ export class BulkPreparationService {
    if((prior.report?.reportId??null)!==input.expectedReportId)fail('验布报告已更新，请刷新');
    if(prior.report?.receiptBatches&&!input.receiptBatches)fail('原报告引用了实际收料批次，请重新选择本次验布范围');
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,corrects_event_id,payload)
-     VALUES($1,'order',$2,'bulk_fabric_report',$3,$4,$5,$6,$7)`,[randomUUID(),id,actor.actorId,input.inspectedAt,input.inspectedAt?'补报未核实':'缺失',input.expectedReportId,JSON.stringify({...input,...(receiptRef?{receiptRef}:{}),snapshotId:prior.report?.snapshotId??(await this.gates(db,id)).snapshotId})]);
+     VALUES($1,'order',$2,'bulk_fabric_report',$3,$4,$5,$6,$7)`,[randomUUID(),id,actor.actorId,input.inspectedAt,input.inspectedAt?'补报未核实':'缺失',input.expectedReportId,JSON.stringify({...input,...(receiptRef?{receiptRef}:{}),
+      ...(inspection?{warehouseInspection:true,arrivedAt:inspection.evidence.firstReceiptAt}:{}),snapshotId:prior.report?.snapshotId??(await this.gates(db,id)).snapshotId})]);
    await this.sync(db,actor,id);
   });
  }
