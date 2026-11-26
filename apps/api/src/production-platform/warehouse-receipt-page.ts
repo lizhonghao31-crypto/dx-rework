@@ -11,7 +11,7 @@ import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHa
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
-import {issuedOrderNumber} from './order-number-repository.js';
+import {issuedOrderNumbers} from './order-number-repository.js';
 
 type Source={kind:'source'|'order';id:string;order_id:string|null;source_id:string|null;order_number:string|null;customer_code:string|null;
  source_style_no:string|null;workbench_generated_number:boolean|null;workbench_number_root_id:string|null;
@@ -93,8 +93,15 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    for(const row of history){
     const key=`${row.resource_kind}:${row.resource_id}`,values=indexed.get(key)??[];values.push(row);indexed.set(key,values);
    }
+   const resolvedNumbers=await issuedOrderNumbers(db,context.map(scope=>({
+    source:scope.source_id&&scope.source_style_no?{
+     source_id:scope.source_id,design_style_no:scope.source_style_no,workbench_generated_number:scope.workbench_generated_number===true,
+     workbench_number_root_id:scope.workbench_number_root_id,
+    }:null,
+    order:scope.order_id&&scope.order_number?{source_id:scope.source_id,design_style_no:scope.order_number}:null,
+   })));
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
-   for(const scope of context){
+   for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
     const materialHistory=nativeRows.map(row=>({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
      resource:{kind:row.resource_kind,id:row.resource_id},recordId:row.record_id,version:row.version,occurredAt:iso(row.occurred_at),
@@ -105,10 +112,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
     const work=deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined);
     if(!work.length)continue;
-    const orderNumber=await issuedOrderNumber(db,scope.source_id&&scope.source_style_no?{
-     source_id:scope.source_id,design_style_no:scope.source_style_no,workbench_generated_number:scope.workbench_generated_number===true,
-     workbench_number_root_id:scope.workbench_number_root_id,
-    }:null,scope.order_id&&scope.order_number?{source_id:scope.source_id,design_style_no:scope.order_number}:null);
+    const orderNumber=resolvedNumbers[scopeIndex]??null;
     const matches=(value:string|null|undefined)=>value?.toLowerCase().includes(search);
     const matchesLine=(line:Source['lines'][number])=>[line.poNumber,line.formalStyleNo,line.temporaryStyleNo].some(matches);
     const matchesOrder=[orderNumber,scope.order_number,scope.source_style_no].some(matches);

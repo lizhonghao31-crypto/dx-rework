@@ -40,17 +40,34 @@ function normalizedCustomerCode(value: string) {
 
 const formatNumber = (prefix: string, number: bigint) => prefix + '-' + String(number).padStart(3, '0');
 
-/** Use this only for an already authorized original source/order candidate. */
-export async function issuedOrderNumber(db: Reader, source: {
-  source_id: string; design_style_no: string; workbench_generated_number?: boolean; workbench_number_root_id?: string | null;
-} | null, order: {source_id: string | null; design_style_no: string} | null) {
-  if (!source) return null;
-  if (order && (order.source_id !== source.source_id || order.design_style_no !== source.design_style_no)) return null;
-  if (source.workbench_generated_number) return source.design_style_no || null;
-  if (order || !source.workbench_number_root_id) return null;
-  return (await db.query<{ design_style_no: string }>(`SELECT root.design_style_no FROM digital_development_revision_sources revision
+type IssuedSource={source_id:string;design_style_no:string;workbench_generated_number?:boolean;workbench_number_root_id?:string|null};
+type IssuedOrder={source_id:string|null;design_style_no:string};
+type IssuedNumberCandidate={source:IssuedSource|null;order:IssuedOrder|null};
+
+/** Resolve only already authorized candidates, with one lookup for all requested revision roots. */
+export async function issuedOrderNumbers(db:Reader,candidates:readonly IssuedNumberCandidate[]){
+  const roots=new Map<string,string>();
+  for(const {source,order} of candidates){
+    if(source&&!order&&!source.workbench_generated_number&&source.workbench_number_root_id)
+      roots.set(source.source_id,source.workbench_number_root_id);
+  }
+  const linked=roots.size?(await db.query<{source_id:string;root_id:string;design_style_no:string}>(`
+    SELECT revision.source_id,root.source_id AS root_id,root.design_style_no
+    FROM jsonb_to_recordset($1::jsonb) AS target(source_id uuid,root_id uuid)
+    JOIN digital_development_revision_sources revision ON revision.source_id=target.source_id AND revision.root_source_id=target.root_id
     JOIN digital_production_sources root ON root.source_id=revision.root_source_id AND root.workbench_generated_number
-    WHERE revision.source_id=$1 AND root.source_id=$2`, [source.source_id, source.workbench_number_root_id])).rows[0]?.design_style_no ?? null;
+  `,[JSON.stringify([...roots].map(([source_id,root_id])=>({source_id,root_id})))] )).rows:[];
+  const bySource=new Map(linked.map(row=>[row.source_id,row]));
+  return candidates.map(({source,order})=>{
+    if(!source||order&&(order.source_id!==source.source_id||order.design_style_no!==source.design_style_no))return null;
+    if(source.workbench_generated_number)return source.design_style_no||null;
+    const root=order?undefined:bySource.get(source.source_id);
+    return root&&root.root_id===source.workbench_number_root_id?root.design_style_no:null;
+  });
+}
+
+export async function issuedOrderNumber(db:Reader,source:IssuedSource|null,order:IssuedOrder|null){
+  return (await issuedOrderNumbers(db,[{source,order}]))[0]??null;
 }
 
 export class OrderNumberRepository {

@@ -2,51 +2,51 @@
   "version": 1,
   "base": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
   "risk": "full",
-  "sourceFingerprint": "21004b0b5ee3debeb94af3ecee98a830ff8b07175284e6d6274798819ba2c1a4",
+  "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r1-evidence/pg.sh",
+      "command": "bash /workspace/scratch/r1-evidence/review-fix/pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
-      "sourceFingerprint": "21004b0b5ee3debeb94af3ecee98a830ff8b07175284e6d6274798819ba2c1a4",
-      "context": "Corrected candidate worktree on exact release base, Node 22.22.2, PostgreSQL 16 isolated CI fixtures, one Vitest worker, system Chromium and runtime-generated test credentials.",
-      "startedAt": "2026-11-26T05:16:31.189803+00:00",
-      "endedAt": "2026-11-26T05:18:14.772790+00:00",
-      "log": "/workspace/scratch/r1-evidence/native.log",
-      "logSha256": "4524470a2d4f9c7a756766c0e30426da48a943d18207aa00bad663398675d68e",
+      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
+      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
+      "context": "Actual corrected R1 business tree with batched number resolution, real PostgreSQL and Chromium and simultaneous original plus structured reports.",
+      "startedAt": "2026-11-26T05:41:56.795813+00:00",
+      "endedAt": "2026-11-26T05:43:31.222054+00:00",
+      "log": "/workspace/scratch/r1-evidence/review-fix/native.log",
+      "logSha256": "ff74ff7eb5728c4e17b481ff794aa06b4cb0f8dd5f959f2cf0fce37f8e0d9cf2",
       "passed": 5,
       "failed": 0,
       "skipped": 86,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1d2eddb2ce5ab340641640f6936b39b14c70ed0a1536efb438f6d3f1a33f12aa"
+          "sha256": "785d4a1f210fa0626e0e3d6b73d067627d988e04f5546262e3a0b8a5a2c79a9d"
         }
       ]
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/.bin/node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=/workspace/scratch/r1-evidence/unit.json tests/unit/config.test.ts tests/unit/digital-detail-route.test.ts tests/unit/warehouse-craft-movement.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/warehouse-craft-factory-basis.test.ts",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/.bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile.json=/workspace/scratch/r1-evidence/review-fix/unit.json tests/unit/config.test.ts tests/unit/digital-detail-route.test.ts tests/unit/warehouse-craft-movement.test.ts tests/unit/warehouse-craft-rework-return.test.ts tests/unit/warehouse-craft-factory-basis.test.ts tests/unit/warehouse-issued-order-number.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
-      "sourceFingerprint": "21004b0b5ee3debeb94af3ecee98a830ff8b07175284e6d6274798819ba2c1a4",
-      "context": "Corrected candidate on actual release base, Node 22.22.2, one Vitest worker, startup config and original warehouse read/write guards",
-      "startedAt": "2026-11-26T05:16:31.192009+00:00",
-      "endedAt": "2026-11-26T05:16:35.446603+00:00",
-      "log": "/workspace/scratch/r1-evidence/unit.log",
-      "logSha256": "953b4ddd516e42a37b4ee31e0a995ea73b046b57f29bafd63a9a2012ac1aff93",
-      "passed": 78,
+      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
+      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
+      "context": "Config, authorization, warehouse custody and one-query assertions for representative 1/15/50 revision counts.",
+      "startedAt": "2026-11-26T05:41:56.801371+00:00",
+      "endedAt": "2026-11-26T05:42:00.019901+00:00",
+      "log": "/workspace/scratch/r1-evidence/review-fix/unit.log",
+      "logSha256": "5ae85e2f12f7c4779b703c9537b79483c0df994cf32b3679d1a1f8329ae4fb68",
+      "passed": 82,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2197f5c670d64e8576efe7c7111b47961d3c3166a98c239b9834a826c9a885b3"
+          "sha256": "2bd2551b1c4e798a4de3a0e43362facfde37ee4d8c3adf34c40d240f70d88bbf"
         }
       ]
     },
@@ -56,13 +56,13 @@
       "command": "bash -c 'export PATH=/workspace/.dx-cloud/toolchain/node_modules/.bin:$PATH\nset -e\nnpm run lint\nnpm run typecheck\nnpm run build --workspaces --if-present\nnpm run secret:scan\nbash -n scripts/deploy/lib.sh\ngit diff --check'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9cae2f684d5cbf6e3f10f0248be78b530bf5aeac",
-      "sourceFingerprint": "21004b0b5ee3debeb94af3ecee98a830ff8b07175284e6d6274798819ba2c1a4",
-      "context": "Corrected candidate on actual release base, Node 22.22.2 and npm 10.9.9, lint, types, builds and worktree secret scanning",
-      "startedAt": "2026-11-26T05:16:31.189527+00:00",
-      "endedAt": "2026-11-26T05:18:18.318324+00:00",
-      "log": "/workspace/scratch/r1-evidence/static.log",
-      "logSha256": "b9db62d7d96c496ef2a0b1cfe11be0d0bae8123d710651473c6f04da51fcc536"
+      "testedHead": "8719a79760e01f12a091aaa9f002b02623fe516c",
+      "sourceFingerprint": "d4aff4aeeddb0dceb91a0cdafa2749832db0d192c3c172d38ca2d6a42a2f9312",
+      "context": "Exact corrected R1 version, Node 22, existing lint/type/build/bash and scanner rules.",
+      "startedAt": "2026-11-26T05:41:56.797035+00:00",
+      "endedAt": "2026-11-26T05:43:34.329261+00:00",
+      "log": "/workspace/scratch/r1-evidence/review-fix/static.log",
+      "logSha256": "e641dd534e79d35029a5f078e99c754c00093d301951731c09aa359504813a8c"
     }
   ],
   "rules": [
@@ -113,7 +113,9 @@
         "apps/web/src/bulk-preparation-panel.tsx#warehouseMaterials",
         "apps/web/src/bulk-materials-panel.tsx#BulkMaterialsPanel",
         "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "apps/api/src/production-platform/order-number-repository.ts#issuedOrderNumbers",
+        "tests/unit/warehouse-issued-order-number.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/warehouse-assigned-resources.ts#assignedWarehousePreparationResources",
@@ -129,7 +131,7 @@
       ],
       "initialization": "沿原当前仓库指派、活跃订单、有效投料和实收批次。老款号仍可查，显示明示为款号，缺失的编号保持待核。",
       "dateAndPermission": "有权候选先过滤再分页，同快照总数，实际发料仍核制单、批准厂、原实收批次和余额。无权不扩大候选。",
-      "expectation": "两个 PO 均命中同一原批次一行，保留分页 total；普通仓管从原列表带母单 UUID 进入，按真实批次发出并返回同一搜索；原详情读取匹配的新余额。",
+      "expectation": "两个 PO 均命中同一原批次一行，保留分页 total；普通仓管从原列表带母单 UUID 进入，按真实批次发出并返回同一搜索；原详情读取匹配的新余额。 独立复版编号在同批对已授权来源查询，1／15／50个对象只读取一次并绑定准确原根；仍从同一全集筛选及分页。",
       "checks": [
         "native",
         "unit",
