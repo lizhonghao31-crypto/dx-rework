@@ -10,8 +10,11 @@ import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-bro
 import {admittedOrderFixture} from '../helpers/order-time-rewash-fixture.js';
 import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
+import {exerciseMaterialVerification} from '../helpers/material-verification-guards.js';
 import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+import {publishedTechnicalArtifact} from '../../apps/api/src/production-platform/development-technical-repository.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
@@ -207,11 +210,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await snapshot(item.orderId,item.sourceId)).toEqual(before);
   }finally{await tab.close();}
  });
- it('blocks one native instruction for a proved B PO gap while A stays unknown and retains the original handoff',async()=>{
-  const f=h.f,settings=new OrderTimeSettingsService(f.db,true,true),previous=await settings.read(f.root);
+ const mixedOrder=async(framework:boolean,verifyLegacyMaterials=true)=>{
+  const f=h.f;
   const forms=new DigitalDevelopmentService(f.db,true,h.patternOrders),identity=new DigitalProductionIdentityService(f.db,true),main=f.people.merchandiser!,scene=await f.scene('2026-11-17T08:00:00.000Z'),style='TEST-mixed-'+randomUUID();
   const template=await f.runtime.run(legacy.scene,f.root,async()=> (await forms.read(f.root,legacy.sourceId)).document!);
-  await settings.save(f.root,{expectedVersion:previous.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  if(framework){
+   const settings=new OrderTimeSettingsService(f.db,true,true),previous=await settings.read(f.root);
+   await settings.save(f.root,{expectedVersion:previous.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  }
   const item=await f.runtime.run(scene,f.root,async()=>{
    // A migrated pre-rule line never had a customer promise. Preserve it as
    // missing at creation, never overwrite a real current date or its guard.
@@ -221,9 +227,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      {formalPoNo:style+'-B',color:'白',customerWarehouseArrivalDate:'2027-03-03',sizes:[{size:'M',quantity:2}]},
     ]}),{slaBeforePreparation:true,scenarioOwnedPreparation:true});
    const source=await identity.createSource(f.root,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
-   const draft=await forms.save(f.root,source.sourceId,{expectedVersion:0,document:{...template,orderDate:null,returnDate:null,files:[{attachmentId:await f.image(f.root),kind:'款图'}]}},randomUUID());
+   const draft=await forms.save(f.root,source.sourceId,{expectedVersion:0,document:{...template,orderDate:null,returnDate:framework?null:'2027-03-03',files:[{attachmentId:await f.image(f.root),kind:'款图'}]}},randomUUID());
    const price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
-   await forms.publish(f.root,source.sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+   const published=await forms.publish(f.root,source.sourceId,draft.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+   if(!framework&&verifyLegacyMaterials){
+    const execution=new DevelopmentExecutionService(f.db,true,h.patternOrders),clerk=f.people['development-clerk']!;
+    const items=published.document!.materials.filter(row=>row.requiredThisRound).map(row=>({materialId:row.materialId,physical:true,quantity:true,color:true,specification:true}));
+    const verified=await exerciseMaterialVerification(f.db,execution,clerk,f.root,source.sourceId,published.taskId!,items,false);
+    await execution.check(clerk,source.sourceId,{...verified,items,result:'通过',note:'TEST 原文员已逐项核实'},randomUUID());
+    const sourcePlan=await new OrderTimePlanRepository(f.db).current({kind:'source',id:source.sourceId});
+    expect(sourcePlan?.input.plan.company.framework).toBeUndefined();
+    expect(sourcePlan?.input.plan.company.nodes.bulk_cutting?.minutes).toBe(60);
+   }
    const orderId=order.productionOrderId;
    await identity.attachSource(f.root,orderId,source.sourceId,randomUUID());
    const current=await service().read(main,orderId);
@@ -232,6 +247,60 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await productionReadinessFixture(f.db,f.root,orderId,f.people['pattern-room-worker']!.actorId,f.people.warehouse!);
    return {orderId,sourceId:source.sourceId,scene,bLine:order.lines[1]!.lineId};
   });
+  return {...item,style};
+ };
+ it('treats a legacy two-PO instruction as unknown when B only has a past promise and a missing native deadline',async()=>{
+  const f=h.f,main=f.people.merchandiser!,item=await mixedOrder(false,false),operation=await request(item);
+  await f.advance(item.scene,'2027-03-04T08:00:00.000Z');
+  const unproved=await f.runtime.run(item.scene,f.root,()=>h.orderTimeRequests!.check(main,operation));
+  expect(unproved.feasibility).toBe('unknown');
+  expect(unproved.coverage).toContain('开发纸样：本工作用时尚未采用');
+  expect(unproved.customerDates).toEqual([{po:item.style+'-A',date:null},{po:item.style+'-B',date:'2027-03-03'}]);
+  expect(instructionTimeInsufficient(unproved)).toBe(false);
+  expect(unproved.instructionLegacyGaps).toBeUndefined();
+ });
+ it('blocks a legacy two-PO instruction for a proved B gap while A is undated',async()=>{
+  const f=h.f,main=f.people.merchandiser!,item=await mixedOrder(false);
+  await f.runtime.run(item.scene,f.root,async()=>{
+   const {artifact}= (await publishedTechnicalArtifact(f.db,item.sourceId,1))!;
+   await new DevelopmentExecutionService(f.db,true,h.patternOrders).complete(f.root,item.sourceId,{taskId:artifact.taskId!,
+    artifactRef:{id:artifact.artifactSetId,version:artifact.version,scopeRef:'整款'},attachmentIds:[],note:'TEST original paper pattern completion'},randomUUID());
+  });
+  const operation=await request(item);
+  await f.advance(item.scene,'2027-03-04T08:00:00.000Z');
+  const prior=await snapshot(item.orderId,item.sourceId);
+  h.setCollectionScene(item.scene);
+  const path=`/api/digital-production/orders/${item.orderId}/instruction/publish`;
+  const tab=await h.open(main.actorId,1165,{},`/ui/digital-production?instruction=${item.orderId}`);
+  try{
+   const preview=await tab.context.request.post(h.base+'/api/digital-production/order-time/check',{data:{operation}});
+   expect(preview.status(),await preview.text()).toBe(200);
+   const check=OrderTimeCheckResultSchema.parse(await preview.json());
+   expect(check).toMatchObject({feasibility:'unknown',customerDates:[{po:item.style+'-A',date:null},{po:item.style+'-B',date:'2027-03-03'}]});
+   expect(check.plan.company.framework).toBeUndefined();
+   expect(check.framework).toBeUndefined();
+   expect(check.instructionLegacyGaps).toEqual([{scopeRef:`po:${item.bLine}`,date:'2027-03-03',earliestAt:'2027-03-04T20:00:00.000Z',lateMinutes:1680}]);
+   expect(instructionTimeInsufficient(check)).toBe(true);
+   expect(check.coverage).toContain(item.style+'-A的客户交期尚未填写');
+   expect(check.coverage).toContain(item.style+'-B 客户交期（原目标 2027-03-03）已证实不足，至少晚 1680 分钟');
+   expect(await snapshot(item.orderId,item.sourceId)).toEqual(prior);
+   const rejected=tab.page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===path);
+   await tab.page.getByRole('button',{name:'发布有效制单',exact:true}).click();
+   const response=await rejected;
+   expect(response.status(),JSON.stringify({coverage:check.coverage})).toBe(409);
+   const error=(await response.json()).error;
+   expect(error.code).toBe('ORDER_TIME_REQUEST_REQUIRED');
+   for(const suffix of ['-A','-B'])expect(error.message).toContain(item.style+suffix);
+   await tab.page.waitForURL(url=>url.searchParams.has('timeRequest'));
+   const requestId=new URL(tab.page.url()).searchParams.get('timeRequest')!;
+   const handoff=await f.runtime.run(item.scene,f.root,()=>h.orderTimeRequests!.read(f.root,requestId));
+   expect(handoff.state).toBe('needs_designer');
+   expect(handoff.check.instructionLegacyGaps).toEqual(check.instructionLegacyGaps);
+   expect(await snapshot(item.orderId,item.sourceId)).toEqual(prior);
+  }finally{await tab.close();}
+ });
+ it('blocks one native instruction for a proved B PO gap while A stays unknown and retains the original handoff',async()=>{
+  const f=h.f,main=f.people.merchandiser!,item=await mixedOrder(true),style=item.style;
   const operation=await request(item);
   await f.advance(item.scene,'2027-03-04T08:00:00.000Z');
   const prior=await snapshot(item.orderId,item.sourceId);

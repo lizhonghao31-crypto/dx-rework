@@ -125,7 +125,7 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
  return {scopes,lowerBound};
 }
 
-export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>;optionalDevelopmentGoal?:boolean;formalEnds?:Readonly<Record<string,readonly SlaTime[]>>}):OrderTimeCheckResult{
+export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;progress:ReadonlyMap<string,OrderTimeNativeProgress>;sourceVersion:Record<string,unknown>;resource:OrderTimeCheckResult['resource'];styleNo:string;customerDates:OrderTimeCheckResult['customerDates'];canRequest:boolean;canApply:boolean;notBefore?:Readonly<Record<string,SlaAnchor>>;extraSettings?:ReadonlyMap<string,boolean>;optionalDevelopmentGoal?:boolean;compareLegacyInstructionScopes?:boolean;formalEnds?:Readonly<Record<string,readonly SlaTime[]>>}):OrderTimeCheckResult{
  const {value,time,formalEnds}=input,optionalGoal=input.resource.kind==='source'&&input.optionalDevelopmentGoal===true;
  const {scopes,lowerBound}=formalEnds
   ?{scopes:value.scopes.map(scope=>assessRemainingScope(value.route,scope,time,formalEnds[scope.scopeRef]??[],[],optionalGoal)),lowerBound:false}
@@ -134,6 +134,17 @@ export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;pro
  const computable=scopes.length>0&&scopes.every(scope=>scope.feasibility!=='unknown'),compared=scopes.filter(scope=>scope.feasibility!=='not_applicable'),late=computable&&compared.length?Math.max(...compared.map(scope=>scope.lateMinutes??0)):null;
  const insufficient=compared.some(scope=>scope.feasibility==='insufficient');
  const known=computable&&(!lowerBound||insufficient);if(computable&&lowerBound&&!insufficient)coverage.push('在办节点已超时，剩余工作时间尚未确认');
+ // This opt-in is only for native legacy instruction publication with no
+ // shared route gaps. Per-PO forecasts still use the exact original work,
+ // calendar and facts, while the order remains unknown for plan adoption.
+ const legacyScopes=!known&&input.compareLegacyInstructionScopes
+  ?value.route.complete?scopes:orderTimeRemaining({...value,route:{complete:true,missing:[]}},time,input.progress,input.notBefore).scopes
+  :[];
+ const instructionLegacyGaps=legacyScopes.flatMap(scope=>{
+  if(!scope.scopeRef.startsWith('po:')||scope.feasibility!=='insufficient'||scope.lateMinutes===null||!scope.expectedEnd?.at)return [];
+  const goal=value.scopes.find(row=>row.scopeRef===scope.scopeRef)?.customerGoal;
+  return goal?.precision==='date'?[{scopeRef:scope.scopeRef,date:goal.value,earliestAt:scope.expectedEnd.at,lateMinutes:scope.lateMinutes}]:[];
+ });
  const required=computable?Math.max(...scopes.map(scope=>scope.requiredSpanMinutes??0)):null;
  const available=scopes.map(scope=>slaAnchorTime(value.scopes.find(row=>row.scopeRef===scope.scopeRef)!.customerGoal,'客户交期').at).filter((at):at is string=>Boolean(at));
  const catalog=new Map([...ORDER_TIME_NODES,...FRAMEWORK_TIME_NODES].map(node=>[node.key,node]));
@@ -149,5 +160,6 @@ export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;pro
  return {enabled:true,fingerprint:digest({operation:input.sourceVersion,company:value.plan.company,work:value.work,scopes:value.scopes,scenario:time.scenarioId,revision:time.revision}),resource:input.resource,styleNo:input.styleNo,customerDates:input.customerDates,plan:value.plan,rows,coverage,
   feasibility:!known?'unknown':!compared.length?'not_applicable':insufficient?'insufficient':'sufficient',availableMinutes:available.length===scopes.length?Math.min(...available.map(at=>(Date.parse(at)-Date.parse(time.now))/60000)):null,
   requiredMinutes:required,lateMinutes:late,expectedEnd:computable?scopes.reduce((at,scope)=>!at||Date.parse(scope.expectedEnd!.at!)>Date.parse(at)?scope.expectedEnd!.at!:at,null as string|null):null,
+  ...(instructionLegacyGaps.length?{instructionLegacyGaps}:{}),
   forecastQuality:!computable?'unknown':lowerBound?'lower_bound':'conditional',canRequest:input.canRequest,canApply:input.canApply,sourceVersion:input.sourceVersion};
 }

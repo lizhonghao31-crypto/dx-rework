@@ -102,7 +102,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const round=document?.round_number??1,development=document?.document as DevelopmentDocument|null;
  let frameworkRoute:SeriesRoute|undefined;
  let route:Pick<FixedTimelineInput,'work'|'consumers'>,production:OrderTimeProductionRoute|null=null,dates:Array<{po:string;date:string|null}>=[],optionalDevelopmentGoal=false;
- const styleNo=source?.design_style_no??order?.design_style_no??(operation.kind==='direct_order'?operation.input.designStyleNo:''),missing:string[]=[];
+ const styleNo=source?.design_style_no??order?.design_style_no??(operation.kind==='direct_order'?operation.input.designStyleNo:''),missing:string[]=[],missingCustomerDates:string[]=[];
  const adopted=sourceId?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},round):null;
  const kinds=document?.revision?.route_nodes??['development_materials',...developmentSlaRoute(development??{craft:'无',washing:'免洗'},document?.output_kind??'整件样板',2)];
  const built=development?fixedDevelopmentWork(initial,sourceId!,round,kinds,steps(development).map(step=>({...step,stepId:adopted?.input.craftSteps?.find(old=>craftStepIdentity(old)===craftStepIdentity(step))?.stepId??`planned-${round}-${craftStepIdentity(step)}`})),hasBothBuiltinCrafts(steps(development)),development.washing,development.materials.some(material=>material.category==='辅料'&&material.requiredThisRound!==false)):null;
@@ -204,7 +204,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const colorMatching=order?.requires_color_matching??(operation.kind==='direct_order'||operation.kind==='confirm_order'?operation.input.requiresColorMatching:development?.customerOrderDraft?.order.requiresColorMatching);
   frameworkRoute=colorMatching===true?'A':colorMatching===false?'B':undefined;
   if(plan.company.framework&&!frameworkRoute)throw new ApplicationError('VALIDATION_ERROR','请在原单确认是否需要对色',400);
-  for(const line of lines)if(!line.date)missing.push(`${line.po||'本PO'}的客户交期尚未填写`);
+  for(const line of lines)if(!line.date)missingCustomerDates.push(`${line.po||'本PO'}的客户交期尚未填写`);
   const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,hasBothBuiltinCrafts(declaredSteps),dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:line.customerDateVersion??1,...(washing?.get(line.id)?.document?{washing:washing.get(line.id)!.document!.arrangement}:{})})),frameworkRoute,{preorder,keepLegacyGraph:Boolean(priorFramework&&priorScope===undefined)});
   route={work:bulk.work,consumers:bulk.consumers.map(consumer=>({...consumer,lineId:resource?.kind==='order'?consumer.lineId:null}))};
  }else{
@@ -221,7 +221,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   // Keep its immutable evidence; changed dates still face repository guards.
   goals.set(consumer.scopeRef,previous?.precision==='date'&&previous.value===date?structuredClone(previous):{precision:'date',value:date,source:'本单已填写的客户或样板日期'});
  }
- const value=orderTimeInputFromRoute(plan,route,goals,!missing.length,missing,sourceId?{kind:'source',id:sourceId}:resource??undefined);
+ const value=orderTimeInputFromRoute(plan,route,goals,!missing.length&&!missingCustomerDates.length,[...missing,...missingCustomerDates],sourceId?{kind:'source',id:sourceId}:resource??undefined);
  if(materialInvestmentScope!==undefined)value.materialInvestmentScope=materialInvestmentScope;
  if(plan.company.framework){value.factoryCommitments=factoryCommitments;sourceVersion.factoryCommitments=factoryCommitments;}
  if(rewashChanges.length&&(!manager||operation.kind!=='arrangement'||!order||!saved?.input.frameworkPlans))conflict('请由原有权人员在已采用的本单安排中新增返洗工作');
@@ -312,6 +312,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   if(applicable.length&&applicable.every(work=>begunStates.get(work.id)?.all)&&JSON.stringify(original?.overrides[key]??original?.company.nodes[key]??company.nodes[key])!==JSON.stringify(rule))conflict('已开始的节点保留原用时和责任时钟，请调整尚未开始的节点');
  }
  const notBefore:Record<string,SlaAnchor>={...rewashBounds};
+ const addSharedRouteGap=(reason:string)=>{missing.push(reason);value.route.complete=false;value.route.missing.push(reason);};
  const unconfirmedFabric:string[]=[];
  if(development){
   const native=operation.kind==='development_revision'?null:await materialReadiness(db,sourceId!,round),byId=new Map(native?.materials.map(row=>[row.materialId,row])??[]);
@@ -322,10 +323,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    const fabric=bounds.filter(row=>row.material.category!=='辅料'&&!isDevelopmentMaterialPlaceholder(row.material));
    const accessories=bounds.filter(row=>row.material.category==='辅料'&&row.material.designerHasMaterial===false&&!isDevelopmentMaterialPlaceholder(row.material));
    for(const row of fabric)if(!row.date)unconfirmedFabric.push(row.name);
-   for(const row of accessories)if(!row.date){
-    value.route.complete=false;
-    value.route.missing.push(`${row.name}选择了没有实物，请填写预计日期`);
-   }
+   for(const row of accessories)if(!row.date)addSharedRouteGap(`${row.name}选择了没有实物，请填写预计日期`);
    const setBound=(parameterKey:string,rows:typeof bounds,label:string)=>{
     const work=value.work.find(item=>item.parameterKey===parameterKey);
     const latest=rows.flatMap(row=>row.date?[row.date]:[]).sort().at(-1);
@@ -335,7 +333,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    setBound('development_sewing',accessories,'本单已登记的最晚辅料预计，实际车板仍以文员补核为准');
   }else{
    const dates=bounds.flatMap(row=>row.date?[row.date]:[]).sort();
-   for(const row of bounds.filter(row=>!row.date)){value.route.complete=false;value.route.missing.push(`${row.name}尚未到位，请在原单填写预计到位日`);}
+   for(const row of bounds.filter(row=>!row.date))addSharedRouteGap(`${row.name}尚未到位，请在原单填写预计到位日`);
    if(dates.length){const first=value.work.find(work=>work.parameterKey==='development_materials');if(first)notBefore[first.id]={precision:'date',value:dates.at(-1)!,source:'本单已登记的最晚物料到位日'};}
   }
   sourceVersion.materialSupply={readiness:native?.materials??null,expected,...(unconfirmedFabric.length?{unconfirmedFabric}:{})};
@@ -353,7 +351,11 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   value.formalInputs={version:'approved-remaining-v1',progress:Object.fromEntries(progress),notBefore,pendingWork:pending};
   formalEnds=formalRemainingSchedule(value,value.formalInputs,saved,time,'本次拟采用安排').terminalEnds;
  }
- const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,...(formalEnds?{formalEnds}:{})});
+ // A missing customer promise belongs to that PO only. Never remove a
+ // shared route/material gap to get comparable legacy evidence.
+ const compareLegacyInstructionScopes=operation.kind==='instruction_publish'&&!plan.company.framework
+  &&value.scopes.length>1&&!missing.length&&!unconfirmedFabric.length;
+ const check=orderTimeCheck({value,time,progress,sourceVersion,resource:resource??{kind:'proposal',id:null},styleNo,customerDates:dates,canRequest:Boolean(designer),canApply:Boolean(manager),notBefore,extraSettings,optionalDevelopmentGoal,compareLegacyInstructionScopes,...(formalEnds?{formalEnds}:{})});
  if(plan.company.framework&&frameworkRoute&&datedScopes.length){
   const unresolvedNativeRemainder=check.forecastQuality==='lower_bound'&&check.feasibility==='unknown';
   const prospective=operation.kind==='confirm_order'&&Boolean(lifecycle?.first_event_id||preorderPublication)||operation.kind==='development_publish'&&lifecycle?.is_draft;
@@ -427,10 +429,11 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  if(washing)check.washing=[...washing].map(([lineId,row])=>({lineId,label:row.label,version:row.version,document:row.document}));
  if(rewashing)check.rewashing=rewashing.candidates.flatMap(row=>row.plan.document.arrangement.mode==='none'?[]:[{lineId:row.lineId,scopeId:row.scopeId,quantityVersion:row.quantityVersion,inspectionId:row.inspectionId,label:row.label,round:row.round,availableQuantity:row.availableQuantity,inspectionAt:row.inspectionAt,washingMinutes:row.plan.document.arrangement.washing.minutes,inspectionMinutes:row.plan.document.arrangement.inspection.minutes,calendar:row.plan.document.arrangement.washing.calendar,inspectionCalendar:row.plan.document.arrangement.inspection.calendar}]);
  if(operation.kind==='instruction_publish'&&check.feasibility==='unknown'){
-  const {milestones,factories}=instructionConfirmedGaps(check);
+  const {legacy,milestones,factories}=instructionConfirmedGaps(check);
   const poByScope=new Map(value.scopes.map((scope,index)=>[scope.scopeRef,dates[index]?.po||scope.lineId||scope.scopeRef]));
   const gap=(label:string,date:string|null,minutes:number|null)=>`${label}${date?'（原目标 '+date+'）':''}已证实不足${minutes!==null&&minutes>=1?'，至少晚 '+Math.floor(minutes)+' 分钟':''}`;
-  const confirmed=[...milestones.map(row=>gap(`${poByScope.get(row.scopeRef)??row.scopeRef} ${SERIES_MILESTONES.find(item=>item.key===row.key)!.label}`,row.date,row.lateMinutes)),
+  const confirmed=[...legacy.map(row=>gap(`${poByScope.get(row.scopeRef)??row.scopeRef} 客户交期`,row.date,row.lateMinutes)),
+   ...milestones.map(row=>gap(`${poByScope.get(row.scopeRef)??row.scopeRef} ${SERIES_MILESTONES.find(item=>item.key===row.key)!.label}`,row.date,row.lateMinutes)),
    ...factories.map(row=>gap(`${row.label} 工厂交货`,row.date,row.lateMinutes))];
   if(confirmed.length)check.coverage=[...new Set([...confirmed,...check.coverage])];
  }
