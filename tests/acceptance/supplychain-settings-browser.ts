@@ -67,6 +67,7 @@ import {ProcessConfigurationService} from '../../apps/api/src/rework/process-con
 import {ProcessWorkerPlanService} from '../../apps/api/src/rework/process-worker-plan-service.js';
 import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {readIntegratedIeDirectory} from '../../apps/api/src/production-platform/ie-directory-reader.js';
+import {normalFixtureApi} from '../helpers/normal-fixture-api.js';
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
@@ -74,9 +75,10 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url,options?.throughVersion?{throughVersion:options.throughVersion}:undefined),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
- const activeRequests=new Map<string,Set<Promise<void>>>(),closedSessions=new Set<string>();
+ const activeRequests=new Map<string,Set<Promise<void>>>(),closedSessions=new Set<string>(),normalSessions=new Set<string>();
+ let normal:ReturnType<typeof normalFixtureApi>|undefined;
  let browser:Browser|undefined,server:Server|undefined,loginIndex=0,collectionScene:string|undefined;
- const dispose=async()=>{await browser?.close();if(server)await new Promise<void>(r=>server!.close(()=>r()));await app.close();await f.dispose();await rm(out,{recursive:true,force:true});};
+ const dispose=async()=>{await browser?.close();if(server)await new Promise<void>(r=>server!.close(()=>r()));await (await normal?.catch(()=>undefined))?.close();await app.close();await f.dispose();await rm(out,{recursive:true,force:true});};
  try{
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   if(options?.auxiliaryCatalog)registerAuxiliaryCatalogRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new AuxiliaryCatalogService(db,root)});
@@ -127,6 +129,15 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
     settle=()=>{active.delete(pending);finish();};
    }
    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const body=Buffer.concat(chunks).toString(),method=req.method??'GET',key=typeof req.headers['idempotency-key']==='string'?req.headers['idempotency-key']:null,fault=faults.get(session);
+   if(normalSessions.has(session)){
+    const backend=await normal!,headers={cookie:req.headers.cookie??'',...(req.headers['content-type']?{'content-type':req.headers['content-type']}:{}),...(key?{'idempotency-key':key}:{})};
+    const result=await backend.request(path.slice(4),{method,headers,...(body?{body}:{})});
+    const replyHeaders=Object.fromEntries(['content-type','cache-control','location','x-dx-rework-actor-id','idempotency-replayed'].flatMap(name=>{
+     const value=result.headers.get(name);return value===null?[]:[[name,value]];
+    }));
+    requests.push({session,path,method,key,bodyHash:body?createHash('sha256').update(body).digest('hex'):null,status:result.status});
+    res.writeHead(result.status,replyHeaders);res.end(Buffer.from(await result.arrayBuffer()));return;
+   }
    if(fault?.failRead&&path===(fault.readPath??'/api/digital-production/sla-settings/sets')&&method==='GET'){fault.failRead=false;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_READ_FAILURE',message:'TEST 设置读取暂时失败'}}));return;}
    const inject=async()=>await app.inject({method:method as 'GET'|'POST'|'PUT',url:path.slice(4),headers:{cookie:req.headers.cookie??'',...(req.headers['content-type']?{'content-type':req.headers['content-type']}:{}),...(key?{'idempotency-key':key}:{})},...(body?{payload:body}:{})});
    // Global collection routes have no resource ID for the ordinary guarded
@@ -148,10 +159,22 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   const admin={...f.root,authorizationCapability:'access:admin',authorizationCapabilities:['access:admin','master_data:manage']};
   const dedicated=async(role:string,label?:string)=>{const id=randomUUID();await db.query('INSERT INTO app_users(id,display_name,enabled)VALUES($1,$2,true)',[id,label??'TEST settings set '+role]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,'uat-pair-'+id,'uat-union-pair-'+id]);const assignment=await f.access.assignRole(admin,{userId:id,roleCode:role,reason:'TEST isolated settings native identity'});return {id,assignmentId:assignment.assignmentId};};
   const login=async(id:string)=>{const mapping=(await db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[id])).rows[0];assert(mapping?.provider_user_id.startsWith('uat-'));const response=await app.inject({method:'POST',url:'/auth/mobile',remoteAddress:'127.0.0.'+(++loginIndex),payload:{code:mintAcceptanceLoginCode(mapping.provider_user_id.slice(4),secret)}});assert.equal(response.statusCode,200,response.statusCode===200?undefined:response.body);const cookie=response.headers['set-cookie'],header=Array.isArray(cookie)?cookie[0]:cookie;assert.equal(typeof header,'string');const token=header!.split(';',1)[0]!.slice('dx_rework_session='.length);assert.equal((await auth.authenticate(token)).id,id);return token;};
-  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={},path='/ui/digital-cockpit?workspace=settings&fullApp=1')=>{
-   const context=await browser!.newContext({viewport:{width,height:960}}),session=randomUUID(),active=new Set<Promise<void>>();
+  let normalOpenings=0;
+  const stopIdleNormalApi=async()=>{if(normal&&normalSessions.size===0&&normalOpenings===0){const closing=normal;normal=undefined;await (await closing.catch(()=>undefined))?.close();}};
+  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={},path='/ui/digital-cockpit?workspace=settings&fullApp=1',throughNormal=false)=>{
+   const session=randomUUID();
+   let sessionToken:string;
+   if(throughNormal){
+    normalOpenings++;
+    try{
+     const mapping=(await db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[id])).rows[0];
+     assert(mapping?.provider_user_id.startsWith('uat-'));
+     const backend=await (normal??=normalFixtureApi(url,db));sessionToken=await backend.login(mapping.provider_user_id.slice(4));normalSessions.add(session);
+    }finally{normalOpenings--;await stopIdleNormalApi();}
+   }else sessionToken=await login(id);
+   const context=await browser!.newContext({viewport:{width,height:960}}),active=new Set<Promise<void>>();
    faults.set(session,fault);activeRequests.set(session,active);
-   await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base},{name:'settings_fixture_session',value:session,url:base},...(controlToken?[{name:'dx_acceptance_control',value:controlToken,url:base}]:[])]);
+   await context.addCookies([{name:'dx_rework_session',value:sessionToken,url:base},{name:'settings_fixture_session',value:session,url:base},...(controlToken&&!throughNormal?[{name:'dx_acceptance_control',value:controlToken,url:base}]:[])]);
    const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
    await page.goto(base+path);
    const close=async()=>{
@@ -162,6 +185,8 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
      await Promise.all(active);
      activeRequests.delete(session);
      faults.delete(session);
+     normalSessions.delete(session);
+     if(throughNormal)await stopIdleNormalApi();
     }
    };
    return {context,page,session,close};
