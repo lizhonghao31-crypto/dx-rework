@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
   "risk": "full",
-  "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
+  "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -13,6 +13,8 @@
         "apps/api/src/production-platform/production-instruction-service.ts#lockImageBindings",
         "apps/api/src/production-platform/order-time-automatic.ts#automaticOrderTime",
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts#instructionConfirmedGaps",
+        "tests/helpers/historical-digital-order-fixture.ts#scenarioOwnedPreparation",
         "tests/integration/order-time-requests-browser-postgres.test.ts#ProductionClosureService"
       ],
       "reads": [
@@ -30,7 +32,7 @@
       "newTests": [
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。",
+      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。 同单 A 明确资料未知而 B 在原 PO 可比目标下已证实不足，不写制单或正式时效。原申请可接续、未齐时仍不能采用，即使有原有晚期确认。 原 R5-09 维持实际发厂、入库、装箱、座舱和日历断言，仅将测试收货依赖与原正常接线对齐。",
       "checks": [
         "native",
         "static"
@@ -44,7 +46,9 @@
       "writes": [
         "apps/api/src/production-platform/cockpit-actionable.ts#readCockpitInstructionActions",
         "apps/web/src/order-time-application.tsx#checkInstructionShortage",
-        "apps/web/src/production-instruction-panel.tsx#checkingPublication"
+        "apps/web/src/production-instruction-panel.tsx#checkingPublication",
+        "packages/contracts/src/order-time-requests.ts#instructionTimeInsufficient",
+        "scripts/test-suite-plan.mjs#LONG_CORRECTNESS_TESTS"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts#actionableTodo",
@@ -53,12 +57,13 @@
       ],
       "oldTests": [
         "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts#runs every consumer of the original shared authenticated App browser"
       ],
       "newTests": [
         "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。",
+      "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。 保持汇总未知和真实逐 PO 缺口两个维度，正式制单、预查重读、PMC 和原申请共享已核不足判定，现有正确性预算不变。",
       "checks": [
         "native",
         "static"
@@ -69,39 +74,39 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/revision/native.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/mixed-candidate/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "60e4d2e0cc11404c0c5da8895d56b8d0dd01215e",
-      "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
-      "context": "本地 Chromium 和标记的低权限隔离 PostgreSQL，原时效、制单和 R5-09 全链，现有正确性配置、单 worker。",
-      "startedAt": "2026-11-26T19:22:12.614749+00:00",
-      "endedAt": "2026-11-26T19:24:43.767114+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/revision/native.log",
-      "logSha256": "185ab87d33daeebd86a4c9401864aeb408d681e357e03afa9fdad316d418c266",
-      "passed": 22,
+      "testedHead": "af6f22b8084aca0e04690faa48c56cc628f7fbfd",
+      "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
+      "context": "Actual Chromium original instruction and approval entry on isolated PostgreSQL; existing long correctness config. Covers mixed A-unknown/B-proved shortage, unchanged other requests and the original receiving journey.",
+      "startedAt": "2026-11-26T19:53:19.531985+00:00",
+      "endedAt": "2026-11-26T19:56:13.184666+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/mixed-candidate/native.log",
+      "logSha256": "132ffc3b20427b19952ca763619ff6632d0c3d3ec84a8dd99015f7bf59f3a6c5",
+      "passed": 23,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "08bdc672e19e30c203734812e0ed95e646a653e839f8955da7ec3ad6e99481cb"
+          "sha256": "0b9c9921bc93dfad196a54fd4c13b61ea3a4d735b2a6488d907f9e0a1284279c"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/revision/static.sh",
+      "command": "bash /workspace/scratch/m02-01-evidence/mixed-candidate/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "60e4d2e0cc11404c0c5da8895d56b8d0dd01215e",
-      "sourceFingerprint": "7337a165554b62d995a0caf889e8a6f9a141b20f779a5cc7489189feeb3ea2c4",
-      "context": "Node22/npm10，原 preflight 和时间来源盘点、改动 ESLint、工作区类型、静态迁移及 secret 校验。",
-      "startedAt": "2026-11-26T19:22:40.526359+00:00",
-      "endedAt": "2026-11-26T19:23:34.484920+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/revision/static.log",
-      "logSha256": "e605744c294e2c9e4ad90d26568c89d8d8b6efd166b4d4f91a5fff203c896ba5"
+      "testedHead": "af6f22b8084aca0e04690faa48c56cc628f7fbfd",
+      "sourceFingerprint": "e960a2df839953f33cfa91e3b51806fb9f2231a2c841ac2948e4a69d91cd7486",
+      "context": "Node22/npm10 / original protocol, inventory, scoped ESLint, workspaces types and migration/secret static.",
+      "startedAt": "2026-11-26T19:53:14.063020+00:00",
+      "endedAt": "2026-11-26T19:54:12.870635+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/mixed-candidate/static.log",
+      "logSha256": "e6e34125ce2b20c9dcb5ff3b667b0111220e7000f7c919fb3f5892faaee9cf2d"
     }
   ]
 }
