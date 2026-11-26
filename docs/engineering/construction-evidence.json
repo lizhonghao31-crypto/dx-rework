@@ -1,171 +1,105 @@
 {
   "version": 1,
-  "base": "d062d5d6b878844e217d4cde65e71f350637c4e6",
+  "base": "b7db88a364b5dc6e4a0ab76c90caa00d6fb13bb4",
   "risk": "full",
-  "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
+  "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
   "rules": [
     {
-      "rule": "G7 开发岗位看板只有同一授权筛选确知全空时显示一条整板文案。",
-      "source": "Eric 已审 G1–G9 施工单第 313–319 行；Astryx DXUI-ASYNC-003/005/007/008/011。",
+      "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
+      "source": "Eric 审定的模块体验02 M02-01 定点施工方案。现行原大货制单、权限和时效申请规范不变。",
+      "initialization": "不迁移、不改任何初始/历史计划，按隔离原数据验证有/无旧生效计划；无预测激活、虚假的目标日期、旧窗口重算或状态翻转。",
+      "dateAndPermission": "保原订单、产前和制单版本、原审批和真实时钟，沿真实主跟单与拒绝身份。仅本发布动作的预测分流，不改其他命令或原质量。",
       "writes": [
-        "apps/web/src/digital-pattern-workspace.tsx#isConfirmedEmptyDevelopmentBoard",
-        "tests/unit/r2-pattern-boards.test.ts#G7 confirms"
+        "apps/api/src/production-platform/production-instruction-service.ts#lockImageBindings",
+        "apps/api/src/production-platform/order-time-automatic.ts#automaticOrderTime",
+        "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-workspace-query.ts#indexedPattern",
-        "packages/contracts/src/digital-development-workspace.ts#PatternWorkspaceResult",
-        "apps/web/src/App.tsx#DigitalPatternWorkspace",
-        "apps/web/src/digital-pattern-workspace.tsx#boardItems"
+        "apps/api/src/production-platform/production-instruction-routes.ts#registerInstructionRoutes",
+        "apps/api/src/production-platform/order-time-request-service.ts#arrange",
+        "apps/api/src/production-platform/bulk-preparation-service.ts#sync",
+        "apps/api/src/production-platform/task-service.ts#executionBlock"
       ],
       "oldTests": [
-        "tests/unit/r2-pattern-boards.test.ts#R2 PR08 board display boundaries",
-        "tests/integration/workspace-page-native-browser-postgres.test.ts#PERF07 full production application workspace pages"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/r2-pattern-boards.test.ts#G7 confirms"
+        "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "initialization": "开发看板仍沿原选项、分页、任务来源及读取选项初始化；无新初始化、SQL 或迁移。",
-      "dateAndPermission": "仍按原授权 scope 读取；结果仅跟当前筛选、选项和刷新一起判空。日期、任务轮次、业务时限不变。",
-      "expectation": "整板真空只一处，抑制列内重复；未知、过期、计数冲突、预览卡片、读错或部分结果不报整板空。",
+      "expectation": "核时效未知的正常只写一次和原关联事实、既有/无计划窗口状态、拒绝权限与资料和原回执、下游故障完整回滚、同键重试。确认不足仍走设计师和原管理路。",
       "checks": [
-        "g7-unit",
-        "g7-browser",
-        "g7-g2-native-browser",
-        "g7-web-typecheck",
-        "g7-lint"
+        "native",
+        "static"
       ]
     },
     {
-      "rule": "G7 真卡片、各栏入口、局部内容、岗位跳转和请求范围保持基座行为。",
-      "source": "已审 G7 第 317–319 行与 Astryx DXUI-ACCESS-003、DXUI-ASYNC-011。",
+      "rule": "原制单时效预查只作说明，服务器重算决定写入；PMC 原可办项只读，未知和真实读取错误分别呈现。",
+      "source": "Eric 审定的模块体验02 M02-01 定点施工方案。现行原大货制单、权限和时效申请规范不变。",
+      "initialization": "复用原页面和现有时效预查、原回执和重放键，无新增设置、权限或现场数据。",
+      "dateAndPermission": "跟单仍通过原鉴权，权限和真正不足不放宽；时效未知不伪装成足够，网络失败不转换为已知或允许写。",
       "writes": [
-        "tests/fixtures/digital-read-recovery.tsx#patternBoardResponse",
-        "tests/acceptance/g7-pattern-empty-browser.mjs#obsolete empty request",
-        "apps/web/src/digital-pattern-workspace.tsx#confirmedBoardEmpty"
+        "apps/api/src/production-platform/cockpit-actionable.ts#readCockpitInstructionActions",
+        "apps/web/src/order-time-application.tsx#checkInstructionShortage",
+        "apps/web/src/production-instruction-panel.tsx#checkingPublication"
       ],
       "reads": [
-        "apps/web/src/digital-pattern-workspace.tsx#choose",
-        "apps/web/src/pattern-board-parts.tsx#PatternBoardCard",
-        "apps/web/src/digital-production-access-panel.tsx#pmcPatternTaskReadOnly",
-        "apps/web/src/development-workspace-return.tsx#developmentWorkspaceReturnUrl"
+        "apps/api/src/production-platform/journey-query.ts#actionableTodo",
+        "apps/web/src/digital-production-api.ts#DigitalRequestError",
+        "apps/api/src/production-platform/order-time-request-service.ts#check"
       ],
       "oldTests": [
-        "tests/acceptance/r2-boards-browser.mjs#boardsBrowser",
-        "tests/acceptance/digital-read-recovery-browser.mjs#late failed query",
-        "tests/unit/r2-pattern-boards.test.ts#restores independently scoped"
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/instruction-recovery-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "tests/acceptance/g7-pattern-empty-browser.mjs#same original route and source"
+        "tests/integration/instruction-forecast-native-browser-postgres.test.ts"
       ],
-      "initialization": "配对浏览器复用原读取恢复夹具；真实回归复用原 App、认证、授权固定和测试库。",
-      "dateAndPermission": "普通板房本人任务与 PMC 部门只读任务按原按钮开启；沿用任务标识、taskView 和 returnTo。",
-      "expectation": "七列及查看全部在真空时仍可达，键盘 Enter 跳转到同一真实目标，基座和候选的读请求完全一致，写入零次。",
+      "expectation": "预查失败没有发原写，预查旧不足但服务器为未知不会挡，预查旧足够而服务器证实不足仍按同单当前参数转原设计师；提交未知不新建第二次。",
       "checks": [
-        "g7-unit",
-        "g7-browser",
-        "g7-g2-native-browser",
-        "g7-lint"
+        "native",
+        "static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "g7-unit",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/r2-pattern-boards.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/final/r2-pattern-boards.json",
+      "id": "native",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
-      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
-      "startedAt": "2026-11-26T18:19:36.469034+00:00",
-      "endedAt": "2026-11-26T18:19:41.618477+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-unit.log",
-      "logSha256": "78ddc8a77432e045db9e0e12a701ce3bbfe1fbc698d6e36c71b52f2727343f15",
-      "context": "Node 22.22.2 / Vitest 4.1.10，准确 G5 基座的最终源，原 R2 共 19 项含 G7 12 项，不接数据库。",
-      "kind": "tests",
-      "passed": 19,
+      "testedHead": "4f866d17fb7885bd9521e096fa59ce10f02ff670",
+      "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
+      "context": "本地 Node22/Chromium，原 Web 制单、真实鉴权/HTTP handlers 与隔离 PostgreSQL，含结构化时效和原正式写。",
+      "startedAt": "2026-11-26T19:16:18.427608+00:00",
+      "endedAt": "2026-11-26T19:16:58.703499+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/native.log",
+      "logSha256": "6992d54496a490895817ee42f58aac0d071cfa797fdbe5c914fa595fc633f7e2",
+      "passed": 5,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2d91497925af527046aa4ea5017b402aba51cd1f17e0d5be594cec125ae8da57"
+          "sha256": "5ade11293c6c695cdbe57e9d640e3cb3d3fda38347cbe43cf198f42ab1c8e331"
         }
       ]
     },
     {
-      "id": "g7-browser",
-      "command": "env G7_BASE_SHA=d062d5d6b878844e217d4cde65e71f350637c4e6 G7_BROWSER_EVIDENCE=/workspace/scratch/dx-governance-evidence/g7/final/browser.json node tests/acceptance/g7-pattern-empty-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
-      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
-      "startedAt": "2026-11-26T18:19:36.468932+00:00",
-      "endedAt": "2026-11-26T18:19:50.689817+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-browser.log",
-      "logSha256": "97f0c66e80af723f1bad62cc9da5bfa8ba21751e0e62064d132216bea32ec41f",
-      "context": "同一真实基座与候选加载相同实际组件、同一授权响应夹具，Chromium 12 配对检查、GET 顺序逐项一致、零写。",
-      "kind": "command"
-    },
-    {
-      "id": "g7-g2-native-browser",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/workspace-page-native-browser-postgres.test.ts -t 'shows15 current native|keeps available rows' --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/final/native-browser.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
-      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
-      "startedAt": "2026-11-26T18:20:10.496906+00:00",
-      "endedAt": "2026-11-26T18:20:37.444621+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-final-native-browser.log",
-      "logSha256": "013c728db4223a10fb6b474a856c6f2e1e8764efeede9479010b778314b384b9",
-      "kind": "tests",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 1,
-      "context": "Node 22.22.2 / PostgreSQL 16.14，原完整 App、原登录、准确 G5 基座源，两个板房相关原回归；另一个仅设计师用例过滤。专用 loopback 低权限标记验证，运行前后本次拥有 schema 均为 0。",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2cc5bbedc196a82fdb09041fc4408f338d6c82b4deea219dfc26d2514db2b564"
-        }
-      ]
-    },
-    {
-      "id": "g7-lint",
-      "command": "node node_modules/eslint/bin/eslint.js apps/web/src/digital-pattern-workspace.tsx tests/unit/r2-pattern-boards.test.ts tests/fixtures/digital-read-recovery.tsx tests/acceptance/g7-pattern-empty-browser.mjs --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "8e6808e0cd18e10ebb94cddae82c8bd4cf9770b3",
-      "sourceFingerprint": "d9fb3010ca89eb459e497010053d5160a1886a2711fde13bcd0918d839ddc33d",
-      "startedAt": "2026-11-26T16:38:58.779764+00:00",
-      "endedAt": "2026-11-26T16:39:00.115501+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/g7-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node 22.22.2, repository ESLint, four affected source/unit/browser files only. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments. 对齐 G5 后仍以输入指纹逐字验证，不重复运行。",
+      "id": "static",
       "kind": "command",
-      "inputPaths": [
-        "eslint.config.js",
-        "package.json",
-        "package-lock.json",
-        "apps/web/src/digital-pattern-workspace.tsx",
-        "tests/unit/r2-pattern-boards.test.ts",
-        "tests/fixtures/digital-read-recovery.tsx",
-        "tests/acceptance/g7-pattern-empty-browser.mjs"
-      ],
-      "inputFingerprint": "e2bf17469a0ba5b53cc76318ccc8167320afaa4d5b0aa969cf2fe9acea6f9b75"
-    },
-    {
-      "id": "g7-web-typecheck",
-      "command": "npm run typecheck -w @dx-rework/web",
+      "command": "bash /workspace/scratch/m02-01-evidence/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
-      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
-      "startedAt": "2026-11-26T18:19:36.469131+00:00",
-      "endedAt": "2026-11-26T18:20:01.578118+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-web-typecheck.log",
-      "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "context": "Node 22.22.2 / npm 10.9.9，准确 G5 基座候选的 Web 原 tsconfig 与实际 workspace 合同包。",
-      "kind": "command"
+      "testedHead": "6b23ad28a8bd3d7538b5b24be2f47f22a4d8c949",
+      "sourceFingerprint": "bf9e1ccaf0fa3982424fe4be594909a195e7c90b40055010837b64eecca2f206",
+      "context": "Node22/npm10，工作区类型校验、受影响 ESLint、迁移清单和 secret 校验；测试已更新为读回实际申请。",
+      "startedAt": "2026-11-26T19:16:40.952547+00:00",
+      "endedAt": "2026-11-26T19:17:31.540981+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/static.log",
+      "logSha256": "310151ca46e5dc3cbe92c83638314ae3d5518aaf809308612203b8f60ee744cc"
     }
   ]
 }
