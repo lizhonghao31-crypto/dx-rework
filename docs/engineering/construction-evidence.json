@@ -2,7 +2,7 @@
   "version": 1,
   "base": "a86a45fa31865731bcaf2c2358a05936495e016e",
   "risk": "full",
-  "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
+  "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
   "rules": [
     {
       "rule": "制单正式命令在同一原事务验证全部真实业务前置；仅结构化时效未知时照常处理业务，不采用时间计划；可证实不足保原时效申请。",
@@ -143,95 +143,119 @@
       "checks": [
         "inherited-native"
       ]
+    },
+    {
+      "rule": "返洗测试使用原下游收货条件，不放宽真实仓库收货门槛。仅修 Full 失效的测试夹具。",
+      "source": "旧准确 Full 45892354624 的 PostgreSQL job 140158973169 两个套件共三例失败；发布基座 a86a45fa 未改同例 409 复现。",
+      "initialization": "仅在隔离测试的 after_receipt 支路，经原仓库发厂、工厂 QC、实际生产报告及回货建立准确原厂、裁单和收货对象。",
+      "dateAndPermission": "用本场景原业务时钟及北京时间，不补产量、不改角色、商用配置、仓库门槛、正式时效或现场数据。",
+      "writes": [
+        "tests/helpers/order-time-rewash-fixture.ts#failedFrameworkWashingFixture"
+      ],
+      "reads": [
+        "apps/api/src/receiving/native-receipt-admission.ts#admitNativeReceipt",
+        "apps/api/src/production-platform/factory-flow-service.ts#productionQc",
+        "apps/api/src/sourcing/production-reporting-service.ts#async execute"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-washing-rework-postgres.test.ts",
+        "tests/integration/order-time-washing-rework-browser-postgres.test.ts"
+      ],
+      "newTests": [],
+      "expectation": "旧 409 发生在返洗以前的原收货。现同三例过真正收货后验证原浏览器和原返洗职责、读写和时间线，其余厂内及历史用例全部保留。",
+      "checks": [
+        "rewash",
+        "static"
+      ]
     }
   ],
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
-      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
-      "context": "隔离 PostgreSQL 受限身份、原浏览器/跟单页面，补核旧制单、有/无正式计划、独立逐 PO 及原申请；已绿新版混合例不由这次定向重跑",
-      "startedAt": "2026-11-26T20:47:10.701589+00:00",
-      "endedAt": "2026-11-26T20:49:58.882173+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/legacy-final/native.log",
-      "logSha256": "e8278c62b2edad234db28c401d681b3fbf0c8a49b180701b1c7b3159d05201a7",
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "隔离 PostgreSQL、真实主跟单和原浏览器，已绿新版混合例不在这次定向重跑",
+      "startedAt": "2026-11-26T21:06:56.754445+00:00",
+      "endedAt": "2026-11-26T21:10:06.269723+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/native.log",
+      "logSha256": "c76a0454325192e2c31b19ddab9fa583ca33ff603cfe33d767e9cc40f9c4878d",
       "passed": 24,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "18f92215ee2b84b07d32d7796b187be62e8fc595df825f3360c5b01cd47f2567"
+          "sha256": "c1df9d5e972c7ba92cb6cbbcc6dd6045cd5ca21fd030e3ac90495d0ce9c782f7"
         }
       ]
     },
     {
       "id": "inherited-native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/inherited-native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/inherited-native.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
-      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
-      "context": "继承已合 QC 正常启动真实浏览器及两类合同 ready 的末步骤发厂隔离 PostgreSQL",
-      "startedAt": "2026-11-26T20:47:10.728104+00:00",
-      "endedAt": "2026-11-26T20:48:36.858716+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/legacy-final/inherited-native.log",
-      "logSha256": "5bfdb1c0f43490863240eef3ebb085499213d2af953b893339ae6d38db81ceab",
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "继承原同批返工的正常启动和末步骤原发厂隔离 PostgreSQL",
+      "startedAt": "2026-11-26T21:06:56.757533+00:00",
+      "endedAt": "2026-11-26T21:08:52.043082+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/inherited-native.log",
+      "logSha256": "1722081f2cc5ecc03cecf8f6719069004ee082ad6488c496d7919159f7211360",
       "passed": 18,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ef68bd472307fb338dada89480961f3b6cb1f754c1ae7073f6020cc6a1d64f47"
+          "sha256": "566fdd0db71f48d6e83cdcc430d90debc5b5afeb1a68da3cc5396fbde8be3ea6"
         }
       ]
     },
     {
       "id": "canonical",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/canonical.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/canonical.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
-      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
-      "context": "本地审定风险映射全文件，保持两个原浏览器及原 suite 登记",
-      "startedAt": "2026-11-26T20:47:10.704932+00:00",
-      "endedAt": "2026-11-26T20:47:12.216794+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/legacy-final/canonical.log",
-      "logSha256": "7b7ba07bc62d981d3ccf8b05064d40b3df24e4c8e68e47c51fc588b30243c53f",
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "原风险映射全文件及原共享浏览器预算和选测登记",
+      "startedAt": "2026-11-26T21:06:56.756210+00:00",
+      "endedAt": "2026-11-26T21:06:58.851316+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/canonical.log",
+      "logSha256": "287a87d0ef0e087a36248b4e703af8ae650286278a02a16abe634f42b8e64a52",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8970e6ae732aa8e59e2986c81d2ec96e80de500488b0ef3807b1bacd49bf3f60"
+          "sha256": "46f5911d18e1147ef36963780a13e1486cdcb47ab306321ba525873f3b99f425"
         }
       ]
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/protocol.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/protocol.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
-      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
-      "context": "原 Gate 协议验算、预检和约束，不重新触发仓库 Light",
-      "startedAt": "2026-11-26T20:47:10.733114+00:00",
-      "endedAt": "2026-11-26T20:47:18.099043+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/legacy-final/protocol.log",
-      "logSha256": "7ff64d9009c4808a44a27e550914902daf62f499a7205536a4b121178ac19909",
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "原 Gate 协议完整便宜预检，不触发仓库 Light",
+      "startedAt": "2026-11-26T21:06:56.755425+00:00",
+      "endedAt": "2026-11-26T21:07:05.026413+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/protocol.log",
+      "logSha256": "366494195e2358512ddffc5cc51020efda1b82913a65dac7df3371af14ebfceb",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "7ff64d9009c4808a44a27e550914902daf62f499a7205536a4b121178ac19909"
+          "sha256": "366494195e2358512ddffc5cc51020efda1b82913a65dac7df3371af14ebfceb"
         }
       ],
       "passed": 285,
@@ -241,16 +265,39 @@
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/m02-01-evidence/legacy-final/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/static.sh a86a45fa31865731bcaf2c2358a05936495e016e",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fc71faa18f1844602c9efd302d413ec8a3806cb1",
-      "sourceFingerprint": "d381a59da7adae7fb84d04f070855d2ce351410c88faba0d2c2adf773945a1da",
-      "context": "当前候选所有产品类型/本次变动 ESLint、时间清单、迁移 lint 和秘密扫描",
-      "startedAt": "2026-11-26T20:47:10.703015+00:00",
-      "endedAt": "2026-11-26T20:48:04.859983+00:00",
-      "log": "/workspace/scratch/m02-01-evidence/legacy-final/static.log",
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "该提交类型、变更 lint、时间清单、迁移和秘密扫描",
+      "startedAt": "2026-11-26T21:06:56.754087+00:00",
+      "endedAt": "2026-11-26T21:08:00.022353+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/static.log",
       "logSha256": "b4ae7da76bd1da311aaa145e65a15fcbb5f91e41b0f5bc664c9a58d76b5d7ed7"
+    },
+    {
+      "id": "rewash",
+      "kind": "tests",
+      "command": "bash /workspace/scratch/m02-01-evidence/final-rewash/rewash.sh a86a45fa31865731bcaf2c2358a05936495e016e",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "07071340f3cba0f6f89ef313d54a2be22a748549",
+      "sourceFingerprint": "01a7dfe236d4b04a790ce6dac0efbdde5076b495f94dbe163b6f6000f3f76279",
+      "context": "隔离 PostgreSQL 和真实原浏览器回归现有收货后及厂内返洗，按原范围补真实发厂、工厂质检和发回",
+      "startedAt": "2026-11-26T21:06:56.754469+00:00",
+      "endedAt": "2026-11-26T21:08:34.091519+00:00",
+      "log": "/workspace/scratch/m02-01-evidence/final-rewash/rewash.log",
+      "logSha256": "034dd1e0a253a7884bbc4551df6190932227aa6a3738bfcbc6fceb5c47abb376",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "6293b54066d1388fec093136c49072697384f02008ce17ec58b4830f0525fef8"
+        }
+      ]
     }
   ],
   "inheritedReleaseEvidence": {
@@ -418,6 +465,16 @@
         }
       ]
     },
-    "scope": "既有原生 framework 混合 PO 测试通过；本次提取共用准备入口，不改该场景及其断言。"
+    "scope": "既有原生 framework 混合 PO 测试通过；本次提取共用准备入口，不改该场景及其断言。",
+    "requiredRewashCheck": {
+      "oldFull": 45892354624,
+      "oldPostgresJob": 140158973169,
+      "passed": 564,
+      "failed": 3,
+      "baselineHead": "a86a45fa31865731bcaf2c2358a05936495e016e",
+      "baselineLog": "/workspace/scratch/m02-01-evidence/legacy-final/rewash-base.log",
+      "baselineLogSha256": "c81fc4454d91728582a180ee82df6a12a6b22d8d7ab4201614fe7c2cfaece075",
+      "note": "基座定向一例真实原收货相同 409；没有改变任何生产文件或旧返洗断言。"
+    }
   }
 }
