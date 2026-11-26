@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "d03d9ffd5d92f1c36822835ef68d0898ae81083d",
-  "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
+  "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
   "risk": "full",
   "rules": [
     {
@@ -10,6 +10,8 @@
       "writes": [
         "apps/api/src/server.ts",
         "apps/api/src/sourcing/sourcing-contract-recovery.ts",
+        "apps/api/src/platform/contract-recovery-database.ts",
+        "apps/api/src/acceptance-clock/repository.ts",
         "apps/api/src/sourcing/sourcing-contract-service.ts#resumePendingContracts",
         "apps/api/src/sourcing/sourcing-contract-recovery-render.ts",
         "apps/api/src/sourcing/sourcing-contract-render-child.ts",
@@ -28,13 +30,12 @@
         "tests/integration/business-anchors-clock-postgres.test.ts",
         "tests/integration/sourcing-owner-readiness-postgres.test.ts"
       ],
-      "initialization": "原 API listen 成功后才调度，旧实例排空后由配置显式打开。shutdown 停止领取并等待手头任务，原按文档与人工入口保留。",
+      "initialization": "原 API listen 成功后才调度，旧实例排空后由配置显式打开。shutdown 停止领取并给出短暂收尾时间，随后取消恢复任务连接及子进程。原按文档与人工入口保留。",
       "dateAndPermission": "数据库真实时间决定租约，业务就绪时间用原 Acceptance 场景或普通业务时钟。原账号能力、精确关联和场景身份缺失时记为待办理。",
-      "expectation": "持有首份 PDF 写入障碍时另一张单的原认证 GET 仍成功；扫描无重叠，跨页继续，丢场景身份时零领取。旧人工重试和 superseded PDF 留存。",
+      "expectation": "持有首份 PDF 写入障碍时另一张单的原认证 GET 仍成功；扫描无重叠，跨页继续，丢场景身份时零领取。独立 PG 连接保持生命周期锁时退出停止等待，真实场景锁占用时记录原单待核并后续恢复。删除原单、旧人工重试和 superseded PDF 留存。",
       "checks": [
         "anchors",
         "originals",
-        "unit",
         "build",
         "lint"
       ]
@@ -71,7 +72,6 @@
         "anchors",
         "originals",
         "preflight",
-        "unit",
         "build",
         "lint"
       ]
@@ -107,93 +107,106 @@
   "checks": [
     {
       "id": "anchors",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/anchors.json tests/integration/business-anchors-clock-postgres.test.ts",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/anchors-final.json tests/integration/business-anchors-clock-postgres.test.ts -t G1 |bounded pages|rolls back a failed first-ready",
       "kind": "tests",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:06:37Z",
+      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
+      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
+      "startedAt": "2026-11-26T15:20:13Z",
+      "endedAt": "2026-11-26T15:20:46Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。完整原时间事实夹具与 G1 本地回滚、两次硬停止、双写者和真实下载断点。",
-      "log": "/tmp/dx-g1-evidence/anchors.log",
-      "logSha256": "cb1f532d07ed35c9764f939e7de38ab2beaeb4d0f84a828ab538a9b22190f5ce",
-      "passed": 27,
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。",
+      "log": "/tmp/dx-g1-evidence/review-fix/anchors-final.log",
+      "logSha256": "9a70ba556e489eb94ca97ef7260536858a34e9b687aa05ae8f4c006fe53ff961",
+      "passed": 11,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 18,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4697aed4dc6e831ce3b94ad89f73f891af94bcc821a032fe73bf41b852da6f87"
+          "sha256": "4c66deacab76bbfea71ae4c1cb87d2cf99447ac369b2ce0348345b48df6a934d"
         }
       ]
     },
     {
       "id": "originals",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g1-evidence/originals.json tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.config.ts /tmp/dx-g1-evidence/review-fix/originals.json tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/contract-return-cycles-postgres.test.ts",
       "kind": "tests",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:56Z",
+      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
+      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
+      "startedAt": "2026-11-26T15:18:22Z",
+      "endedAt": "2026-11-26T15:19:14Z",
       "exitCode": 0,
       "status": "passed",
       "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。",
-      "log": "/tmp/dx-g1-evidence/originals.log",
-      "logSha256": "faacbd39b98f265ab763532e733237e539aeecdb74d79f6d3feaf097af08dcb2",
+      "log": "/tmp/dx-g1-evidence/review-fix/originals.log",
+      "logSha256": "84b324a1ccfe8ccae84452de3850f84dfa96cdda3698000c1eb3ad38b5345750",
+      "inputPaths": [
+        "apps/api/src",
+        "apps/api/migrations",
+        "apps/web/src",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
+        "tests/integration/contract-return-cycles-postgres.test.ts"
+      ],
+      "inputFingerprint": "437c6e2eb324d8103306ac1599f42abb456d7b1506e944dbec5768bb2017da9b",
       "passed": 12,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "db0adcf9fb3155549a873c278ea05caf1f82b10e2ddb9500ce370e94f39f1320"
+          "sha256": "221fd7ecec99a6f121d86fc11fd00b7578ff580392478b91f6daea5c560eb57c"
         }
       ]
     },
     {
       "id": "transfer",
-      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/transfer.json tests/integration/sourcing-pr03-postgres.test.ts -t binds both authorized merchandisers|recovers missing transfer tasks explicitly|recovers an enrolled new transfer|keeps historical finance and signed PDFs|preserves 27 synthetic legacy orders|preserves the Root-edited delivery date",
+      "command": "env NODE_ENV=test DATABASE_URL= DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=postgresql://g1_work_test@127.0.0.1:55437/dx_rework_acceptance_test node /tmp/dx-g1-evidence/run-pg.mjs vitest.business-chain.config.ts /tmp/dx-g1-evidence/review-fix/transfer.json tests/integration/sourcing-pr03-postgres.test.ts -t binds both authorized merchandisers|recovers missing transfer tasks explicitly|recovers an enrolled new transfer|keeps historical finance and signed PDFs|preserves 27 synthetic legacy orders|preserves the Root-edited delivery date",
       "kind": "tests",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:40Z",
+      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
+      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
+      "startedAt": "2026-11-26T15:18:22Z",
+      "endedAt": "2026-11-26T15:18:56Z",
       "exitCode": 0,
       "status": "passed",
       "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2；只定位相关六项，136 项因名称过滤没有运行。",
-      "log": "/tmp/dx-g1-evidence/transfer.log",
-      "logSha256": "ab03a7b077bcfa78d01dff59f8fbe7775aa69a72aa4b0aede0bc1a4adb0e5843",
+      "log": "/tmp/dx-g1-evidence/review-fix/transfer.log",
+      "logSha256": "5fbe5365dbf422b8ca12bf3964f7548a0fa854fd7ec17ae874f69c1ffe39ecb1",
+      "inputPaths": [
+        "apps/api/src",
+        "apps/api/migrations",
+        "apps/web/src",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/work-analysis-postgres.cases.ts"
+      ],
+      "inputFingerprint": "5d4b42f6baf99f214cb04fd18150db20c18a477ddbec1df38adc32bbd778835f",
       "passed": 6,
       "failed": 0,
       "skipped": 136,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2cd0ab134e9102cbd5097b6adc351266c8ec68d9cf98b2a62725a76fb442f619"
-        }
-      ]
-    },
-    {
-      "id": "unit",
-      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/tmp/dx-g1-evidence/unit.json tests/unit/sourcing-ssp05-contract-pdf.test.ts tests/unit/attachment-service-failures.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/business-time-write-contract.test.ts tests/integration/sourcing-routes.test.ts tests/integration/public-tools-routes.test.ts",
-      "kind": "tests",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:23Z",
-      "exitCode": 0,
-      "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10, nonDB canonical config maxWorkers=1; PDF, routes, attachment and time contracts.",
-      "log": "/tmp/dx-g1-evidence/unit.log",
-      "logSha256": "71dbac9f387e387808052dae7a945f8d2604249d5f116cd66de532f5899b5af5",
-      "passed": 70,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "d5f918fb6d70cd21e1f372df92fa7738092b2cba335695660760162fcddec751"
+          "sha256": "b3c8f27f073bd998a151d6b77ca4abb3bb9481da83051c208b074e9380c55815"
         }
       ]
     },
@@ -201,15 +214,15 @@
       "id": "preflight",
       "command": "npm run test:preflight",
       "kind": "tests",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:18Z",
+      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
+      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
+      "startedAt": "2026-11-26T15:20:13Z",
+      "endedAt": "2026-11-26T15:20:20Z",
       "exitCode": 0,
       "status": "passed",
       "context": "Node 22.22.2 / npm 10.9.9, repository protocol worker cap 2; checksum-bound migration, time inventory and gate tests.",
-      "log": "/tmp/dx-g1-evidence/preflight.log",
-      "logSha256": "7769ae1a07646dc091ae3859368ea40213a8b4ceeebe66701b9d7fc1bb78e801",
+      "log": "/tmp/dx-g1-evidence/review-fix/preflight-final.log",
+      "logSha256": "29a59ff68332effae2ec6ec3851393174d86be3f62703d09af8cbe471270dbd4",
       "passed": 285,
       "failed": 0,
       "skipped": 0
@@ -218,28 +231,36 @@
       "id": "build",
       "command": "npm run build -w @dx-rework/api",
       "kind": "command",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:28Z",
+      "testedHead": "cce85ee74b56a2657d1f1648e459a1518a218908",
+      "sourceFingerprint": "01ad1e42e7586b98eb045d3e59d1f24cbffa4dd9c400f9a556cec19ac8893178",
+      "startedAt": "2026-11-26T15:18:22Z",
+      "endedAt": "2026-11-26T15:18:46Z",
       "exitCode": 0,
       "status": "passed",
       "context": "Node 22.22.2 / npm 10.9.9; reused previously built workspace contracts/config/domain, API tsc build and original contract font copier.",
-      "log": "/tmp/dx-g1-evidence/build.log",
-      "logSha256": "c9493b47bf7234d5eb62cea780d266010c1a0374e8d89e98a877f46749bf8dc7"
+      "log": "/tmp/dx-g1-evidence/review-fix/build.log",
+      "logSha256": "c9493b47bf7234d5eb62cea780d266010c1a0374e8d89e98a877f46749bf8dc7",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "0f5c5a8615c52a368014e4e8fe5b78c6d0a86c514319cb393189b70a7574b6f1"
     },
     {
       "id": "lint",
-      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/sourcing/sourcing-contract-content.ts apps/api/src/sourcing/sourcing-contract-history-scope.ts apps/api/src/sourcing/sourcing-contract-management-service.ts apps/api/src/sourcing/sourcing-contract-pdf.ts apps/api/src/sourcing/sourcing-contract-recovery-render.ts apps/api/src/sourcing/sourcing-contract-recovery.ts apps/api/src/sourcing/sourcing-contract-render-child.ts apps/api/src/sourcing/sourcing-contract-return-service.ts apps/api/src/sourcing/sourcing-contract-service.ts apps/api/src/sourcing/sourcing-transfer-contract-todos.ts apps/api/src/tools/acceptance-storage.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/server.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/helpers/sourcing-contract-crash-worker.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/acceptance-clock/repository.ts apps/api/src/platform/contract-recovery-database.ts apps/api/src/sourcing/sourcing-contract-content.ts apps/api/src/sourcing/sourcing-contract-history-scope.ts apps/api/src/sourcing/sourcing-contract-management-service.ts apps/api/src/sourcing/sourcing-contract-pdf.ts apps/api/src/sourcing/sourcing-contract-recovery-render.ts apps/api/src/sourcing/sourcing-contract-recovery.ts apps/api/src/sourcing/sourcing-contract-render-child.ts apps/api/src/sourcing/sourcing-contract-return-service.ts apps/api/src/sourcing/sourcing-contract-service.ts apps/api/src/sourcing/sourcing-transfer-contract-todos.ts apps/api/src/tools/acceptance-storage.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/server.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/helpers/sourcing-contract-crash-worker.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
       "kind": "command",
-      "testedHead": "c918d8e8770adcab1222450ad35495a157585dc1",
-      "sourceFingerprint": "f9756d3219cc4c545ee1ec86ca3cc8b728ece7963f98a2b623e3262894aaa717",
-      "startedAt": "2026-11-26T15:05:05Z",
-      "endedAt": "2026-11-26T15:05:09Z",
+      "testedHead": "b899268438e5e747a56b2855e9ca2fdf1519a060",
+      "sourceFingerprint": "34481d20641345b6c5a8245a2da43b8f006c0760ebafae79a6af3571d2b44018",
+      "startedAt": "2026-11-26T15:20:13Z",
+      "endedAt": "2026-11-26T15:20:16Z",
       "exitCode": 0,
       "status": "passed",
       "context": "Node 22.22.2 / npm 10.9.9, direct ESLint on changed executable inputs and integration fixtures.",
-      "log": "/tmp/dx-g1-evidence/lint.log",
+      "log": "/tmp/dx-g1-evidence/review-fix/lint-final.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
