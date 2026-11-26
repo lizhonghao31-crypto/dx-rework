@@ -9,6 +9,22 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { setTimeout as delay } from "node:timers/promises";
+
+import Fastify, { type FastifyInstance } from "fastify";
+import type { PoolClient } from "pg";
+
+import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
+import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
+import { AcceptanceDingTalkProvider, mintAcceptanceLoginCode } from "../../apps/api/src/auth/acceptance-provider.js";
+import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
+import { AuthService } from "../../apps/api/src/auth/service.js";
+import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
+import { registerReceivingRoutes } from "../../apps/api/src/receiving/receiving-routes.js";
+import { testExecutionConfig } from "../../scripts/test-execution-config.mjs";
+import { businessAnchorFixture } from "../helpers/business-anchor-fixture.js";
+import { seedOwnTailHistory } from "./own-tail-responsibility-history.cases.js";
+import { databaseNameFromConnectionUrl, isAcceptanceDatabaseName } from "../../apps/api/src/auth/acceptance-database-guard.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -1931,4 +1947,283 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const options = await service.listStyleOptions("RECEIVING");
     expect(options).toContain("STYLE-RECEIVING-01");
   });
+});
+
+type ReworkRow = {
+  rework_order_id: string;
+  source_receiving_batch_id: string | null;
+  style_no: string;
+  version: number;
+  updated_by: string;
+};
+
+const g9DatabaseUrl = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL ?? (
+  databaseUrl && isAcceptanceDatabaseName(databaseNameFromConnectionUrl(databaseUrl)) ? databaseUrl : undefined
+);
+const runG9WithPostgres = g9DatabaseUrl ? describe : describe.skip;
+const originalStyle = "TEST-BO20547249";
+
+runG9WithPostgres("G9 receiving correction over PostgreSQL", () => {
+  let fixture: Awaited<ReturnType<typeof businessAnchorFixture>>;
+  let app: FastifyInstance;
+  let service: ReceivingService;
+  let rootSession: string;
+  let otherRootSession: string;
+  let warehouseSession: string;
+
+  beforeAll(async () => {
+    fixture = await businessAnchorFixture(g9DatabaseUrl!);
+    const secret = "TEST receiving correction identity ".repeat(3);
+    const root = new RootAuthority(fixture.db, "anchor-test", "uat-root");
+    const auth = new AuthService(new AcceptanceDingTalkProvider(fixture.db, "anchor-test", secret),
+      new PostgresAuthStore(fixture.db, "anchor-test", "uat-root"), "anchor-test", 3_600_000, secret);
+    const session = async (role: string) => (await auth.loginMobile(mintAcceptanceLoginCode(role, secret))).token;
+    rootSession = await session("root");
+    otherRootSession = await session("root");
+    warehouseSession = await session("warehouse");
+    service = new ReceivingService(fixture.db, undefined, undefined, undefined, { allowLegacyStyleInput: true });
+    app = Fastify({ genReqId: randomUUID });
+    registerReceivingRoutes(app, { service, root, authenticate: (token) => auth.authenticate(token) });
+  }, testExecutionConfig.correctnessTimeoutMs);
+
+  afterAll(async () => {
+    await app?.close();
+    await fixture?.dispose();
+  }, testExecutionConfig.correctnessTimeoutMs);
+
+  async function receive(styleNo: string) {
+    const actor = { ...fixture.people.warehouse!, authorizationCapability: "receiving:create",
+      authorizationCapabilities: ["receiving:create"], requestId: randomUUID() };
+    return (await service.create(actor, {
+      styleNo, documentQuantity: 40, actualQuantity: 40, attachmentIds: [await fixture.image(actor)],
+    }, randomUUID())).value.receivingBatchId;
+  }
+
+  async function seedHistory(receivingBatchId?: string, styleNo = originalStyle) {
+    const client = await fixture.db.connect();
+    try {
+      const result = await seedOwnTailHistory(client);
+      if (receivingBatchId) {
+        await client.query("BEGIN");
+        try {
+          // Only seed restored historical rows in the owned schema. The current
+          // guards stay enabled for corrections, rollback checks and retries.
+          await client.query("ALTER TABLE rework_orders DISABLE TRIGGER USER");
+          await client.query("UPDATE rework_orders SET source_receiving_batch_id=$2,style_no=$3 WHERE rework_order_id=$1",
+            [result.order, receivingBatchId, styleNo]);
+          await client.query("ALTER TABLE rework_orders ENABLE TRIGGER USER");
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        }
+      }
+      return result.order;
+    } finally {
+      client.release();
+    }
+  }
+
+  const patch = (batchId: string, styleNo: string, options: {
+    version?: number; actualQuantity?: number; session?: string; attachmentIds?: string[];
+  } = {}) => app.inject({
+    method: "PATCH", url: `/receiving/batches/${batchId}`,
+    headers: { cookie: `dx_rework_session=${options.session ?? rootSession}` },
+    payload: { expectedVersion: options.version ?? 1, styleNo, documentQuantity: 40,
+      actualQuantity: options.actualQuantity ?? 40, defectiveQuantity: 0, attachmentIds: options.attachmentIds },
+  });
+
+  const reworks = async (orders: string[], db: Pick<PoolClient, "query"> = fixture.db) => (await db.query<ReworkRow>(`
+    SELECT rework_order_id,source_receiving_batch_id,style_no,version,updated_by FROM rework_orders
+    WHERE rework_order_id=ANY($1::uuid[]) ORDER BY rework_order_id`, [orders])).rows;
+
+  const batchState = async (batchId: string, db: Pick<PoolClient, "query"> = fixture.db) => (await db.query(`
+    SELECT to_jsonb(batch) AS batch,
+      (SELECT count(*)::int FROM operation_events WHERE entity_id=$1::uuid::text AND action='receiving.batch.correct') AS events,
+      (SELECT count(*)::int FROM receiving_receipt_corrections WHERE receiving_batch_id=$1) AS corrections,
+      ARRAY(SELECT to_jsonb(receipt) FROM receiving_receipts receipt WHERE receiving_batch_id=$1 ORDER BY receipt_id) AS receipts,
+      ARRAY(SELECT to_jsonb(image) FROM attachments image WHERE entity_type='receiving_batch' AND entity_id=$1::uuid::text ORDER BY attachment_id) AS images,
+      ARRAY(SELECT to_jsonb(retired) FROM receiving_attachment_retirements retired WHERE receiving_batch_id=$1 ORDER BY attachment_id) AS retirements,
+      ARRAY(SELECT to_jsonb(packing) FROM receiving_packing_revisions packing WHERE receiving_batch_id=$1 ORDER BY packing_revision_id) AS packing
+    FROM receiving_batches batch WHERE batch.receiving_batch_id=$1`, [batchId])).rows[0]!;
+
+  const workHistory = async (orders: string[], db: Pick<PoolClient, "query"> = fixture.db) => (await db.query(`
+    SELECT ARRAY(SELECT to_jsonb(wage) FROM rework_wage_items wage WHERE rework_order_id=ANY($1::uuid[]) ORDER BY wage_item_id) AS wages,
+      ARRAY(SELECT to_jsonb(period) FROM rework_wage_periods period WHERE period_id IN
+        (SELECT period_id FROM rework_wage_items WHERE rework_order_id=ANY($1::uuid[])) ORDER BY period_id) AS periods,
+      ARRAY(SELECT to_jsonb(review) FROM rework_order_reviews review WHERE rework_order_id=ANY($1::uuid[]) ORDER BY order_review_id) AS reviews,
+      ARRAY(SELECT to_jsonb(config) FROM rework_process_configurations config WHERE rework_order_id=ANY($1::uuid[]) ORDER BY configuration_id) AS approvals,
+      ARRAY(SELECT to_jsonb(work) FROM rework_work_reports work WHERE rework_order_id=ANY($1::uuid[]) ORDER BY work_report_id) AS work`, [orders])).rows[0]!;
+
+  it("updates only source-batch rework rows with a different style and preserves wage and packing history", async () => {
+    const target = "TEST-G9-STYLE-ONLY";
+    const x = await receive(originalStyle);
+    const actor = { ...fixture.people.warehouse!, authorizationCapability: "receiving:packing_manage",
+      authorizationCapabilities: ["receiving:packing_manage"], requestId: randomUUID() };
+    await service.recordPacking(actor, { receivingBatchId: x, expectedVersion: 1, packingQuantity: 39 }, randomUUID());
+    const needsChange = await seedHistory(x);
+    const alreadyTarget = await seedHistory(x, target);
+    const y = await receive(originalStyle);
+    const sameStyleOtherBatch = await seedHistory(y);
+    const unbound = await seedHistory();
+    const orders = [needsChange, alreadyTarget, sameStyleOtherBatch, unbound];
+
+    const rows = await reworks(orders);
+    // Compare the existing UPDATE's hit set and per-row values on the same snapshot.
+    const hits = (await fixture.db.query<ReworkRow>(`SELECT rework_order_id,source_receiving_batch_id,style_no,version,updated_by
+      FROM rework_orders WHERE source_receiving_batch_id=$1 AND style_no IS DISTINCT FROM $2`, [x, target])).rows;
+    expect(hits).toEqual(rows.filter((row) => row.rework_order_id === needsChange));
+    expect(hits).toHaveLength(1);
+    const xBefore = await batchState(x);
+    const yBefore = await batchState(y);
+    const history = await workHistory(orders);
+    expect(history.wages).toHaveLength(12);
+    expect(xBefore.packing).toHaveLength(1);
+
+    const response = await patch(x, ` ${target.toLowerCase()} `, { version: xBefore.batch.version });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ receivingBatchId: x, styleNo: target, version: xBefore.batch.version + 1 });
+    expect(await reworks(orders)).toEqual(rows.map((row) => row.rework_order_id !== needsChange ? row : {
+      ...row, style_no: target, updated_by: fixture.root.actorId, version: row.version + 1,
+    }));
+    expect(await batchState(x)).toMatchObject({
+      batch: { style_no: target, version: xBefore.batch.version + 1 }, events: 1, corrections: 0,
+      receipts: xBefore.receipts, images: xBefore.images, retirements: xBefore.retirements, packing: xBefore.packing,
+    });
+    expect(await batchState(y)).toEqual(yBefore);
+    expect(await workHistory(orders)).toEqual(history);
+
+    const historyResponse = await app.inject({
+      url: `/receiving/batches/${x}/document-history`,
+      headers: { cookie: `dx_rework_session=${warehouseSession}` },
+    });
+    expect(historyResponse.statusCode, historyResponse.body).toBe(200);
+    expect(historyResponse.json()).toMatchObject({
+      batchIds: [x], receipts: [{ receiptId: xBefore.receipts[0].receipt_id, actualQuantity: 40 }],
+      corrections: [], packing: [{ id: xBefore.packing[0].packing_revision_id, quantity: "39" }],
+      files: [{ id: xBefore.images[0].attachment_id }],
+    });
+
+    const allAlreadyTarget = await receive("TEST-G9-ALREADY-CORRECTED");
+    const historical = await seedHistory(allAlreadyTarget, target);
+    const historicalBefore = await reworks([historical]);
+    expect((await patch(allAlreadyTarget, target)).statusCode).toBe(200);
+    expect(await reworks([historical])).toEqual(historicalBefore);
+  }, testExecutionConfig.correctnessTimeoutMs);
+
+  it("keeps the Root, image and version guards and leaves rework untouched for quantity-only corrections", async () => {
+    const source = "TEST-G9-QUANTITY";
+    const target = "TEST-G9-NEXT-STYLE";
+    const batch = await receive(source);
+    const order = await seedHistory(batch, source);
+    const before = await batchState(batch);
+    const rework = await reworks([order]);
+    expect((await patch("bad-id", target)).statusCode).toBe(400);
+    expect((await patch(randomUUID(), target)).statusCode).toBe(404);
+    expect((await patch(batch, target, { session: warehouseSession })).statusCode).toBe(403);
+    const replacement = await fixture.image(fixture.root);
+    expect((await patch(batch, target, { attachmentIds: [replacement] })).statusCode).toBe(409);
+    expect(await batchState(batch)).toEqual(before);
+    expect(await reworks([order])).toEqual(rework);
+    expect((await fixture.db.query("SELECT entity_id FROM attachments WHERE attachment_id=$1", [replacement])).rows[0]!.entity_id).toBeNull();
+
+    expect((await patch(batch, source, { actualQuantity: 39 })).statusCode).toBe(200);
+    // Simulate a caller that has no usable first response and resubmits the same expectedVersion.
+    expect((await patch(batch, source, { actualQuantity: 39 })).statusCode).toBe(409);
+    expect(await batchState(batch)).toMatchObject({ batch: { version: 2 }, events: 1, corrections: 1 });
+    expect(await reworks([order])).toEqual(rework);
+
+    const independent = await receive("TEST-G9-NO-REWORK");
+    expect((await patch(independent, "TEST-G9-NO-REWORK-NEW")).statusCode).toBe(200);
+    expect((await reworks([order]))[0]).toEqual(rework[0]);
+    expect((await fixture.db.query("SELECT count(*)::int AS count FROM rework_orders WHERE source_receiving_batch_id=$1", [independent])).rows[0]!.count).toBe(0);
+
+    const competing = await Promise.all([
+      patch(batch, target, { version: 2, actualQuantity: 39 }),
+      patch(batch, target, { version: 2, actualQuantity: 39, session: otherRootSession }),
+    ]);
+    expect(competing.map((result) => result.statusCode).sort()).toEqual([200, 409]);
+    expect(await batchState(batch)).toMatchObject({ batch: { version: 3, style_no: target }, events: 2, corrections: 1 });
+    expect(await reworks([order])).toEqual([{ ...rework[0], style_no: target, version: rework[0]!.version + 1, updated_by: fixture.root.actorId }]);
+  }, testExecutionConfig.correctnessTimeoutMs);
+
+  it("rolls back the entire correction on a later packing invalidation failure and retries the original version", async () => {
+    const source = "TEST-G9-ROLLBACK";
+    const target = "TEST-G9-ROLLBACK-TARGET";
+    const batch = await receive(source);
+    const order = await seedHistory(batch, source);
+    const y = await receive(source);
+    const yOrder = await seedHistory(y, source);
+    const designer = fixture.people["sample-designer"]!;
+    const aliasOrder = await new DigitalProductionIdentityService(fixture.db, true).createOrder(designer, DigitalOrderCreateSchema.parse({
+      customerCode: "PD", productGroup: "男装", designStyleNo: target, orderDate: "2026-11-26",
+      primaryMerchandiserId: fixture.people.merchandiser!.actorId,
+      lines: [{ formalPoNo: target, color: "黑", customerWarehouseArrivalDate: "2027-03-01", sizes: [{ size: "M", quantity: 10 }] }],
+    }), randomUUID());
+    const observer = await fixture.db.connect();
+    const lockKey = 910093;
+    const invalidations = async () => (await observer.query(`SELECT count(*)::int AS count FROM digital_journey_fact_changes
+      WHERE resource_kind='order' AND resource_id=$1`, [aliasOrder.productionOrderId])).rows[0]!.count;
+    let request: PromiseLike<{ statusCode: number; body: string }> | undefined;
+    try {
+      const before = await batchState(batch, observer);
+      const yBefore = await batchState(y, observer);
+      const rows = await reworks([order, yOrder], observer);
+      const history = await workHistory([order, yOrder], observer);
+      const invalidationCount = await invalidations();
+      await observer.query("SELECT pg_advisory_lock($1)", [lockKey]);
+      await observer.query(`CREATE FUNCTION test_g9_fail_invalidation() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.resource_id = '${aliasOrder.productionOrderId}'::uuid THEN
+            IF NOT EXISTS(SELECT 1 FROM rework_orders WHERE rework_order_id='${order}'::uuid AND style_no='TEST-G9-ROLLBACK-TARGET')
+              OR NOT EXISTS(SELECT 1 FROM receiving_receipt_corrections WHERE receiving_batch_id='${batch}'::uuid)
+            THEN RAISE EXCEPTION 'TEST G9 did not reach the after-rework checkpoint'; END IF;
+            PERFORM pg_advisory_xact_lock(${lockKey});
+            RAISE EXCEPTION 'TEST G9 packing invalidation failure';
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER test_g9_fail_invalidation AFTER INSERT ON digital_journey_fact_changes
+        FOR EACH ROW EXECUTE FUNCTION test_g9_fail_invalidation()`);
+      // Keep an independent connection outside the writing transaction while it is stopped after the rework update.
+      request = Promise.resolve(patch(batch, target, { actualQuantity: 38 }));
+      let reached = false;
+      const deadline = Date.now() + 5000;
+      while (!reached && Date.now() < deadline) {
+        reached = (await observer.query(`SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory'
+          AND NOT granted AND classid=0 AND objid=$1) AS reached`, [lockKey])).rows[0]!.reached;
+        if (!reached) await delay(20);
+      }
+      expect(reached).toBe(true);
+      expect(await batchState(batch, observer)).toEqual(before);
+      expect(await batchState(y, observer)).toEqual(yBefore);
+      await observer.query("SELECT rework_order_id FROM rework_orders WHERE rework_order_id=$1 FOR UPDATE NOWAIT", [yOrder]);
+      await observer.query("SELECT pg_advisory_unlock($1)", [lockKey]);
+      const failed = await request;
+      expect(failed.statusCode, failed.body).toBe(500);
+      expect(failed.body).toContain("TEST G9 packing invalidation failure");
+
+      expect(await batchState(batch, observer)).toEqual(before);
+      expect(await batchState(y, observer)).toEqual(yBefore);
+      expect(await reworks([order, yOrder], observer)).toEqual(rows);
+      expect(await workHistory([order, yOrder], observer)).toEqual(history);
+      expect(await invalidations()).toBe(invalidationCount);
+
+      await observer.query("DROP TRIGGER test_g9_fail_invalidation ON digital_journey_fact_changes");
+      const retried = await patch(batch, target, { actualQuantity: 38 });
+      expect(retried.statusCode, retried.body).toBe(200);
+      expect(await batchState(batch, observer)).toMatchObject({ batch: { version: 2, style_no: target }, events: 1, corrections: 1 });
+      expect(await reworks([order, yOrder], observer)).toEqual(rows.map((row) => row.rework_order_id !== order ? row : {
+        ...row, style_no: target, version: row.version + 1, updated_by: fixture.root.actorId,
+      }));
+      expect(await batchState(y, observer)).toEqual(yBefore);
+      expect(await workHistory([order, yOrder], observer)).toEqual(history);
+      expect(await invalidations()).toBe(invalidationCount + 1);
+    } finally {
+      await observer.query("SELECT pg_advisory_unlock($1)", [lockKey]);
+      await request;
+      await observer.query("DROP TRIGGER IF EXISTS test_g9_fail_invalidation ON digital_journey_fact_changes");
+      observer.release();
+    }
+  }, testExecutionConfig.correctnessTimeoutMs);
 });

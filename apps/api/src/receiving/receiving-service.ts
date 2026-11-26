@@ -14,6 +14,7 @@ import {nativeExceptionsForBatchGroup} from './native-receipt-qualification.js';
 import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
+import { correctSourceBatchStyle } from "../rework/correct-source-batch-style.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -1002,12 +1003,7 @@ export class ReceivingService {
       );
       if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
       if (current.has_rework_history && current.style_no !== normalized.styleNo) {
-        await client.query(
-          `UPDATE rework_orders
-           SET style_no=$2,version=version+1,updated_by=$3,updated_at=clock_timestamp()
-           WHERE source_receiving_batch_id=$1 AND style_no IS DISTINCT FROM $2`,
-          [receivingBatchId, normalized.styleNo, actor.actorId],
-        );
+        await correctSourceBatchStyle(client, receivingBatchId, normalized.styleNo, actor.actorId);
       }
       await this.replaceReceivingImages(client, actor, receivingBatchId, normalized.attachmentIds);
       await invalidatePackingAliasCandidates(client,[current.style_no,normalized.styleNo]);
