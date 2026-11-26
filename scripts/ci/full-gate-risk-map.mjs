@@ -498,6 +498,12 @@ export const classifyFullGatePaths = (inputPaths) => {
   if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','apps/api/src/sourcing/sourcing-case-read.ts','apps/api/src/sourcing/sourcing-case-mapping.ts','tests/integration/sourcing-page-details-postgres.test.ts'].includes(path))){
     for(const suite of ['sourcing-page-details','contract-return-clock','contract-return-routes-clock','contract-return-cycles'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('sourcing-page-details');
   }
+  if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','apps/api/src/sourcing/sourcing-contract-service.ts',
+    'apps/api/src/production-platform/identity-service.ts','apps/api/src/tools/repositories.ts',
+    'tests/integration/g2-contract-transfer-replay-postgres.test.ts','tests/integration/g2-number-style-replay-postgres.test.ts'].includes(path))){
+    for(const suite of ['g2-contract-transfer-replay','g2-number-style-replay'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
+    domains.add('sourcing-original-command-replay');
+  }
   if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){
     for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
     domains.add('todo-read-split');
