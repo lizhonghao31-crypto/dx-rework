@@ -1,80 +1,72 @@
 {
   "version": 1,
-  "base": "eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
+  "base": "ed2382a34537d6bd00cae4fcd1c46e8414b22686",
   "risk": "full",
-  "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
+  "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
   "rules": [
     {
-      "rule": "客户评语按原评语与图片发起、继续或查看来回版本；内部复版和客户真实独立复版真实发布最新表单，审核等待不创建半套任务",
-      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§4.2，A06/A07",
-      "initialization": "从原已发布开发单与权限精确的评语开始，实际原短交期由原批准处理；沿用原合法首发与实际任务体系。",
-      "dateAndPermission": "仅原授权设计与审批角色执行，原客户普通意见不启动制作，不冒用原已完工日期、不复制父单实际生产。",
+      "rule": "预下单转正仅在原料、供方、单位、实际范围和真实依据相符时继承原投料及收料；仅补齐与实质变更分开，需求不覆盖真实已投收",
+      "source": "《设计开发工作台_v11.5_Acceptance定点整改施工方案_R1工艺收发接线补订版.md》§5，A04/A05",
+      "initialization": "原自动编号预下单、准确已发布资料、原物料及交接记录，经法定原跟单确认后转正式。旧无身份的量不自动补齐。",
+      "dateAndPermission": "仅原设计师与原跟单拥有资料与确认权限，原仓库实际批次保持。原采购和收料业务时钟不改，正式时效仅由原正式动作首次启动。",
       "writes": [
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-revision-source.ts",
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/web/src/development-revision-comment-intent.ts",
-        "apps/web/src/development-revision-fields.tsx",
-        "apps/web/src/development-technical-workspace.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "packages/contracts/src/digital-development-rounds.ts",
-        "packages/contracts/src/digital-development-technical.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "apps/api/src/production-platform/cockpit-actionable.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/preorder-investment-applicability.ts",
+        "apps/api/src/production-platform/preorder-investment-evidence.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/warehouse-material-balance.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/web/src/production-readiness-panel.tsx",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/preorder-investment-applicability.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/web/src/digital-development-panel.tsx"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/preparation-series-bridge.ts",
+        "apps/api/src/production-platform/material-investment-reminder.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts"
       ],
       "oldTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/unit/production-readiness-contract.test.ts"
       ],
-      "expectation": "评语区与原编辑版单两条实际入口均把当前未保存表单直接发布成独立有效结果，无第二次手工发布。真实短交期原审批沿同一已冻结依据，结果只写一次，父源保持。",
+      "expectation": "真实 A/B 转正及补齐仍保原520米和实际日期。增加只补真实差额，减少不删除已投收。不同供方影响单项，老无证范围不误认。",
       "checks": [
         "native",
-        "quote",
-        "non-db",
+        "mapped-other",
         "static",
         "protocol"
       ]
     },
     {
-      "rule": "精确评语来源、材料输入、附图与每次已发布复版有序关联，明确再改才追加；原精确历史双单和 R6 报价消费者保持",
-      "source": "同一批准施工方案 §4.2.4–5，A07/A08，§8 报价联验",
-      "initialization": "原 0306 引用关系通过 0315 只扩有序办理标识，不改实际历史评语或原图片。R6 原报价从所选合法版本读取。",
-      "dateAndPermission": "按准确原角色/授权、scope、来源、目标轮次、原精确文档及服务器二次核查。历史图片不串单，当前采用不冒充原发生时间。",
+      "rule": "已合法保存的 H1 同一 PO、同一物料、同一范围实收可投影；无关旧 PO 或无实数标记不可遮蔽，可能重复的旧有效量保持待核",
+      "source": "同一批准施工方案 A13-a，H1 原 Acceptance 单 PO 回货批次的专项取证与用户授权；不是 A13-b/c 工艺收发",
+      "initialization": "同一当前投资两类范围，准确选定 ID、有效批次和采购目标。原共享 60 米作为同一实际事实分别由 A/B 命中。",
+      "dateAndPermission": "仅原授权仓库读和实际批次命令；H1 不补造数量、目标、原日期、不扩大范围或原任务。",
       "writes": [
-        "apps/api/migrations/0315_development_comment_revision_lineage.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/development-revision-comment-basis.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/web/src/development-technical-workspace.tsx",
-        "packages/contracts/src/digital-development-technical.ts",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/warehouse-material-balance.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-print-details.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/api/src/production-platform/development-revision-source.ts",
-        "apps/web/src/digital-development-panel.tsx",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts"
       ],
       "oldTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/warehouse-material-balance.test.ts"
       ],
-      "expectation": "实际在已发布 B 上打开原评语图片、保存 C 草稿并刷新恢复，然后从原版单直发并重放原请求。原意见原件权限不扩大，C 的同版打印准确显示原意见版本、日期及图片，两个继任身份有序无重，旧版和原报价的正式用量集不变。",
+      "expectation": "原业务正常入口精确 PO 60/20/40，共享 60/10/50 且不重复。可能重叠仍待核，原批次订正后原余额按同一批次计算。",
       "checks": [
         "native",
-        "quote",
-        "non-db",
+        "mapped-other",
         "static",
         "protocol"
       ]
@@ -84,84 +76,61 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/native.sh",
+      "command": "bash /workspace/scratch/r4-evidence/exact-r3/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
-      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
-      "context": "原评语区和原编辑版单两个正式直发入口，原回执恢复、原授权和 A4 历史正反例；原短交期隔离 PG",
-      "startedAt": "2026-11-26T10:01:11.642027+00:00",
-      "endedAt": "2026-11-26T10:04:26.745003+00:00",
-      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/native.log",
-      "logSha256": "c410b3740ec69221f7b20773284003768adc9d241311e2a7d0164cb3d830be19",
-      "passed": 66,
+      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
+      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "context": "原实际 A/B 预下单投料、转正 T0、H1 和共享收料、正反权限与数量口径",
+      "startedAt": "2026-11-26T10:29:10.542765+00:00",
+      "endedAt": "2026-11-26T10:30:59.987959+00:00",
+      "log": "/workspace/scratch/r4-evidence/exact-r3/native.log",
+      "logSha256": "852205cb67dc35c21e46edb27c5da3301a7084f31af07d399ec1b2a4813258c6",
+      "passed": 88,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ca50030fe41161cf53cde35237372595a803ebd9d32b0d08a56cf371a2c1c697"
+          "sha256": "5b8784cc6ddea979a83b23ea42e8dabed3b14d354c4affbb0de5066ec6875846"
         }
       ]
     },
     {
-      "id": "quote",
+      "id": "mapped-other",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/quote.sh",
+      "command": "bash /workspace/scratch/r4-evidence/exact-r3/mapped-other.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
-      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
-      "context": "原技术评语与 R6 真实报价交叉 PostgreSQL",
-      "startedAt": "2026-11-26T10:04:27.316517+00:00",
-      "endedAt": "2026-11-26T10:05:08.006470+00:00",
-      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/quote.log",
-      "logSha256": "0dffc842ba4cf76cfc6b4b29774e9182965a627fd67591b5eb735cadd26f1587",
-      "passed": 45,
+      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
+      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "context": "当前实际 R3 发布基点映射的余下十套 PostgreSQL",
+      "startedAt": "2026-11-26T10:31:00.257575+00:00",
+      "endedAt": "2026-11-26T10:36:13.524175+00:00",
+      "log": "/workspace/scratch/r4-evidence/exact-r3/mapped-other.log",
+      "logSha256": "3a0e7486bd23ba9335d6ecb4be4a9dada9519084afe876ff2e0d55215a522d74",
+      "passed": 144,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9d12b20a696ffc20af9fd8d90f61e38ef35c858121898c4b4a53782da4bc8e1b"
-        }
-      ]
-    },
-    {
-      "id": "non-db",
-      "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/non-db.sh",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
-      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
-      "context": "原版单规则、原打印对与配置契约非数据库",
-      "startedAt": "2026-11-26T10:01:11.639748+00:00",
-      "endedAt": "2026-11-26T10:01:15.330207+00:00",
-      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/non-db.log",
-      "logSha256": "bac848b9ef5a2447e80f74cd18384ddc16e85bd44478f8bc4fa53a69164f579f",
-      "passed": 43,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "0a43c943f59887168723fafaf1ba300c1205e77dcfc258c575e61677ae33e8ff"
+          "sha256": "7a16f3e63b6d613f02e95bf925319463e8bc9f982ae999b8cb8fd41713aec409"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r3-evidence/legacy-entry-fix/static.sh eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
+      "command": "bash /workspace/scratch/r4-evidence/exact-r3/static.sh ed2382a34537d6bd00cae4fcd1c46e8414b22686",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
-      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
-      "context": "实际依赖和权限范围类型、迁移、时间与凭证静态检查",
-      "startedAt": "2026-11-26T10:01:11.643507+00:00",
-      "endedAt": "2026-11-26T10:01:58.588423+00:00",
-      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/static.log",
+      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
+      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "context": "实际源码对应的类型、迁移、时间、凭证和已授权编辑范围静态检查",
+      "startedAt": "2026-11-26T10:29:10.541597+00:00",
+      "endedAt": "2026-11-26T10:29:56.054415+00:00",
+      "log": "/workspace/scratch/r4-evidence/exact-r3/static.log",
       "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
     },
     {
@@ -170,17 +139,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eb39d5f696da1294c376232c1a8153c1f4a8fd7f",
-      "sourceFingerprint": "7b1aa67a43457b12472fe885c4b332e60fd634a459b3099b4bd92df04c692fca",
-      "context": "原治理门禁、实际时间与 release 机制协议测试",
-      "startedAt": "2026-11-26T10:01:15.653188+00:00",
-      "endedAt": "2026-11-26T10:01:21.603219+00:00",
-      "log": "/workspace/scratch/r3-evidence/legacy-entry-fix/protocol.log",
-      "logSha256": "330a0d8cdd318bbbf14a6484edce099162d973e67d43a10c28b1e7b87f473f95",
+      "testedHead": "74773dcb0a6027a1df3557cce0e23e4455c8b436",
+      "sourceFingerprint": "784d1b65a1360b7fc62dcde1e6be5c2250d2f6cd84204d7e39262888eeedd17a",
+      "context": "原治理门禁、时效与 release 机制协议测试",
+      "startedAt": "2026-11-26T10:29:10.541621+00:00",
+      "endedAt": "2026-11-26T10:29:16.725962+00:00",
+      "log": "/workspace/scratch/r4-evidence/exact-r3/protocol.log",
+      "logSha256": "e22cc534ad06eee1ffb9ee6dd8a28289844a31ac2b304065ad5550457652543a",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "330a0d8cdd318bbbf14a6484edce099162d973e67d43a10c28b1e7b87f473f95"
+          "sha256": "e22cc534ad06eee1ffb9ee6dd8a28289844a31ac2b304065ad5550457652543a"
         }
       ],
       "passed": 285,
