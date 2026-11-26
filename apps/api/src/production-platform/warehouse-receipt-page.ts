@@ -7,7 +7,7 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {assignedWarehousePreparationResources} from './warehouse-assigned-resources.js';
 import {developmentReadTables} from './development-amendment-repository.js';
-import {attachCurrentPreorderApplicability,currentPreparationMaterials,instructionInvestmentMaterials,materialBasisChanged,preparationHandoverCurrent,preparationHash,sourceHandoverChanged,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
+import {attachCurrentPreorderApplicability,currentPreparationMaterials,instructionInvestmentMaterials,legacyPreparationMaterialFingerprint,materialBasisChanged,preparationHandoverCurrent,sourceHandoverChanged,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
 import {readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
@@ -40,10 +40,7 @@ function validMaterialEvidence(raw:Raw,ctx:Source){
   }
  }
  if(raw.body.materialBasis&&(raw.kind==='fabric_receipt'||raw.kind==='accessories_ready')){
-  const kind=raw.kind;
-  const materials=(ctx.development?.materials??[]).filter(m=>kind==='fabric_receipt'?m.category!=='辅料':m.category==='辅料')
-   .map(m=>[m.materialId,m.name,m.color,m.specification,m.width,m.weight,m.composition]).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
-  return raw.body.materialBasis===preparationHash({materials,accessories:kind==='accessories_ready'?ctx.instruction?.accessories??null:null});
+  return raw.body.materialBasis===legacyPreparationMaterialFingerprint(raw.kind,ctx.development?.materials,ctx.instruction?.accessories);
  }
  return true;
 }
@@ -107,13 +104,16 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
    for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
-    const rawHistory=nativeRows.map(row=>({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
-     resource:{kind:row.resource_kind,id:row.resource_id},recordId:row.record_id,version:row.version,occurredAt:iso(row.occurred_at),
-     recordedAt:iso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:'',valid:validMaterialEvidence(row,scope),
-     invalidReasons:!row.evidence_valid?['原凭证已失效或尚未完成上传']:validMaterialEvidence(row,scope)?[]:
-      [row.kind==='design_handover'?sourceHandoverChanged:materialBasisChanged],quantities:row.body.quantities??[],evidenceIds:row.body.evidenceIds??[],
-     note:row.body.note??'',expectedVersion:row.body.expectedVersion??0,recipientId:row.body.recipientId??null,
-     sourceDocumentVersion:row.body.sourceDocumentVersion??null})) as PreparationMaterialFact[];
+    const rawHistory=nativeRows.map(row=>{
+     const valid=validMaterialEvidence(row,scope);
+     return {...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
+      resource:{kind:row.resource_kind,id:row.resource_id},recordId:row.record_id,version:row.version,occurredAt:iso(row.occurred_at),
+      recordedAt:iso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:'',valid,
+      invalidReasons:!row.evidence_valid?['原凭证已失效或尚未完成上传']:valid?[]:
+       [row.kind==='design_handover'?sourceHandoverChanged:materialBasisChanged],quantities:row.body.quantities??[],evidenceIds:row.body.evidenceIds??[],
+      note:row.body.note??'',expectedVersion:row.body.expectedVersion??0,recipientId:row.body.recipientId??null,
+      sourceDocumentVersion:row.body.sourceDocumentVersion??null};
+    }) as PreparationMaterialFact[];
     const materialHistory=await attachCurrentPreorderApplicability(db,rawHistory,scope.source_id,scope.development&&scope.development_version!==null?
      {document:scope.development,version:scope.development_version,round_number:scope.development_round}:null,preorderProofs);
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
