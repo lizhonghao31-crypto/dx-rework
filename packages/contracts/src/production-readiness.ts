@@ -34,6 +34,15 @@ export const PreparationMaterialRecordSchema=z.object({
  if(new Set(x.evidenceIds).size!==x.evidenceIds.length)c.addIssue({code:'custom',path:['evidenceIds'],message:'凭证不可重复'});
 });
 const WarehouseReceiptRefSchema=z.object({recordId:z.uuid(),version:z.number().int().positive()}).strict();
+export const ConfirmPreorderMaterialApplicabilitySchema=z.object({sourceVersion:z.number().int().positive(),roundNumber:z.number().int().positive(),
+ materialId:z.uuid(),handover:WarehouseReceiptRefSchema,investment:WarehouseReceiptRefSchema,
+ evidenceIds:z.array(z.uuid()).min(1).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复'),
+ note:z.string().trim().min(1).max(1000),
+}).strict();
+export type ConfirmPreorderMaterialApplicability=z.infer<typeof ConfirmPreorderMaterialApplicabilitySchema>;
+export type PreorderMaterialApplicabilityConfirmation={confirmedAt:string;evidenceIds:string[]};
+export type PreorderMaterialApplicabilityCandidate=Pick<ConfirmPreorderMaterialApplicability,'sourceVersion'|'roundNumber'|'materialId'|'handover'|'investment'> &
+ {name:string;fields:string[];state:'needs_same_material_proof'|'descriptive_fill'|'quantity_amendment';reason:string};
 export const WarehouseReceiptBatchSchema=z.object({
  kind:z.enum(['fabric_receipt','accessories_ready']),
  scopeRef:z.string().trim().min(1).max(150).default('whole'),
@@ -84,10 +93,13 @@ export type MaterialInvestmentScopeBasis={
   handoverRecordId:string;handoverVersion:number;preorder?:true;
  };
  type InvestmentOccurrence={fingerprint:string;occurredAt:string};
+ export type PreorderInvestmentApplicability={sourceVersion:number;roundNumber:number;full:boolean;
+   originalFingerprints:Record<string,string>;basisRevisions:string[];
+   quantityDemand?:Record<string,{requested:string;originallyRecorded:string;remaining:string;unit:string}>};
  export type StyleLabelRecordRef={recordId:string;version:number;resource:PreparationResource;scopeRef:string;occurredAt:string|null};
  export type StyleLabelOccurrence={ruleVersion:number;orderId:string;lineId:string;requiredQuantity:number;requirementFingerprint:string;quantityFingerprint:string;
    record:StyleLabelRecordRef;completedAt:string|null;precision:'instant'|'unknown';source:StyleLabelRecordRef|null;reason:string|null};
- export type PreparationMaterialFact=Omit<PreparationMaterialRecord,'investmentQuantityCorrection'>&{warehouseReceipt?:WarehouseReceiptBatchEvidence;styleLabelOccurrences?:Record<string,StyleLabelOccurrence>;styleLabelRequirementsBasis?:{orderId:string;fingerprint:string};investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,InvestmentOccurrence>;investmentQuantityOccurrences?:Record<string,InvestmentOccurrence>;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string;supplierId?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
+ export type PreparationMaterialFact=Omit<PreparationMaterialRecord,'investmentQuantityCorrection'>&{warehouseReceipt?:WarehouseReceiptBatchEvidence;styleLabelOccurrences?:Record<string,StyleLabelOccurrence>;styleLabelRequirementsBasis?:{orderId:string;fingerprint:string};investmentScopeBasis?:MaterialInvestmentScopeBasis;investmentMaterialOccurrences?:Record<string,InvestmentOccurrence>;investmentQuantityOccurrences?:Record<string,InvestmentOccurrence>;preorderApplicability?:PreorderInvestmentApplicability;preorderApplicabilityAnchorVersion?:number;preorderApplicabilityConfirmation?:PreorderMaterialApplicabilityConfirmation;handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string;materialId?:string;category?:'主布'|'配布'|'辅料';supplier?:string;supplierId?:string;width?:string;weight?:string;composition?:string;quantityUnit?:string;garmentColor?:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
 export const PreparationResponsibilitySchema=z.object({expectedVersion:z.number().int().nonnegative(),warehouseWorkerId:z.uuid().nullable(),colorConfirmationWorkerId:z.uuid().nullable(),colorConfirmationRole:z.string().trim().min(1).max(100).nullable(),reason:z.string().trim().min(1).max(1000)}).strict().refine(x=>Boolean(x.colorConfirmationWorkerId)===Boolean(x.colorConfirmationRole),'对色确认人和现有岗位须同时选择');
 export type PreparationResponsibility=z.infer<typeof PreparationResponsibilitySchema>;
 export const PreparationAdoptionSchema=z.object({previewRevision:z.string().min(1),reason:z.string().trim().min(1).max(1000)}).strict();
@@ -103,6 +115,7 @@ export type MaterialInvestmentReminder={
 };
 export type ProductionReadinessState={
  materialInvestmentReminder?:MaterialInvestmentReminder&{canClose:boolean};
+ preorderApplicabilityCandidates?:PreorderMaterialApplicabilityCandidate[];
  sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;orderInstructionVersion?:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
  facts:PreparationMaterialFact[];history:PreparationMaterialFact[];canRecord:PreparationMaterialKind[];
  responsibility:{version:number;warehouseWorkerId:string|null;colorConfirmationWorkerId:string|null;colorConfirmationRole:string|null};canAssign:boolean;

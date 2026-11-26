@@ -27,16 +27,28 @@ function receivedAtBasis(fact:PreparationMaterialFact){
  return typeof (fact as PreparationMaterialFact&{materialBasis?:unknown}).materialBasis==='string';
 }
 
+function mayOverlapOriginalReceipt(fact:PreparationMaterialFact|undefined,basis:WarehouseReceiptBasis,asOf:string){
+ if(!fact?.valid||!fact.occurredAt||!Number.isFinite(Date.parse(fact.occurredAt))||Date.parse(fact.occurredAt)>Date.parse(asOf)||
+   !['ready','partial'].includes(fact.state))return false;
+ // A positive original amount with unknown material, shared/unknown PO, or
+ // mismatched units can still refer to the same pieces. Never silently add it
+ // or presume a conversion. A different exact material or PO cannot overlap.
+ return fact.quantities.some(row=>row.quantity>0&&(!row.materialId||row.materialId===basis.materialId)&&
+  (!row.lineId||!basis.lineId||row.lineId===basis.lineId));
+}
+
 export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0]):WarehouseReceiptWorkItem[]{
  return original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
-  const handover=original.facts.find(fact=>fact.kind==='design_handover'&&fact.scopeRef===investment.scopeRef&&
-   fact.resource.kind===investment.resource.kind&&fact.resource.id===investment.resource.id&&fact.valid&&fact.state==='ready'&&
-   fact.recordId===scope.handoverRecordId&&fact.version===scope.handoverVersion&&fact.investmentScopeBasis?.fingerprint===scope.fingerprint);
+  const matches=(fact:PreparationMaterialFact)=>fact.kind==='design_handover'&&fact.scopeRef===investment.scopeRef&&
+   fact.resource.kind===investment.resource.kind&&fact.resource.id===investment.resource.id&&(fact.valid||fact.preorderApplicability)&&fact.state==='ready'&&
+   fact.recordId===scope.handoverRecordId&&fact.version===scope.handoverVersion&&fact.investmentScopeBasis?.fingerprint===scope.fingerprint;
+  const handover=original.facts.find(matches)??original.history.find(fact=>fact.preorderApplicability&&matches(fact));
   if(!handover)return [];
   return investment.quantities.flatMap(row=>{
-   if(!row.materialId||row.lineId&&!original.lines.some(line=>line.lineId===row.lineId))return [];
+   if(!row.materialId||row.lineId&&!original.lines.some(line=>line.lineId===row.lineId)||
+    handover.preorderApplicability&&handover.preorderApplicability.originalFingerprints[row.materialId]!==scope.materialFingerprints[row.materialId])return [];
    const materials=handover.handoverMaterials?.filter(material=>material.materialId===row.materialId)??[];
    if(materials.length!==1||!materials[0]?.category)return [];
    const material=materials[0];
@@ -55,9 +67,9 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const replaced=new Set(raw.flatMap(row=>row.replaces?[receiptKey(row.replaces)]:[]));
    const activeBatches=typedBalance?raw.flatMap(row=>row.occurredAt&&!replaced.has(receiptKey(row.original))?
     [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt}]:[]):[];
-   // A separate, explicitly recorded batch cannot be mixed with old numeric
-   // snapshots whose physical lots cannot be matched to the batch.
-   const received=raw.length?(receipt?null:typedBalance):
+   // An unrelated PO or a quantityless status cannot suppress this exact
+   // batch. Keep genuinely overlapping old physical quantities unresolved.
+   const received=raw.length?(mayOverlapOriginalReceipt(receipt,basis,asOf)?null:typedBalance):
     currentWarehouseReceiptQuantity(receipt??null,basis);
    const productionRequired=demandForWarehouseReceipt(demand,basis,original.lines);
    const balance=warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired,

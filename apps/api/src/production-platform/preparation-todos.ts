@@ -14,6 +14,7 @@ import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {digitalFormalPoNo,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
 import {todoSlaTiming} from '../todos/sla-presentation.js';
 import {todoContentToken} from '../todos/content-reads.js';
+import {projectPreorderInvestmentApplicability,readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 /** Derived actions share native evidence. Reading or acknowledging them never completes work. */
 export async function preparationWindowTodos(db:DB,actor:TrustedActorContext,projection?:TodoProjection,
@@ -62,10 +63,9 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  observation?:{database:Pool;transaction?:PoolClient;scan?:true}):Promise<TodoResponse[]>{
  if(!actor.actorRoles.includes('order_merchandiser')||!await preparationAvailable(db)||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'))return [];
  const tables=await developmentReadTables(db);
- type Handover=Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'>;
  const workbench=projection?.merchandiserSelection===true;
- type Candidate={sourceId:string|null;orderId:string|null;styleNo:string;sourceCustomer:string|null;preorder:unknown;handoverId:string;handoverVersion:number;occurredAt:Date;handover:Handover;
-  documentVersion:number|null;materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;instructionVersion:number|null;orderHandover:boolean;investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'version'|'investmentMaterialOccurrences'>|null};
+ type Candidate={sourceId:string|null;orderId:string|null;styleNo:string;sourceCustomer:string|null;preorder:unknown;handoverId:string;handoverVersion:number;occurredAt:Date;handover:PreparationMaterialFact;
+  documentVersion:number|null;roundNumber:number;materials:DevelopmentMaterial[]|null;instruction:InstructionDocument|null;instructionVersion:number|null;orderHandover:boolean;investment:PreparationMaterialFact|null};
  const rows=(await db.query<Candidate>(`WITH resources AS (
   SELECT s.source_id,o.production_order_id,o.primary_merchandiser_id,s.design_style_no,s.customer_code
   FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
@@ -77,17 +77,20 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  SELECT res.source_id AS "sourceId",res.production_order_id AS "orderId",res.design_style_no AS "styleNo",res.customer_code AS "sourceCustomer",
   CASE WHEN $3 AND res.production_order_id IS NULL AND d.document->'customerOrderDraft'->>'stage'='preorder'
    AND d.document->'customerOrderDraft'->>'withOrder'='true' THEN d.document->'customerOrderDraft'->'order' END AS preorder,
-  h.record_id AS "handoverId",h.version AS "handoverVersion",h.occurred_at AS "occurredAt",h.body AS handover,
-  coalesce(r.document_version,d.version) AS "documentVersion",j.version AS "instructionVersion",
+  h.record_id AS "handoverId",h.version AS "handoverVersion",h.occurred_at AS "occurredAt",
+  h.body||jsonb_build_object('recordId',h.record_id,'version',h.version,'state',h.state,'scopeRef',h.scope_ref,
+   'resource',jsonb_build_object('kind',h.resource_kind,'id',h.resource_id),'valid',true) AS handover,
+  coalesce(r.document_version,d.version) AS "documentVersion",coalesce(r.round_number,1) AS "roundNumber",j.version AS "instructionVersion",
   (h.resource_kind='order' AND h.body->>'sourceDocumentVersion' IS NULL) AS "orderHandover",
   coalesce(r.document,d.document)->'materials' AS materials,j.document AS instruction,
-  CASE WHEN i.record_id IS NOT NULL THEN jsonb_build_object('state',i.state,'version',i.version,'quantities',coalesce(i.body->'quantities','[]'::jsonb),'investmentMaterialOccurrences',i.body->'investmentMaterialOccurrences',
+  CASE WHEN i.record_id IS NOT NULL THEN i.body||jsonb_build_object('state',i.state,'recordId',i.record_id,'version',i.version,'scopeRef',i.scope_ref,
+   'resource',jsonb_build_object('kind',i.resource_kind,'id',i.resource_id),'quantities',coalesce(i.body->'quantities','[]'::jsonb),
    'valid',NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(coalesce(i.body->'evidenceIds','[]'::jsonb)) f(id)
     WHERE NOT EXISTS(SELECT 1 FROM attachments a WHERE a.attachment_id::text=f.id AND a.status='ready'))) END AS investment
   FROM resources res
   LEFT JOIN ${tables.documents} d ON d.source_id=res.source_id
   LEFT JOIN digital_instruction_documents j ON j.production_order_id=res.production_order_id AND j.version>0
-  LEFT JOIN LATERAL (SELECT round.document,round.document_version FROM ${tables.rounds} round
+  LEFT JOIN LATERAL (SELECT round.document,round.round_number,round.document_version FROM ${tables.rounds} round
    WHERE round.source_id=res.source_id ORDER BY round.round_number DESC LIMIT 1) r ON true
   JOIN LATERAL (SELECT native.* FROM digital_preparation_material_versions native
    WHERE native.kind='design_handover' AND native.scope_ref='whole'
@@ -111,11 +114,17 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  const clock=observation?new ContextBusinessClock(observation.database,observation.transaction):null;
  const scoped=observation?.scan||acceptanceBusinessContext()||!observation;
  const eligible:Array<{row:Candidate;id:string}>=[];
+ const proofs=await readPreorderApplicabilityProofs(db,[...new Set(rows.flatMap(row=>row.sourceId&&row.handover.investmentScopeBasis?.preorder&&
+  row.documentVersion!==row.handover.sourceDocumentVersion?[row.sourceId]:[]))]);
  for(const row of rows){
   const id=row.orderId??row.sourceId;
   const source=row.documentVersion===null?null:{version:row.documentVersion,materials:row.materials??[]};
   const instruction=row.instruction&&row.instructionVersion!==null
    ?{version:row.instructionVersion,materials:instructionInvestmentMaterials(row.instruction)}:null;
+  if(source&&row.handover.investmentScopeBasis?.preorder&&row.documentVersion!==row.handover.sourceDocumentVersion){
+   const projection=projectPreorderInvestmentApplicability(row.handover,row.investment??undefined,{...source,roundNumber:row.roundNumber},proofs);
+   if(projection)row.handover={...row.handover,preorderApplicability:projection};
+  }
   const current=row.orderHandover
    ?row.handover.orderInstructionVersion===undefined||preparationHandoverCurrent(row.handover,instruction,'instruction')
    :preparationHandoverCurrent(row.handover,source);
@@ -137,7 +146,8 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
    notice?.({key:`material-investment:${row.handoverId}:${reminder.fingerprint}:${reminder.status}`,todoId:row.handoverId,title,route});
   }
   const selectionKey:TodoSelectionKey={todoId:row.handoverId,
-   contentToken:todoContentToken(['material-investment',row.handoverId,row.handover.investmentScopeBasis?.fingerprint??row.handover.sourceDocumentVersion,row.investment?.version??null]),
+   contentToken:todoContentToken(['material-investment',row.handoverId,row.handover.investmentScopeBasis?.fingerprint??row.handover.sourceDocumentVersion,row.investment?.version??null,
+    ...(row.handover.preorderApplicability?[row.handover.preorderApplicability.basisRevisions]:[])]),
    taskTitle:preparationMaterialLabels.material_investment,todoType:'business_action',category:'digital_material_investment',sourceAction:'preparation_material_investment',
    recipientUserId:actor.actorId,requiredRole:'order_merchandiser',route,...(preorderSearch?{preorderSearch}:{}),
    dueAt,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:row.styleNo,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};

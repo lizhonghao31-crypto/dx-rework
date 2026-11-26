@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
+import {ConfirmPreorderMaterialApplicabilitySchema,WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
 import {CreateUploadIntentSchema} from '@dx-rework/contracts';
 import {ConfirmDevelopmentSampleHandoverSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {businessActor} from '../access/business-authority.js';
@@ -31,6 +31,10 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
   }
   app.post(`${base}/material-investment-reminder/close`,async r=>service.closeMaterialInvestmentReminder(await actor(r),resource(r),r.body,key(r)));
   if(deps.workbenchNumberedCreation){
+   app.post(`${base}/material-investment/confirm-applicability`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.confirmPreorderMaterial(await actor(r),resource(r),parse(ConfirmPreorderMaterialApplicabilitySchema,r.body),key(r));
+   });
    app.get(`${base}/warehouse-receipt-work`,async(r,reply)=>{
     reply.header('cache-control','private, no-store');
     return service.warehouseReceiptWork(await actor(r),resource(r));
