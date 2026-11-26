@@ -2,7 +2,7 @@
   "version": 1,
   "base": "03be9f081da7c5f7ff9df8e4ecca04ec80c7441e",
   "risk": "full",
-  "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
+  "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
   "rules": [
     {
       "rule": "资料未齐的面料是实际预估风险，不成为只因未知而禁止的普通开发发布；原明确短交期仍按原审批办理",
@@ -69,19 +69,19 @@
       "command": "/workspace/scratch/r2-evidence/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "71c76f3ffc0f52c487e12a89f02fd503fa7109ce",
-      "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
-      "context": "Isolated native PostgreSQL 16 and real authenticated Chromium. Exact design and time application, physical accessory verification and original window.",
-      "startedAt": "2026-11-26T06:51:28.450085+00:00",
-      "endedAt": "2026-11-26T06:52:05.214059+00:00",
-      "logSha256": "4006cd1170d637adb2e33f3fed53996a649aa902f355b7746133ae451b9d3d0e",
-      "passed": 4,
+      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
+      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
+      "context": "Isolated native PostgreSQL 16 and real authenticated Chromium. Review regressions, actual publication, verifiable accessory and original window.",
+      "startedAt": "2026-11-26T06:59:02.279827+00:00",
+      "endedAt": "2026-11-26T06:59:36.778615+00:00",
+      "logSha256": "776dc6c83c6fc5ca14b0d695cdb8eb881c3cb4301bcb5da11087680d1a663472",
+      "passed": 6,
       "failed": 0,
       "skipped": 95,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "13b4345d3146379427d16adf9599e76896d716537a8f40fcd83756677a9fe80c"
+          "sha256": "253ae3462ff2bcc6504f877b83a8d45312c7662d299ca928750d3fb8cd48d45e"
         }
       ]
     },
@@ -91,19 +91,19 @@
       "command": "/workspace/scratch/r2-evidence/order-time.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "71c76f3ffc0f52c487e12a89f02fd503fa7109ce",
-      "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
-      "context": "Isolated native PostgreSQL 16. Original real per-order time approval and execution on the R1 release base.",
-      "startedAt": "2026-11-26T06:51:28.445517+00:00",
-      "endedAt": "2026-11-26T06:52:11.554210+00:00",
-      "logSha256": "eecbffbb52a98174d0ca562a78d672bb236173a67ee68799918bed017a724e2a",
-      "passed": 37,
+      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
+      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
+      "context": "Isolated native PostgreSQL 16. Full original per-order time approval and execution on the exact revised R2 source.",
+      "startedAt": "2026-11-26T06:59:02.114641+00:00",
+      "endedAt": "2026-11-26T06:59:45.031945+00:00",
+      "logSha256": "684ded98eb4809faf644e316e36c250587c8f9345218b5e834c2f84375b20b0c",
+      "passed": 39,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5162ace71f50e5722b300dc3008fbffc5891e351b973dd8986be95524e8d864d"
+          "sha256": "802ee2984141239938c8f8002f25e446016f8ef9ffefd4cc6dde7105861bcffb"
         }
       ]
     },
@@ -113,11 +113,11 @@
       "command": "/workspace/scratch/r2-evidence/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "71c76f3ffc0f52c487e12a89f02fd503fa7109ce",
-      "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
+      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
+      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
       "context": "Locked Node 22 and npm 10 workspace typecheck, touched-source lint and working tree secret check.",
-      "startedAt": "2026-11-26T06:51:28.450743+00:00",
-      "endedAt": "2026-11-26T06:52:15.758892+00:00",
+      "startedAt": "2026-11-26T06:58:54.167875+00:00",
+      "endedAt": "2026-11-26T06:59:40.942413+00:00",
       "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
     },
     {
@@ -126,12 +126,12 @@
       "command": "bash -lc 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ebaf2dab62767dcdbc1f6cd8eac4ab7d6e2d0538",
-      "sourceFingerprint": "f08e240fd551455ea4ceb3e64410b3c3fef4b239cfaae596052b678411c38243",
-      "context": "Exact GitHub Light protocol regression command checked locally. Only the known reviewed display-site signature changed.",
-      "startedAt": "2026-11-26T06:55:18.021853+00:00",
-      "endedAt": "2026-11-26T06:55:21.156889+00:00",
-      "logSha256": "f28a184413f02be5a0fca67ff7965823c25e916a191e0c17cf3843b70e222005"
+      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
+      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
+      "context": "Exact GitHub Light protocol tests checked locally. The known reviewed display-site signature is synchronized.",
+      "startedAt": "2026-11-26T06:58:54.159716+00:00",
+      "endedAt": "2026-11-26T06:58:59.018370+00:00",
+      "logSha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c"
     }
   ]
 }
