@@ -29,6 +29,28 @@
       "checks": [
         "g9-receiving-pg"
       ]
+    },
+    {
+      "rule": "G9 迁移现有 wall-clock updated_at 写入时，时点清单只迁移原字节标识并保留原 R5 注记。",
+      "source": "Eric 审核 G9 的同事务与数据保序要求，加上现行时点清单门禁。",
+      "writes": [
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "apps/api/src/rework/correct-source-batch-style.ts#clock_timestamp"
+      ],
+      "reads": [
+        "scripts/acceptance/time-site-inventory.mjs#checkTimeSiteInventory",
+        "apps/api/src/receiving/receiving-service.ts#correctBatch"
+      ],
+      "oldTests": [
+        "scripts/ci/pr-gate-controller.test.mjs#cheap CI preflight includes",
+        "scripts/ci/pr-gate-controller.test.mjs#keeps the reviewed responsibility sources"
+      ],
+      "initialization": "原时点标识按源路径索引。仅移动一条已存在的 wall-clock 语句，保留所有原站点标识及其他路径元数据。",
+      "dateAndPermission": "该 updated_at 原时间域和 Root 审计仍由 PostgreSQL 同事务写入；未增业务发生时间、控制时钟或角色。",
+      "expectation": "原 SQL 摘要逐字相同；旧清单来源删除一条、新返工模块新增一条；两条首次 Light 失败项均定向通过。",
+      "checks": [
+        "g9-clock-inventory"
+      ]
     }
   ],
   "checks": [
@@ -54,6 +76,33 @@
           "sha256": "21b0e371ebbbc459b15babb7ba452873ef4eb6d04b3cb991a8f1f88aa7f4a10f"
         }
       ]
+    },
+    {
+      "id": "g9-clock-inventory",
+      "kind": "tests",
+      "command": "node --test --test-name-pattern 'cheap CI preflight includes|keeps the reviewed responsibility sources' scripts/ci/pr-gate-controller.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "b4c1ea87795863f659700db6c0b49aa6cf218e23",
+      "sourceFingerprint": "f12d86a9a2d48ecd0359fb1eff2652a600ac7ee2a4f13e09802d5a0c0cdae2a1",
+      "inputPaths": [
+        "apps/api/src",
+        "apps/web/src",
+        "packages/domain/src",
+        "packages/contracts/src",
+        "apps/api/migrations",
+        "scripts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
+      ],
+      "inputFingerprint": "ae34e958b317623ade5abe30bee8400dbad04a415dd1c1304899353618e69967",
+      "context": "Node 22.22.2；候选源码同首次 Light，测试时包含本次已修复的时点清单，输入指纹绑定清单及扫描源文件。",
+      "startedAt": "2026-11-26T15:00:17Z",
+      "endedAt": "2026-11-26T15:00:18Z",
+      "log": "/tmp/dx-g9-evidence.j33DD1/inventory.tap",
+      "logSha256": "c89927bf30a0b788b503cf270d4f201bd084b1bb3ef8b247ae8f27e63ad65e8e"
     }
   ]
 }
