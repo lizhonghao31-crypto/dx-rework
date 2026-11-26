@@ -6,6 +6,9 @@ import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/or
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
@@ -16,7 +19,7 @@ import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-ser
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
-import {InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
+import {beijingCalendarDate,InitialCustomerOrderDraftSchema} from '@dx-rework/contracts/digital-production';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {r5OneHourConfiguration} from './r5-order-time-fixture.js';
 import type {BulkWashingAdoption} from '@dx-rework/contracts/bulk-washing';
@@ -97,8 +100,21 @@ export async function failedFrameworkWashingFixture(f:Awaited<ReturnType<typeof 
     await flow.dispatch(f.root,orderId,{expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST real original dispatch'},randomUUID());
    }else{
     const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
-    await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:cut,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID());
-    const receipt=(await garmentQuality(f.db,orderId))[0]!;
+    // The original warehouse entry requires explicit dispatch and factory
+    // return in this exact scope before there can be a received batch for rewash.
+    const occurredAt=businessNow().toISOString(),businessDate=beijingCalendarDate(new Date(occurredAt));
+    const flow=new FactoryFlowService(f.db),dispatch=await flow.read(f.root,orderId);
+    await flow.dispatch(warehouse,orderId,{expectedRevision:dispatch.revision,occurredAt,supplierId:f.supplierId,note:'TEST after-receipt rewash original warehouse dispatch'},randomUUID());
+    const qc=await flow.read(f.root,orderId);
+    await flow.productionQc(f.root,orderId,{expectedRevision:qc.revision,factoryDecisionId:null,occurredAt,checks:[{lineId,result:'合格',problem:''}],note:'TEST original factory QC before shipment'},randomUUID());
+    const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.production_order_id;
+    const reporting=new ProductionReportingService(f.db);
+    await reporting.report(f.root,productionId,{position:1,factoryDecisionId:null,businessDate,quantity:2},randomUUID());
+    await reporting.execute(f.root,productionId,'complete',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
+    await reporting.execute(f.root,productionId,'ship',{factoryDecisionId:null,businessDate,confirmed:true},randomUUID());
+    const receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
+    const receiptId=(await receiving.create(warehouse,{cuttingOrderId:cut,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(warehouse)]},randomUUID())).value.receiptId;
+    const receipt=(await garmentQuality(f.db,orderId)).find(row=>row.receiptId===receiptId)!;
     await new GarmentQualityService(f.db).record(f.root,orderId,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:2,occurredAt:'2026-11-17T08:00:00.000Z',problem:''},randomUUID());
    }
    const start=await washing.record(f.root,orderId,{...await command(),kind:mode==='factory'?'factory_start':'send',quantity:2},randomUUID());
