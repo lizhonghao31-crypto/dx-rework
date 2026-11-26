@@ -1,154 +1,171 @@
 {
   "version": 1,
-  "base": "f6feb22c864ee14d5b2fc873287bf6f694f2ad53",
-  "risk": "quick",
-  "sourceFingerprint": "8ac5fd8ee9899af06aacc4980c6851f8d98842c9cbbc35cbcb7f63b20841a52f",
+  "base": "d062d5d6b878844e217d4cde65e71f350637c4e6",
+  "risk": "full",
+  "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
   "rules": [
     {
-      "rule": "删除无运行引用的 FinancePage 包装，原工资列表和历史书签使用现行同一权限门。",
-      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
+      "rule": "G7 开发岗位看板只有同一授权筛选确知全空时显示一条整板文案。",
+      "source": "Eric 已审 G1–G9 施工单第 313–319 行；Astryx DXUI-ASYNC-003/005/007/008/011。",
       "writes": [
-        "apps/web/src/finance-page.tsx#FinancePage"
+        "apps/web/src/digital-pattern-workspace.tsx#isConfirmedEmptyDevelopmentBoard",
+        "tests/unit/r2-pattern-boards.test.ts#G7 confirms"
       ],
       "reads": [
-        "apps/web/src/App.tsx#financePageRequirements",
-        "apps/web/src/finance-access.ts#financePageRequirements",
-        "apps/web/src/wages/wage-page.tsx#WagePage",
-        "apps/web/src/wages/wage-period-list.tsx#readWageListQuery"
+        "apps/api/src/production-platform/development-workspace-query.ts#indexedPattern",
+        "packages/contracts/src/digital-development-workspace.ts#PatternWorkspaceResult",
+        "apps/web/src/App.tsx#DigitalPatternWorkspace",
+        "apps/web/src/digital-pattern-workspace.tsx#boardItems"
       ],
       "oldTests": [
-        "tests/unit/finance-navigation-hierarchy.test.ts#preserves legacy routes",
-        "tests/unit/wage-web-and-export.test.ts#wires read-only wage viewing"
+        "tests/unit/r2-pattern-boards.test.ts#R2 PR08 board display boundaries",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts#PERF07 full production application workspace pages"
       ],
-      "initialization": "原 Vite HTML/静态与异步导入链不加载该包装；旧名字只在静态否定断言或历史记录出现。",
-      "dateAndPermission": "原 /ui/finance 与 /ui/wages 共享原角色加 capability；用模拟的工资历史期间、工资会计与仓管走真实编译路由。",
-      "expectation": "有权身份读到同一工资期间并展示原导出 GET 链接，无权身份访问任一旧路径都拒绝且零工资请求；读取零写入。",
+      "newTests": [
+        "tests/unit/r2-pattern-boards.test.ts#G7 confirms"
+      ],
+      "initialization": "开发看板仍沿原选项、分页、任务来源及读取选项初始化；无新初始化、SQL 或迁移。",
+      "dateAndPermission": "仍按原授权 scope 读取；结果仅跟当前筛选、选项和刷新一起判空。日期、任务轮次、业务时限不变。",
+      "expectation": "整板真空只一处，抑制列内重复；未知、过期、计数冲突、预览卡片、读错或部分结果不报整板空。",
       "checks": [
-        "g5-original-routes",
-        "g5-web-build",
-        "g5-browser-assets"
+        "g7-unit",
+        "g7-browser",
+        "g7-g2-native-browser",
+        "g7-web-typecheck",
+        "g7-lint"
       ]
     },
     {
-      "rule": "删除未挂载的 PlatformHomePage 及其专属样式，保留原首页与角色分流。",
-      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
+      "rule": "G7 真卡片、各栏入口、局部内容、岗位跳转和请求范围保持基座行为。",
+      "source": "已审 G7 第 317–319 行与 Astryx DXUI-ACCESS-003、DXUI-ASYNC-011。",
       "writes": [
-        "apps/web/src/platform-home-page.tsx#PlatformHomePage",
-        "apps/web/src/platform-home.css"
+        "tests/fixtures/digital-read-recovery.tsx#patternBoardResponse",
+        "tests/acceptance/g7-pattern-empty-browser.mjs#obsolete empty request",
+        "apps/web/src/digital-pattern-workspace.tsx#confirmedBoardEmpty"
       ],
       "reads": [
-        "apps/web/src/App.tsx#HomeLanding",
-        "apps/web/src/platform-modules.ts#platformLandingTarget",
-        "apps/web/src/shell-navigation.css"
+        "apps/web/src/digital-pattern-workspace.tsx#choose",
+        "apps/web/src/pattern-board-parts.tsx#PatternBoardCard",
+        "apps/web/src/digital-production-access-panel.tsx#pmcPatternTaskReadOnly",
+        "apps/web/src/development-workspace-return.tsx#developmentWorkspaceReturnUrl"
       ],
       "oldTests": [
-        "tests/unit/ui-prototype.test.ts#routes the authenticated root",
-        "tests/unit/platform-modules.test.ts#retires the legacy module selector",
-        "tests/unit/platform-modules.test.ts#existing direct landing"
+        "tests/acceptance/r2-boards-browser.mjs#boardsBrowser",
+        "tests/acceptance/digital-read-recovery-browser.mjs#late failed query",
+        "tests/unit/r2-pattern-boards.test.ts#restores independently scoped"
       ],
-      "initialization": "静态、动态、配置及测试引用反查；专属选择器只来自这一对文件。原 shell 的 app-shell__platform-home 属于自身样式。",
-      "dateAndPermission": "使用当前设计与仓管岗位分流及授权身份无模块分支；不更改首页用户、焦点、导航、缓存和 CSS。",
-      "expectation": "两种首页书签走现有 HomeLanding；看见原岗位目标或原无模块消息，打包无遗留专属样式。",
+      "newTests": [
+        "tests/acceptance/g7-pattern-empty-browser.mjs#same original route and source"
+      ],
+      "initialization": "配对浏览器复用原读取恢复夹具；真实回归复用原 App、认证、授权固定和测试库。",
+      "dateAndPermission": "普通板房本人任务与 PMC 部门只读任务按原按钮开启；沿用任务标识、taskView 和 returnTo。",
+      "expectation": "七列及查看全部在真空时仍可达，键盘 Enter 跳转到同一真实目标，基座和候选的读请求完全一致，写入零次。",
       "checks": [
-        "g5-original-routes",
-        "g5-web-build",
-        "g5-browser-assets"
-      ]
-    },
-    {
-      "rule": "删除无调用且只返回 null 的 SeriesCreationPreview；原新建、草稿、历史照原业务路径。",
-      "source": "Eric 审核的《达兴数字生产系统架构治理方案 · G1–G9 详细施工与验收单》G5",
-      "writes": [
-        "apps/web/src/series-creation-preview.tsx#SeriesCreationPreview"
-      ],
-      "reads": [
-        "apps/web/src/App.tsx#DigitalDesignerWorkspace",
-        "apps/web/src/digital-designer-workspace.tsx#DevelopmentCreateForm",
-        "apps/web/src/digital-production-page.tsx#customerWarehouseArrivalDate"
-      ],
-      "oldTests": [
-        "tests/unit/development-confirmation-resume.test.ts#restores saved colors, quantities and dates",
-        "tests/unit/digital-detail-route.test.ts#returns a child document to its exact historical mother record",
-        "tests/unit/digital-po-identity-dates.test.ts#one formal PO and explicit customer promise contract"
-      ],
-      "initialization": "原旧包装没有业务请求或 UI 输出，整仓没有入口、动态加载、打包清单或测试夹具引用。",
-      "dateAndPermission": "保存草稿按原创建权限恢复；旧单及带 PO 参数的原路径、正式 PO 及客户交期原语义保持。",
-      "expectation": "原保存草稿字段、PO 标识和已存日期/历史仍可读，本地未创建或修改业务单，Acceptance 另按原角色与原单回读。",
-      "checks": [
-        "g5-original-routes",
-        "g5-web-build"
+        "g7-unit",
+        "g7-browser",
+        "g7-g2-native-browser",
+        "g7-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "g5-original-routes",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/finance-navigation-hierarchy.test.ts tests/unit/wage-web-and-export.test.ts tests/unit/platform-modules.test.ts tests/unit/ui-prototype.test.ts tests/unit/digital-detail-route.test.ts tests/unit/development-confirmation-resume.test.ts tests/unit/m01-series-plan-reading.test.ts -t finance\\ secondary\\ navigation\\|wires\\ read-only\\ wage\\ viewing\\|existing\\ direct\\ landing\\|retires\\ the\\ legacy\\ module\\ selector\\|protects\\ sourcing\\ with\\ AuthGate\\|routes\\ the\\ authenticated\\ root\\|restores\\ saved\\ colors\\,\\ quantities\\ and\\ dates\\|returns\\ a\\ child\\ document\\ to\\ its\\ exact\\ historical\\ mother\\ record\\|switches\\ history\\ as\\ one\\ saved\\ snapshot --reporter=default --reporter=json --outputFile.json=/tmp/dx-g5-final-g8/routes.json",
+      "id": "g7-unit",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/r2-pattern-boards.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/final/r2-pattern-boards.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "733ad4874c82fbe91fcf93cab16aa530b5deb3ed",
-      "sourceFingerprint": "8ac5fd8ee9899af06aacc4980c6851f8d98842c9cbbc35cbcb7f63b20841a52f",
-      "context": "Node 22.22.2 / Vitest 4.1.10，G8 已合基座的实际暂存候选。按三条规则运行原菜单、工资权限、首页、草稿与历史用例。77 项按精准名称过滤，旧 62 项保持原回执。",
-      "startedAt": "2026-11-26T18:11:52Z",
-      "endedAt": "2026-11-26T18:11:59Z",
-      "log": "/tmp/dx-g5-final-g8/routes.log",
-      "logSha256": "352b5ed52b93f930356569eac53edc519d9dda93aef33e21b03df0a862175ce9",
-      "passed": 13,
+      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
+      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
+      "startedAt": "2026-11-26T18:19:36.469034+00:00",
+      "endedAt": "2026-11-26T18:19:41.618477+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-unit.log",
+      "logSha256": "78ddc8a77432e045db9e0e12a701ce3bbfe1fbc698d6e36c71b52f2727343f15",
+      "context": "Node 22.22.2 / Vitest 4.1.10，准确 G5 基座的最终源，原 R2 共 19 项含 G7 12 项，不接数据库。",
+      "kind": "tests",
+      "passed": 19,
       "failed": 0,
-      "skipped": 77,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f70e4361a7c6b25f5f1b0d811df92cf7c4f42ed240f30a6b6d8727352a8817b5"
+          "sha256": "2d91497925af527046aa4ea5017b402aba51cd1f17e0d5be594cec125ae8da57"
         }
       ]
     },
     {
-      "id": "g5-web-build",
-      "kind": "command",
-      "command": "npm run build --workspace @dx-rework/web",
+      "id": "g7-browser",
+      "command": "env G7_BASE_SHA=d062d5d6b878844e217d4cde65e71f350637c4e6 G7_BROWSER_EVIDENCE=/workspace/scratch/dx-governance-evidence/g7/final/browser.json node tests/acceptance/g7-pattern-empty-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1e89fb6cb83694b6cf9f0f803ae2e7d7d3a401a6",
-      "sourceFingerprint": "06ec3e1895586ac93ca61d0b3ad361d3867e1bedee758cbcfdf7275ba13fe353",
-      "context": "原 G6 基座暂存四个删除时，由 Vite 实际编译的产物用于闭包核验。 已逐字复核新候选的限定 Web/依赖输入，复用原记录，不冒称最终 Head 重跑。",
-      "startedAt": "2026-11-26T17:50:23Z",
-      "endedAt": "2026-11-26T17:50:25Z",
-      "log": "/tmp/dx-g5-after-g6.I2Mo3T/build.log",
-      "logSha256": "90e3af8fa2cc03c3d23c7cd2f4680b55f7ee0294e4d01c13aa71f1e7cbf9b054",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        ".node-version",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "a4318279264e0285fcd773aab8707d7343a1fcd887a87de236416a62273bf847"
+      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
+      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
+      "startedAt": "2026-11-26T18:19:36.468932+00:00",
+      "endedAt": "2026-11-26T18:19:50.689817+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-browser.log",
+      "logSha256": "97f0c66e80af723f1bad62cc9da5bfa8ba21751e0e62064d132216bea32ec41f",
+      "context": "同一真实基座与候选加载相同实际组件、同一授权响应夹具，Chromium 12 配对检查、GET 顺序逐项一致、零写。",
+      "kind": "command"
     },
     {
-      "id": "g5-browser-assets",
-      "kind": "command",
-      "command": "node /tmp/dx-g5-after-g6.I2Mo3T/browser.mjs",
+      "id": "g7-g2-native-browser",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/workspace-page-native-browser-postgres.test.ts -t 'shows15 current native|keeps available rows' --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/final/native-browser.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "1e89fb6cb83694b6cf9f0f803ae2e7d7d3a401a6",
-      "sourceFingerprint": "06ec3e1895586ac93ca61d0b3ad361d3867e1bedee758cbcfdf7275ba13fe353",
-      "context": "原 G6 基座暂存四个删除构建的 loopback Chromium。核资产闭包、两工资书签原权限与导出、三个首页分流和零写入。 已逐字复核新候选的限定 Web/依赖输入，复用原记录，不冒称最终 Head 重跑。",
-      "startedAt": "2026-11-26T17:50:25Z",
-      "endedAt": "2026-11-26T17:50:29Z",
-      "log": "/tmp/dx-g5-after-g6.I2Mo3T/browser.log",
-      "logSha256": "5f28b1f7863156328ad702dd90b0646c7ad3d43ae205e3332677bdb1a45ea7aa",
+      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
+      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
+      "startedAt": "2026-11-26T18:20:10.496906+00:00",
+      "endedAt": "2026-11-26T18:20:37.444621+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-final-native-browser.log",
+      "logSha256": "013c728db4223a10fb6b474a856c6f2e1e8764efeede9479010b778314b384b9",
+      "kind": "tests",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 1,
+      "context": "Node 22.22.2 / PostgreSQL 16.14，原完整 App、原登录、准确 G5 基座源，两个板房相关原回归；另一个仅设计师用例过滤。专用 loopback 低权限标记验证，运行前后本次拥有 schema 均为 0。",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2cc5bbedc196a82fdb09041fc4408f338d6c82b4deea219dfc26d2514db2b564"
+        }
+      ]
+    },
+    {
+      "id": "g7-lint",
+      "command": "node node_modules/eslint/bin/eslint.js apps/web/src/digital-pattern-workspace.tsx tests/unit/r2-pattern-boards.test.ts tests/fixtures/digital-read-recovery.tsx tests/acceptance/g7-pattern-empty-browser.mjs --max-warnings=0",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "8e6808e0cd18e10ebb94cddae82c8bd4cf9770b3",
+      "sourceFingerprint": "d9fb3010ca89eb459e497010053d5160a1886a2711fde13bcd0918d839ddc33d",
+      "startedAt": "2026-11-26T16:38:58.779764+00:00",
+      "endedAt": "2026-11-26T16:39:00.115501+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/g7-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node 22.22.2, repository ESLint, four affected source/unit/browser files only. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments. 对齐 G5 后仍以输入指纹逐字验证，不重复运行。",
+      "kind": "command",
       "inputPaths": [
-        "apps/web",
-        "packages",
-        ".node-version",
+        "eslint.config.js",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json"
+        "apps/web/src/digital-pattern-workspace.tsx",
+        "tests/unit/r2-pattern-boards.test.ts",
+        "tests/fixtures/digital-read-recovery.tsx",
+        "tests/acceptance/g7-pattern-empty-browser.mjs"
       ],
-      "inputFingerprint": "a4318279264e0285fcd773aab8707d7343a1fcd887a87de236416a62273bf847"
+      "inputFingerprint": "e2bf17469a0ba5b53cc76318ccc8167320afaa4d5b0aa969cf2fe9acea6f9b75"
+    },
+    {
+      "id": "g7-web-typecheck",
+      "command": "npm run typecheck -w @dx-rework/web",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "35783eaa98405b518703955922bb60816b416d2a",
+      "sourceFingerprint": "2a8b24ea6082663f77898deacd2b5ca525f1feb4c9488e081c64c24d6aabe6a8",
+      "startedAt": "2026-11-26T18:19:36.469131+00:00",
+      "endedAt": "2026-11-26T18:20:01.578118+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/final/g7-web-typecheck.log",
+      "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
+      "context": "Node 22.22.2 / npm 10.9.9，准确 G5 基座候选的 Web 原 tsconfig 与实际 workspace 合同包。",
+      "kind": "command"
     }
   ]
 }
