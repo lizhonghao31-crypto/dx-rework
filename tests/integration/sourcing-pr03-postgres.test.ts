@@ -6442,6 +6442,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally {await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at=clock_timestamp()");}
     const current=(await contractService.getCurrent(rootActor(),id)).item!;
     // Isolated fixture models the supplied identity/time, while retaining actual generated synthetic PDF bytes.
+    // A document from before generation staging has no attempt metadata.
+    expect((await database.query(`DELETE FROM sourcing_contract_generation_staging
+      WHERE sourcing_contract_document_id=$1 AND published_attachment_id=$2`,
+    [current.sourcingContractDocumentId,current.pdfAttachmentId])).rowCount).toBe(1);
     await database.query("ALTER TABLE sourcing_contract_documents DISABLE TRIGGER USER");
     try {await database.query("UPDATE sourcing_contract_documents SET sourcing_contract_document_id=$2,generated_at='2026-10-15T11:40:54.123456+08:00' WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId,documentId]);}
     finally {await database.query("ALTER TABLE sourcing_contract_documents ENABLE TRIGGER USER");}

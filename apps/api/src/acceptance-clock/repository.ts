@@ -6,6 +6,7 @@ import {SlaConfigurationRepository} from '../production-platform/sla-configurati
 
 export const clockConflict=(message:string):never=>{throw new ApplicationError('ACCEPTANCE_CLOCK_CONFLICT',message,409);};
 export const clockHash=(input:unknown)=>createHash('sha256').update(JSON.stringify(input)).digest('hex');
+export const acceptanceClockLockKey=(scenarioId:string)=>`acceptance-sla-clock:${scenarioId}`;
 export type ClockRow={scenario_id:string;name:string;corporation_id:string;initial_time:Date;business_now:Date;version:number;business_revision:string;configuration_id:string;created_by:string;request_key:string;copied_from:string|null;created_at:Date};
 const lockBudgets=new WeakMap<Pool,{active:number;queue:(()=>void)[]}>();
 async function reserveLock(database:Pool){
@@ -23,7 +24,7 @@ export class AcceptanceClockRepository{
   const db=await this.pool.connect();try{await db.query('BEGIN');const result=await action(db);await db.query('COMMIT');return result;}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async withLock<T>(id:string,action:()=>Promise<T>):Promise<T>{
-  const releaseBudget=await reserveLock(this.pool),key=`acceptance-sla-clock:${id}`;
+  const releaseBudget=await reserveLock(this.pool),key=acceptanceClockLockKey(id);
   try{
    const db=await this.pool.connect();
    try{await db.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[key]);return await action();}

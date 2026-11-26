@@ -30,7 +30,7 @@ export interface ObjectStorage {
   readBytes(objectKey: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array>;
   computeSha256(objectKey: string): Promise<string>;
   writeImmutable(objectKey: string, content: Uint8Array, options: { mimeType: string; sha256: string; signal?: AbortSignal }): Promise<void>;
-  deleteObject(objectKey: string): Promise<void>;
+  deleteObject(objectKey: string, signal?: AbortSignal): Promise<void>;
 }
 
 export type AliyunPostPolicyCondition =
@@ -53,7 +53,7 @@ export interface AliyunOssSdkClient {
   head(name: string, signal?: AbortSignal): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
   createReadStream(name: string, signal?: AbortSignal): Promise<AsyncIterable<Uint8Array>>;
   putGeneratedObject(name: string, content: Uint8Array, options: { mimeType: string; sha256: string; signal?: AbortSignal }): Promise<void>;
-  delete(name: string): Promise<void>;
+  delete(name: string, signal?: AbortSignal): Promise<void>;
 }
 
 export class AliyunPrivateObjectStorage implements ObjectStorage {
@@ -162,9 +162,9 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     }
   }
 
-  async deleteObject(objectKey: string): Promise<void> {
+  async deleteObject(objectKey: string, signal?: AbortSignal): Promise<void> {
     try {
-      await this.client.delete(objectKey);
+      await this.client.delete(objectKey, ...(signal ? [signal] : []));
     } catch (error) {
       if (isObjectNotFound(error)) return;
       throw error;

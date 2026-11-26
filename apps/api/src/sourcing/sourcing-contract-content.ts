@@ -46,13 +46,13 @@ export async function loadContractContent(db:Queryable,documentId:string):Promis
     totalQuantity:Number(approval.quantity),totalAmount:String(approval.totalAmount),terms:row.terms,
   };
 }
-export async function hydrateContractContentImages(attachments:AttachmentService,caseId:string,snapshot:ContractPdfSnapshot):Promise<ContractPdfSnapshot> {
+export async function hydrateContractContentImages(attachments:AttachmentService,caseId:string,snapshot:ContractPdfSnapshot,signal?:AbortSignal):Promise<ContractPdfSnapshot> {
   const images = new Map<string,{bytes:Buffer;sha256:string}>();
   for (const line of snapshot.lines) {
     if (!line.imageAttachmentId || images.has(line.imageAttachmentId)) continue;
-    const image = await attachments.readContractContentImage(caseId,line.imageAttachmentId);
+    const image = await attachments.readContractContentImage(caseId,line.imageAttachmentId,signal);
     if (line.imageSha256 && line.imageSha256!==image.sha256) throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH","合同款图与冻结快照不一致",422);
-    images.set(line.imageAttachmentId,{bytes:await normalizeSourcingContractImage(image.bytes),sha256:image.sha256});
+    images.set(line.imageAttachmentId,image);
   }
   return {...snapshot,lines:snapshot.lines.map(line=>({...line,...(line.imageAttachmentId?{imageBytes:images.get(line.imageAttachmentId)!.bytes,imageSha256:images.get(line.imageAttachmentId)!.sha256}:{})}))};
 }

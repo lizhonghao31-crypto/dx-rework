@@ -1319,6 +1319,10 @@
     {
       "version": "0315_development_comment_revision_lineage",
       "checksum": "d4cda855dcf22b3068205f94b0f079dfed07a910ae38be18fc643eaa2c6fe082"
+    },
+    {
+      "version": "0316_sourcing_contract_generation_attempts",
+      "checksum": "6cb9d8181ba45e3118195d5f91d636687e35f1a530687c041ce685ef3c886d56"
     }
   ]
 }
