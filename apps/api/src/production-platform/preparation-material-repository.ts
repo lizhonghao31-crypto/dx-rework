@@ -14,6 +14,20 @@ import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development
 
 export type PreparationDB=Pick<Pool|PoolClient,'query'>;
 export const preparationHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+type LegacyReceiptMaterial=Pick<DevelopmentMaterial,'category'|'materialId'|'name'|'color'|'specification'|'width'|'weight'|'composition'>;
+
+/** Keep the stored pre-batch receipt fingerprint format for old records. */
+export function legacyPreparationMaterialFingerprint(
+ kind:'fabric_receipt'|'accessories_ready',
+ developmentMaterials:readonly LegacyReceiptMaterial[]|null|undefined,
+ instructionAccessories:readonly InstructionDocument['accessories'][number][]|null|undefined,
+){
+ const materials=(developmentMaterials??[]).filter(material=>kind==='fabric_receipt'?material.category!=='辅料':material.category==='辅料')
+  .map(material=>[material.materialId,material.name,material.color,material.specification,material.width,material.weight,material.composition])
+  .sort((left,right)=>String(left[0]).localeCompare(String(right[0])));
+ return preparationHash({materials,accessories:kind==='accessories_ready'?instructionAccessories??null:null});
+}
+
 export const preparationIso=(value:Date|string|null|undefined)=>value?new Date(value).toISOString():null;
 export async function preparationAvailable(db:PreparationDB){return Boolean((await db.query("SELECT to_regclass('digital_preparation_material_versions') AS relation")).rows[0]?.relation);}
 export async function preparationContext(db:PreparationDB,resource:PreparationResource){
@@ -331,10 +345,9 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
 
 /** A source revision changes requirements, not the history of physical receipt or its original clock. */
 export async function preparationMaterialBasis(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>,kind:PreparationMaterialKind){
- if(!['fabric_receipt','accessories_ready','style_label_ready'].includes(kind))return null;
  if(kind==='style_label_ready')return preparationHash({style:context.source?.design_style_no??context.order?.design_style_no,lines:context.lines.map(l=>[l.line_id,l.color])});
+ if(kind!=='fabric_receipt'&&kind!=='accessories_ready')return null;
  const document=context.sourceId?await developmentDocumentRow(db,context.sourceId):null;
- const materials=(document?.document.materials??[]).filter((m:{category:string})=>kind==='fabric_receipt'?m.category!=='辅料':m.category==='辅料').map((m:{materialId:string;name:string;color:string;specification:string;width:string;weight:string;composition:string})=>[m.materialId,m.name,m.color,m.specification,m.width,m.weight,m.composition]).sort((a:unknown[],b:unknown[])=>String(a[0]).localeCompare(String(b[0])));
  const instruction=context.orderId&&kind==='accessories_ready'?(await db.query('SELECT document FROM digital_instruction_documents WHERE production_order_id=$1',[context.orderId])).rows[0]:null;
- return preparationHash({materials,accessories:instruction?.document.accessories??null});
+ return legacyPreparationMaterialFingerprint(kind,document?.document.materials,instruction?.document.accessories);
 }
