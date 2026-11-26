@@ -2,7 +2,7 @@
   "version": 1,
   "base": "03be9f081da7c5f7ff9df8e4ecca04ec80c7441e",
   "risk": "full",
-  "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
+  "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
   "rules": [
     {
       "rule": "资料未齐的面料是实际预估风险，不成为只因未知而禁止的普通开发发布；原明确短交期仍按原审批办理",
@@ -66,61 +66,61 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "/workspace/scratch/r2-evidence/native.sh",
+      "command": "/workspace/scratch/r2-evidence/revised/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
-      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
-      "context": "Isolated native PostgreSQL 16 and real authenticated Chromium. Review regressions, actual publication, verifiable accessory and original window.",
-      "startedAt": "2026-11-26T06:59:02.279827+00:00",
-      "endedAt": "2026-11-26T06:59:36.778615+00:00",
-      "log": "/workspace/scratch/r2-evidence/native.log",
-      "logSha256": "776dc6c83c6fc5ca14b0d695cdb8eb881c3cb4301bcb5da11087680d1a663472",
-      "passed": 6,
+      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
+      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
+      "context": "Real signed browser and isolated PostgreSQL 16 including ordinary publication and both sufficiently timed and late combined formal approval guards.",
+      "startedAt": "2026-11-26T07:05:35.448643+00:00",
+      "endedAt": "2026-11-26T07:06:12.289937+00:00",
+      "log": "/workspace/scratch/r2-evidence/revised/native.log",
+      "logSha256": "0f5473f5048d875433cfd50a5c2d6361254142c4f179d3c84db17728fb4b64a0",
+      "passed": 7,
       "failed": 0,
       "skipped": 95,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "253ae3462ff2bcc6504f877b83a8d45312c7662d299ca928750d3fb8cd48d45e"
+          "sha256": "288e717891971f11a5b287aba372e30f821a5b97c70ea5e1654ff4abbc476a13"
         }
       ]
     },
     {
       "id": "order-time",
       "kind": "tests",
-      "command": "/workspace/scratch/r2-evidence/order-time.sh",
+      "command": "/workspace/scratch/r2-evidence/revised/order-time.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
-      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
-      "context": "Isolated native PostgreSQL 16. Full original per-order time approval and execution on the exact revised R2 source.",
-      "startedAt": "2026-11-26T06:59:02.114641+00:00",
-      "endedAt": "2026-11-26T06:59:45.031945+00:00",
-      "log": "/workspace/scratch/r2-evidence/order-time.log",
-      "logSha256": "684ded98eb4809faf644e316e36c250587c8f9345218b5e834c2f84375b20b0c",
-      "passed": 39,
+      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
+      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
+      "context": "Isolated PostgreSQL 16 on the exact revised R2 source. Native approval and production order checks.",
+      "startedAt": "2026-11-26T07:05:35.421882+00:00",
+      "endedAt": "2026-11-26T07:06:19.130273+00:00",
+      "log": "/workspace/scratch/r2-evidence/revised/order-time.log",
+      "logSha256": "f3b567c160dc6bf50f258b567e334c0e3b3611386bf3ad96042066c795e460ab",
+      "passed": 40,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "802ee2984141239938c8f8002f25e446016f8ef9ffefd4cc6dde7105861bcffb"
+          "sha256": "1facbaedaddb5de8cad8e332f10f67898c367df71b33e7932e62447b5f0e73b0"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "/workspace/scratch/r2-evidence/static.sh",
+      "command": "/workspace/scratch/r2-evidence/revised/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
-      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
-      "context": "Locked Node 22 and npm 10 workspace typecheck, touched-source lint and working tree secret check.",
-      "startedAt": "2026-11-26T06:58:54.167875+00:00",
-      "endedAt": "2026-11-26T06:59:40.942413+00:00",
-      "log": "/workspace/scratch/r2-evidence/static.log",
+      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
+      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
+      "context": "Locked workspace typecheck and touched-file ESLint with secret scan.",
+      "startedAt": "2026-11-26T07:05:35.422818+00:00",
+      "endedAt": "2026-11-26T07:06:24.062275+00:00",
+      "log": "/workspace/scratch/r2-evidence/revised/static.log",
       "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
     },
     {
@@ -129,17 +129,17 @@
       "command": "bash -lc 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4a2e97bbfc144bc353427049306dcf1e589380c8",
-      "sourceFingerprint": "0a922b5635c273253f54861ee923cf9acc5df588a089cb0e8de306b42345c0c4",
-      "context": "Exact GitHub Light protocol tests checked locally. The known reviewed display-site signature is synchronized.",
-      "startedAt": "2026-11-26T06:58:54.159716+00:00",
-      "endedAt": "2026-11-26T06:58:59.018370+00:00",
-      "log": "/workspace/scratch/r2-evidence/protocol.log",
-      "logSha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c",
+      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
+      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
+      "context": "Actual preflight Node TAP suite at the revised R2 source on the approved unchanged inventory.",
+      "startedAt": "2026-11-26T07:05:35.422775+00:00",
+      "endedAt": "2026-11-26T07:05:42.334967+00:00",
+      "log": "/workspace/scratch/r2-evidence/revised/protocol.log",
+      "logSha256": "4671a4a311ebaf4efe34b03c81ba76203ec92f5694b6b0d522d50db547e074a2",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "68f15549d578875e16081c1b848c1a1358a023a31a1d362dfa375453054bb79c"
+          "sha256": "4671a4a311ebaf4efe34b03c81ba76203ec92f5694b6b0d522d50db547e074a2"
         }
       ],
       "passed": 285,
