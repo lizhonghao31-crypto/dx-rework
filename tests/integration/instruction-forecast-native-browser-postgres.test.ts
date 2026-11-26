@@ -193,8 +193,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await tab.page.getByRole('button',{name:'发布有效制单',exact:true}).click();
    const response=await send;expect(response.status()).toBe(409);
    expect((await response.json()).error.code).toBe('ORDER_TIME_REQUEST_REQUIRED');
-   const handoff=await sentForDesigner;expect(handoff.ok(),await handoff.text()).toBe(true);
-   expect((await handoff.json()).state).toBe('needs_designer');
+   const handoff=await sentForDesigner;expect(handoff.ok()).toBe(true);
+   await tab.page.waitForURL(url=>url.searchParams.has('timeRequest'));
+   const handoffId=new URL(tab.page.url()).searchParams.get('timeRequest');
+   const routed=(await f.db.query("SELECT request_id,state FROM digital_order_time_requests WHERE operation_json->>'kind'='instruction_publish' AND operation_json->>'orderId'=$1",[item.orderId])).rows;
+   expect(routed).toEqual([{request_id:handoffId,state:'needs_designer'}]);
    expect(await snapshot(item.orderId,item.sourceId)).toEqual(before);
   }finally{await tab.close();}
  });
