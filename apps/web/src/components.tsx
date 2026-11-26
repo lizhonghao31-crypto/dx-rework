@@ -167,7 +167,7 @@ export function NavigationGroupMenu({ group, active, basePath }: { group: Naviga
   </details>;
 }
 
-function DesktopNavigation({
+export function DesktopNavigation({
   globalNavigation,
   groups,
   active,
@@ -191,7 +191,26 @@ function DesktopNavigation({
           pendingTodoCount={pendingTodoCount}
         />
       </div>
-      {groups.map(group => <NavigationGroupMenu key={group.name} group={group} active={active} basePath={basePath} />)}
+      {groups.map(group => {
+        const [entry] = group.entries;
+        if (group.name !== "大货产前准备" || group.entries.length !== 1 || entry?.href !== "/ui/digital-quotation"
+            || entry.expandOnly || entry.children?.length) {
+          return <NavigationGroupMenu key={group.name} group={group} active={active} basePath={basePath} />;
+        }
+        const isActive = active === (entry.activeKey ?? entry.name);
+        return (
+          <div className="primary-navigation__entry" key={group.name}>
+            <a href={`${basePath}${entry.href}`} aria-current={isActive ? "page" : undefined}>
+              <NavigationItem icon={<NavigationIcon group={group.name} size="primary" />} active={isActive}>
+                <span className="primary-navigation__copy">
+                  <strong>{group.name}</strong>
+                  <span>{entry.label ?? entry.name}</span>
+                </span>
+              </NavigationItem>
+            </a>
+          </div>
+        );
+      })}
     </nav>
   );
 }

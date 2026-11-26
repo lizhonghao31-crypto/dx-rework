@@ -1,9 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
+import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import { financeNavigationEntries, financePageRequirements } from "../../apps/web/src/finance-access.js";
-import { NavigationGroupMenu } from "../../apps/web/src/components.js";
+import { DesktopNavigation, NavigationGroupMenu } from "../../apps/web/src/components.js";
 
 describe("finance secondary navigation", () => {
   it("shows a wage accountant an expandable finance group with a direct wage child", () => {
@@ -34,5 +35,56 @@ describe("finance secondary navigation", () => {
     const positions = ["设计开发工作台", "产品开发打板", "大货产前准备", "外发定价&选厂", "订单开裁", "裁后工艺与发厂", "订单返工", "供应商中心", "样衣管理", "financeGroup", "平台管理"].map(name => groups.indexOf(name));
     expect(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1]!))).toBe(true);
     expect(shell).toContain("<NavigationGroupMenu group={financeGroup}");
+  });
+});
+
+describe("desktop preparation quotation navigation", () => {
+  const quotation = { name: "客户报价协作", description: "按原分工报价", href: "/ui/digital-quotation", activeKey: "customer-quote" };
+  const otherDestination = { name: "其他准备入口", description: "原组的其他目的地", href: "/ui/preparation-other", activeKey: "preparation-other" };
+
+  function renderDesktop(entries: readonly (typeof quotation)[], active: string) {
+    const html = renderToStaticMarkup(createElement(DesktopNavigation, {
+      globalNavigation: [], active, basePath: "/rework", pendingTodoCount: 0,
+      groups: [
+        { name: "产品开发打板", description: "按原顺序", entries: [otherDestination] },
+        { name: "大货产前准备", description: "生产前置汇合", entries },
+        { name: "外发定价&选厂", description: "按原顺序", entries: [otherDestination] },
+      ],
+    }));
+    const doc = JSDOM.fragment(html);
+    return Array.from(doc.querySelectorAll(".desktop-navigation > :not(.desktop-navigation__global)"));
+  }
+
+  it("renders one original quotation link in its desktop group position with a single focus stop", () => {
+    const [previous, direct, next] = renderDesktop([quotation], quotation.activeKey);
+    expect(previous?.querySelector("summary")?.textContent).toContain("产品开发打板");
+    expect(next?.querySelector("summary")?.textContent).toContain("外发定价&选厂");
+    expect(direct?.querySelectorAll("a[href],summary,[tabindex]")).toHaveLength(1);
+    const link = direct?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/rework/ui/digital-quotation");
+    expect(link?.textContent).toContain("大货产前准备");
+    expect(link?.textContent).toContain("客户报价协作");
+    expect(link?.getAttribute("aria-current")).toBe("page");
+    expect(link?.querySelector(".dx-nav-item")?.classList.contains("is-active")).toBe(true);
+    expect(renderDesktop([quotation], "其他页面")[1]?.querySelector("a")?.hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("preserves the hidden desktop preparation group when no destination is authorized", () => {
+    const shown = renderDesktop([], "其他页面");
+    expect(shown).toHaveLength(2);
+    expect(shown.every(group => group.tagName === "DETAILS")).toBe(true);
+    expect(shown.map(group => group.querySelector("summary strong")?.textContent)).toEqual(["产品开发打板", "外发定价&选厂"]);
+  });
+
+  it("keeps the original disclosure for two authorized destinations or a different destination", () => {
+    const group = renderDesktop([quotation, otherDestination], otherDestination.activeKey)[1];
+    expect(group?.tagName).toBe("DETAILS");
+    expect(group?.hasAttribute("open")).toBe(true);
+    expect(group?.querySelector("summary strong")?.textContent).toBe("大货产前准备");
+    expect(Array.from(group?.querySelectorAll("a[href]") ?? [], link => link.getAttribute("href"))).toEqual([
+      "/rework/ui/digital-quotation", "/rework/ui/preparation-other",
+    ]);
+    expect(group?.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/rework/ui/preparation-other");
+    expect(renderDesktop([otherDestination], "其他页面")[1]?.tagName).toBe("DETAILS");
   });
 });
