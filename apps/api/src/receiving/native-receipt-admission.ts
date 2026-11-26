@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import {ApplicationError} from '../platform/errors.js';
 import {pendingReceivingForAuthorizedOrders} from './pending-receiving-original-allocation.js';
 import {assertWholeOrderActive} from '../production-platform/whole-order-visibility.js';
+import {NATIVE_RECEIVING_MANAGED_SQL} from './native-receipt-qualification.js';
 
 type NativeInput={cuttingOrderId?:string;productionOrderId?:string;factoryDecisionId?:string|null;styleNo:string;receivedAt:string};
 type Association={orderId:string;productionOrderId:string;factoryDecisionId:string|null;lineId:string};
@@ -27,13 +28,7 @@ export async function admitNativeReceipt(db:PoolClient,input:NativeInput):Promis
     WHERE $1::uuid IS NULL AND (upper(btrim(p.formal_style_no))=upper(btrim($3)) OR
        upper(btrim(to_jsonb(p)->>'po_number'))=upper(btrim($3)))
  ), candidates AS (SELECT production_order_id,bool_or(cut_link) AS cut_link FROM candidate GROUP BY production_order_id)
- SELECT o.production_order_id AS id,candidates.cut_link,
-   (COALESCE((to_jsonb(o)->>'order_time_managed')::boolean,false) OR
-    NULLIF(to_jsonb(s)->>'workbench_generated_number','') IS NOT NULL OR EXISTS(
-      SELECT 1 FROM digital_factory_routes route JOIN digital_factory_facts f USING(preparation_id)
-      WHERE route.production_order_id=o.production_order_id AND f.kind='仓库实际发厂' AND f.payload ? 'dispatchEvidence') OR EXISTS(
-      SELECT 1 FROM digital_factory_routes route WHERE route.production_order_id=o.production_order_id
-       AND (to_jsonb(route)->>'workflow_version')::int>=2)) AS managed
+ SELECT o.production_order_id AS id,candidates.cut_link,${NATIVE_RECEIVING_MANAGED_SQL} AS managed
    FROM candidates JOIN digital_production_orders o USING(production_order_id)
    LEFT JOIN digital_production_sources s ON s.source_id=o.source_id`,
   [input.cuttingOrderId??null,input.productionOrderId??null,input.styleNo])).rows;
@@ -58,5 +53,10 @@ export async function admitNativeReceipt(db:PoolClient,input:NativeInput):Promis
   row.balance.dispatches.some(dispatch=>dispatch.dispatchedQuantity>0&&Date.parse(dispatch.actualDispatchedAt)<=actual));
  if(matches.length!==1)return conflict('该裁单尚无唯一有效的仓库发厂、工厂发回或当前收货余量，请返回原待收货核对');
  const selected=matches[0]!;
+ const shipped=(await db.query(`SELECT 1 FROM sourcing_production_shipments
+  WHERE production_order_id=$1 AND factory_decision_id IS NOT DISTINCT FROM $2::uuid
+  AND recorded_quantity>0 AND shipped_on<=($3::timestamptz AT TIME ZONE 'Asia/Shanghai')::date`,
+ [selected.identity.productionId,selected.factoryDecisionId,input.receivedAt])).rowCount;
+ if(!shipped)return conflict('本次收货日期早于原工厂实际发回，或原发回没有有效数量');
  return {orderId:root.id,productionOrderId:selected.identity.productionId,factoryDecisionId:selected.factoryDecisionId,lineId:selected.identity.lineId};
 }

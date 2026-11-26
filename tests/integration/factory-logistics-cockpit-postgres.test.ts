@@ -32,6 +32,10 @@ import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sample-service.js';
+import {OperationEventRepository} from '../../apps/api/src/tools/repositories.js';
+import {linkDigitalReceipt} from '../../apps/api/src/production-platform/receiving-link-adapter.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('native factory shipment date ranges in authorized cockpit reads',()=>{
@@ -253,6 +257,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('Acceptance R5 rejects the original no-selection receiving route before native dispatch and shipment',async()=>{
   const ctx=await context('2026-11-25T09:00:00.000Z'),r=await prepare(ctx.run,1,false,500,[]);
+  // This isolated WIP fixture deliberately starts from an existing old
+  // logistics setup. Declare the exact new-chain adoption marker before
+  // exercising R5, without inventing any dispatch or factory return.
+  await f.db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[r.id]);
   await ctx.run(async()=>{
    const closure=new ProductionClosureService(f.db),service=new ReceivingService(f.db,undefined,undefined,closure,{allowLegacyStyleInput:true});
    const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
@@ -282,6 +290,62 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await garmentQuality(f.db,r.id)).map(row=>row.receiptId).sort()).toEqual([receipt.value.receiptId,last.value.receiptId].sort());
    expect((await service.pending(warehouse,{page:1,search:'',status:'collected'})).items.find(item=>item.identity.orderId===r.id)?.balance)
     .toMatchObject({received:500,remaining:0});
+  });
+ },testExecutionConfig.correctnessTimeoutMs);
+ it('Acceptance R5 shows a historical premature receipt as pending proof on both original views without adopting it',async()=>{
+  const ctx=await context('2026-11-25T09:00:00.000Z'),r=await prepare(ctx.run,1,false,500,[]);
+  await f.db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[r.id]);
+  await ctx.run(async()=>{
+   const production=new ProductionClosureService(f.db),service=new ReceivingService(f.db,undefined,undefined,production,{allowLegacyStyleInput:true});
+   const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+   const cut=r.cuts[0]!.cutting_order_id as string,receiptId=randomUUID(),batchId=randomUUID();
+   const style=(await f.db.query('SELECT formal_style_no FROM current_cutting_style_options WHERE cutting_order_id=$1',[cut])).rows[0]!.formal_style_no;
+   // In this disposable historical fixture, reproduce the original ledger
+   // transaction as it was before admission, with all original DB guards on.
+   // There is no shipment, dispatch or inferred production relation.
+   const db=await f.db.connect();
+   try{
+    await db.query('BEGIN');
+    await db.query('INSERT INTO receiving_batches(receiving_batch_id,style_no,cutting_order_id,created_by,delivery_note_quantity) VALUES($1,$2,$3,$4,280)',[batchId,style,cut,warehouse.actorId]);
+    const event=await new OperationEventRepository().append(db,warehouse,{action:'receiving.receipt.create',entityType:'receiving_receipt',
+     entityId:receiptId,after:{receivingBatchId:batchId,cuttingOrderId:cut,styleNo:style,documentQuantity:280,actualQuantity:280,defectiveQuantity:0}});
+    await db.query("SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",[event,warehouse.requestId]);
+    await db.query(`INSERT INTO receiving_receipts(receipt_id,receiving_batch_id,cutting_order_id,style_no,document_quantity,actual_quantity,
+      defective_quantity,receiving_source,received_by,operation_event_id,request_id,received_at) VALUES($1,$2,$3,$4,280,280,0,'initial',$5,$6,$7,$8)`,
+     [receiptId,batchId,cut,style,warehouse.actorId,event,warehouse.requestId,businessNow().toISOString()]);
+    expect(await linkDigitalReceipt(db,receiptId,batchId)).toMatchObject({id:r.id});
+    await db.query('COMMIT');
+   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+   const original=async()=>(await f.db.query('SELECT to_jsonb(r) AS receipt FROM receiving_receipts r WHERE receipt_id=$1',[receiptId])).rows[0]!.receipt;
+   const untouched=await original(),closure=new OrderClosureService(f.db);
+   const legacy=await service.board(r.day,r.day,style);
+   const originalRow=legacy.rows.find(row=>row.receivingBatchId===batchId)!;
+   expect(originalRow).toMatchObject({currentActualQuantity:280,
+    nativeQualification:{effectiveQuantity:null,pendingReceiptCount:1},
+    receivingHistory:[{receiptId,actualQuantity:280,pendingQualification:'原裁单、PO或工厂执行关联待核'}]});
+   const formal=await closure.read(f.root,r.id);
+   expect(formal.lines).toMatchObject([{actualQuantity:0,receivingBatchId:batchId,
+    receivingExceptions:[{receiptId,quantityVersion:receiptId,quantity:280,reason:'原裁单、PO或工厂执行关联待核'}]}]);
+   expect(await garmentQuality(f.db,r.id)).toEqual([]);
+   expect((await new DigitalProductionTaskService(f.db).qualityDirectory(f.root,'garment',{kind:'garment',status:'open',page:1,search:style})).items)
+    .not.toContainEqual(expect.objectContaining({id:receiptId}));
+   expect(await closure.cockpitReceipts.read(f.root,r.id)).toMatchObject({status:'数量待核',totals:{received:null},
+    lines:[{status:'实收待核',pendingQualification:[{receiptId,quantity:280}]}]});
+   await expect(service.recordPacking({...f.root,authorizationCapability:'receiving:packing_manage'},{
+    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,packingQuantity:280,
+   },randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('待核')});
+   await expect(service.resolveDifference({...f.root,authorizationCapability:'receiving:resolve_difference'},{
+    receivingBatchId:batchId,expectedVersion:originalRow.version,expectedPackingRevisionId:null,expectedActualQuantity:280,
+    expectedDocumentQuantity:280,differenceType:'receiving',result:'TEST 原签收仍不能作为正式回货',
+   },randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('待核')});
+   const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,r.id);
+   await flow.dispatch(warehouse,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST later real dispatch'},randomUUID());
+   const productionId=(await flow.read(f.root,r.id)).currentProduction!.productionId;
+   await ship({productionId,day:r.day},null,[500]);
+   expect(await pendingReceivingForAuthorizedOrders(f.db,[r.id])).toMatchObject([{balance:{status:'unresolved',received:null,provenReceived:0,
+    receipts:[]}}]);
+   expect(await original()).toEqual(untouched);
+   expect((await f.db.query('SELECT receipt_id FROM sourcing_production_receipt_links WHERE receipt_id=$1',[receiptId])).rowCount).toBe(0);
   });
  },testExecutionConfig.correctnessTimeoutMs);
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{

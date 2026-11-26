@@ -1,7 +1,8 @@
 import {packingActualTime} from '@dx-rework/contracts';
 import type {PoolClient} from 'pg';
 import type {DeliveryPoFact,DeliveryScope} from '@dx-rework/contracts/delivery-calendar';
-import {readNativePackingHeads,DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
+import {readNativePackingHeads,digitalReceivingBaseSql} from '../receiving/receiving-quantity-query.js';
+import {readNativeReceiptExceptions} from '../receiving/native-receipt-qualification.js';
 import {journeyCutScopesForOrders,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journey-cut-scopes.js';
 import {effectivePackingQuantity,readPackingQualityCoverage} from './packing-quality-coverage.js';
 
@@ -28,12 +29,14 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],rang
  const selectedOrders=[...new Set(rows.map(row=>row.production_order_id))];
  const cutScopes=new Map((await journeyCutScopesForOrders(db,selectedOrders,rows.map(row=>row.line_id))).map(scope=>[scope.lineId,scope]));
  const cutIds=[...new Set(rows.flatMap(row=>cutScopes.get(row.line_id)?.status==='verified'?row.cutting_ids??[]:[]))];
+ const exceptions=await readNativeReceiptExceptions(db,{orderIds:selectedOrders});
+ const excluded=[...new Set(exceptions.map(row=>row.receiptId))],pendingLines=new Set(exceptions.map(row=>row.lineId));
  // This is the original closure/receiving grouping and latest action batch,
  // including corrections/deletion and one cumulative packing across factories.
  const packing=await readNativePackingHeads(db,cutIds);
- const receivingTotals=cutIds.length?(await db.query(`${DIGITAL_RECEIVING_BASE_SQL}
-  SELECT group_key,current_actual_quantity FROM style_totals`,['2000-01-01','2199-12-31','#',cutIds])).rows:[];
- const quality=await readPackingQualityCoverage(db,selectedOrders);
+ const receivingTotals=cutIds.length?(await db.query(`${digitalReceivingBaseSql('$5')}
+  SELECT group_key,current_actual_quantity FROM style_totals`,['2000-01-01','2199-12-31','#',cutIds,excluded])).rows:[];
+ const quality=await readPackingQualityCoverage(db,selectedOrders,excluded);
  const history=(await db.query(`SELECT line_id,version,change_id,new_date::text,old_date::text,source FROM digital_po_date_changes WHERE line_id=ANY($1::uuid[]) AND date_kind='customer' ORDER BY line_id,version`,[rows.map(row=>row.line_id)])).rows;
  const policies=(await db.query(`SELECT DISTINCT ON(production_order_id) production_order_id,snapshot_id,revision,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision DESC`,[selectedOrders])).rows;
  // Business order numbers have the same field permission as the original
@@ -55,6 +58,7 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],rang
   const orderedQty=quantity(row.quantity),rawPackedQty=packed?.packing_revision_id==null&&(verified||row.packing_absence_proven)?0:quantity(packed?.packing_quantity);
   const covered=quality.get(row.line_id)??null,nativeReceived=quantity(byReceiving.get('cut:'+cuts[0])?.current_actual_quantity)??0;
   const effectivePackedQty=effectivePackingQuantity(rawPackedQty,nativeReceived,covered);
+  if(pendingLines.has(row.line_id))reasons.push('有原收货登记仍待核对，未计入正式实收或有效装箱覆盖');
   if(rawPackedQty!==null&&effectivePackedQty===null)reasons.push('原装箱累计的有效合格覆盖待核对，不推定已交数量');
   if(orderedQty===null)reasons.push('本PO有效需求数量待核');if(rawPackedQty===null)reasons.push(cuts.length>1?'本PO有多个开裁关联，装箱范围待核':'本PO尚无可核有效装箱累计');if(!row.customer_date)reasons.push('本PO尚无有效客户出货交期');
   const reminder=policy?.parameters_json?.order_shipping_reminder?.value,reminderDays=reminder?.kind==='offset'&&Number.isInteger(reminder.days)&&reminder.days>=0&&reminder.days<=365?reminder.days as number:null;

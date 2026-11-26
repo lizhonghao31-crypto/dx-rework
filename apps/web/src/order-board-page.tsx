@@ -273,8 +273,8 @@ function OrderBoardOriginal() {
               <div className="order-board-row__style-heading"><span>款号</span>{reworkControl(row)}</div>
               <div className="order-board-row__style-line">
                 <strong>{row.styleNo}</strong>
-                <StatusBadge tone={tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
-                  {tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
+                <StatusBadge tone={row.nativeQualification||tone === "short" ? "danger" : tone === "extra" ? "info" : "success"}>
+                  {row.nativeQualification?"原收货待核":tone === "short" ? "少收" : tone === "extra" ? "多收" : "正常"}
                 </StatusBadge>
               </div>
               {row.receiptCount >= 1 ? <button
@@ -316,7 +316,8 @@ function OrderBoardOriginal() {
                 >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
               </div>
             </div>
-            <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
+            <div className="order-board-row__actual"><span>{row.nativeQualification?'原账登记':'实收'}</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong>
+             {row.nativeQualification&&<small>正式有效实收 {row.nativeQualification.effectiveQuantity===null?'暂无可计数量':`${quantity(row.nativeQualification.effectiveQuantity)}件`} · {row.nativeQualification.pendingReceiptCount} 笔待核</small>}</div>
             <div className="order-board-row__defective"><span>次品</span><strong>{quantity(row.defectiveQuantity)}件</strong></div>
             <div className="order-board-operation order-board-row__difference">
               <span>收货差异</span>
@@ -364,7 +365,7 @@ function OrderBoardOriginal() {
               <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
               <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
               <span>累计实收 {quantity(item.cumulativeActualQuantity)}件</span>
-              <span className="order-board-history__status">{historyStatus}</span>
+              <span className="order-board-history__status">{item.pendingQualification?`待核 · ${item.pendingQualification}`:historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
               {isRoot ? <Button type="button" onClick={() => openReceiptCorrection(item)}>修正本次</Button> : null}

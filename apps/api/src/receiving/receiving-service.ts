@@ -10,6 +10,7 @@ import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.
 import {receivingDocumentHistory} from "./receiving-document-history.js";
 import {parsePendingReceivingIdentity,pendingReceivingSelection,pendingReceivingView} from './pending-receiving-view.js';
 import {admitNativeReceipt} from './native-receipt-admission.js';
+import {nativeExceptionsForBatchGroup} from './native-receipt-qualification.js';
 import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
@@ -2001,6 +2002,11 @@ export class ReceivingService {
             || snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
           fail("订单或装箱数量已更新，本次未覆盖；请在本单回货处理页重新读取累计收货与装箱数，再核对后提交", 409, "CONFLICT");
         }
+        if(normalized.packingQuantity>0){
+          const exceptions=await nativeExceptionsForBatchGroup(client,snapshot.receivingBatchId);
+          if(exceptions.length&&(!normalized.packingAllocations?.length||normalized.packingAllocations.some(row=>exceptions.some(exception=>exception.receiptId===row.receiptId))))
+            return fail('原收货存在待核依据，请按已核准的原实收批次装箱',409,'CONFLICT');
+        }
         const packingRevisionId = randomUUID();
         const now=businessNow().toISOString(),packingActualTime=resolvePackingTime(normalized.packingTime,now);
         const allocations=normalized.packingAllocations===undefined?undefined:await packingReceiptAllocations(client,snapshot.receivingBatchId,normalized.packingQuantity,normalized.packingAllocations,now);
@@ -2127,6 +2133,8 @@ export class ReceivingService {
         if (differenceType === "packing" && snapshot.packingQuantity === null) {
           fail("请先录入装箱数量；请有权回货岗位在本单回货处理页登记实际装箱数，再处理与累计收货数的差异");
         }
+        if((await nativeExceptionsForBatchGroup(client,snapshot.receivingBatchId)).length)
+          return fail('原收货关联或发厂依据待核，不能用差异处理将原登记计为有效实收',409,'CONFLICT');
         const differenceQuantity = differenceType === "receiving"
           ? snapshot.actualQuantity - snapshot.documentQuantity
           : snapshot.packingQuantity! - snapshot.actualQuantity;

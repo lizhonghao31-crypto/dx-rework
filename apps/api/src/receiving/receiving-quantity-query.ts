@@ -82,7 +82,7 @@ export type StyleOperationSnapshot = Readonly<{
 }>;
 
 // Shared native aggregation; the digital adapter changes only the exact-ID scope.
-const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope}), scoped_batches AS (
+const receivingBoardBaseSql = (scope: string, except?:'$5'|'$13') => `WITH scoped_groups AS (${scope}), scoped_batches AS (
          SELECT batch.receiving_batch_id,
                 scope.group_key,
                 scope.style_key,
@@ -153,6 +153,8 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
          JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
          WHERE event.action IN ('receiving.batch.correct','receiving.batch.merge')
            AND event.entity_type='receiving_batch'
+           ${except?`AND NOT EXISTS(SELECT 1 FROM receiving_receipts audit_row WHERE audit_row.receiving_batch_id=scope.receiving_batch_id
+            AND audit_row.receipt_id=ANY(${except}::uuid[]))`:''}
          GROUP BY event.entity_id
        ), batch_totals AS (
          SELECT r.receiving_batch_id,
@@ -259,6 +261,7 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
          ) receipt_correction ON true
          LEFT JOIN correction_adjustments adjustments
            ON adjustments.receiving_batch_id=r.receiving_batch_id
+         ${except?`WHERE r.receipt_id<>ALL(${except}::uuid[])`:''}
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
                   scope.group_key,scope.style_key,scope.cutting_order_id,
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
@@ -342,9 +345,10 @@ export const RECEIVING_BATCH_BOARD_BASE_SQL = receivingBoardBaseSql(`
  upper(btrim(batch.style_no)) AS style_key FROM receiving_batches batch
  WHERE batch.receiving_batch_id=$3::text::uuid AND batch.deleted_at IS NULL
 `);
-export const DIGITAL_RECEIVING_BASE_SQL = receivingBoardBaseSql(`
+export const digitalReceivingBaseSql = (except?:'$5'|'$13')=>receivingBoardBaseSql(`
  SELECT DISTINCT 'cut:'||batch.cutting_order_id::text AS group_key,
                  'cut:'||batch.cutting_order_id::text AS style_key
  FROM receiving_batches batch JOIN receiving_receipts receipt USING(receiving_batch_id)
  WHERE batch.deleted_at IS NULL AND batch.cutting_order_id=ANY($4::uuid[])
-`);
+ `,except);
+export const DIGITAL_RECEIVING_BASE_SQL=digitalReceivingBaseSql();

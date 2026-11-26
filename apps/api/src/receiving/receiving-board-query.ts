@@ -3,6 +3,8 @@ import type {Pool} from "pg";
 import {ApplicationError} from "../platform/errors.js";
 import {RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL,RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,type ReceiptSource,type ReceivingDifferenceType} from "./receiving-quantity-query.js";
 import {RECEIVING_BOARD_FILTERS_SQL} from "./receiving-board-filters.js";
+import {readNativeReceiptExceptions} from './native-receipt-qualification.js';
+import {readNativeReceivingTotals} from './native-receiving-totals.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fail = (message: string, status = 400, code = "VALIDATION_ERROR"): never => {
@@ -34,6 +36,7 @@ type ReceivingHistoryItem = Readonly<{
   differenceQuantity: number;
   receivedAt: string;
   receiverName: string;
+  pendingQualification?:string;
 }>;
 type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
 
@@ -46,6 +49,7 @@ type BoardRow = Readonly<{
   actualQuantity: number;
   defectiveQuantity: number;
   currentActualQuantity: number;
+  nativeQualification?:{effectiveQuantity:number|null;pendingReceiptCount:number};
   currentDefectiveQuantity: number;
   cumulativeActualQuantity: number;
   differenceQuantity: number;
@@ -190,6 +194,7 @@ export async function readReceivingBoard(
       stale_resolution: boolean;
       resolution_history: { resolutionId: string; differenceType: ReceivingDifferenceType; differenceQuantity: number; result: string; handledBy: string; handledAt: string; attachments: {attachmentId: string; filename: string}[] }[];
       receiving_batch_id: string;
+      group_key:string;
       style_no: string;
       document_quantity: string;
       receiving_attachments: { attachmentId: string; filename: string }[];
@@ -247,7 +252,7 @@ export async function readReceivingBoard(
                 ORDER BY r.created_at DESC,r.resolution_id DESC)
                 FROM receiving_difference_resolutions r JOIN scoped_batches b USING(receiving_batch_id)
                 LEFT JOIN app_users u ON u.id=r.handled_by WHERE b.group_key=totals.group_key),'[]'::jsonb) AS resolution_history,
-              action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
+              action.receiving_batch_id,totals.group_key,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
               totals.cumulative_actual_quantity,
@@ -468,7 +473,23 @@ export async function readReceivingBoard(
                 totals.last_received_at DESC,totals.style_key ASC,totals.group_key ASC`,
       pageWindowParameters,
     );
-    const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
+    const cuts=rowsResult.rows.flatMap(row=>row.group_key.startsWith('cut:')?[row.group_key.slice(4)]:[]);
+    const uncutBatches=rowsResult.rows.filter(row=>!row.group_key.startsWith('cut:')).flatMap(row=>[row.receiving_batch_id,...row.receiving_history.map(item=>item.receivingBatchId)]);
+    const exceptions=[...await readNativeReceiptExceptions(client,{cutIds:cuts}),...await readNativeReceiptExceptions(client,{batchIds:uncutBatches})];
+    const qualificationByReceipt=new Map(exceptions.map(row=>[row.receiptId,row.reason]));
+    const affected=new Map<string,Set<string>>();
+    for(const exception of exceptions){
+     for(const key of ['batch:'+exception.batchId,...(exception.cuttingId?['cut:'+exception.cuttingId]:[])]){
+      const found=affected.get(key)??new Set<string>();
+      found.add(exception.receiptId);affected.set(key,found);
+     }
+    }
+    const affectedCuts=[...new Set(exceptions.flatMap(row=>row.cuttingId?[row.cuttingId]:[]))];
+    const effective=new Map((await readNativeReceivingTotals(client,affectedCuts,exceptions.map(row=>row.receiptId))).map(row=>[row.group_key,Number(row.current_actual_quantity)]));
+    const allRows: BoardRow[] = rowsResult.rows.map((row) => {
+     const batchHistory=new Set([row.receiving_batch_id,...row.receiving_history.map(item=>item.receivingBatchId)]);
+     const pendingReceiptCount=new Set([...(affected.get(row.group_key)??[]),...[...batchHistory].flatMap(id=>[...(affected.get('batch:'+id)??[])])]).size;
+     return {
       staleResolution: row.stale_resolution,
       resolutionHistory: row.resolution_history ?? [],
       receivingBatchId: row.receiving_batch_id,
@@ -479,6 +500,7 @@ export async function readReceivingBoard(
       actualQuantity: Number(row.actual_quantity),
       defectiveQuantity: Number(row.defective_quantity),
       currentActualQuantity: Number(row.current_actual_quantity),
+      ...(pendingReceiptCount?{nativeQualification:{effectiveQuantity:effective.get(row.group_key)??null,pendingReceiptCount}}:{}),
       currentDefectiveQuantity: Number(row.current_defective_quantity),
       cumulativeActualQuantity: Number(row.cumulative_actual_quantity),
       differenceQuantity: Number(row.difference_quantity),
@@ -512,6 +534,7 @@ export async function readReceivingBoard(
       batchCount: Number(row.batch_count),
       receivingHistory: row.receiving_history.map((item) => ({
         ...item,
+        ...(qualificationByReceipt.has(item.receiptId)?{pendingQualification:qualificationByReceipt.get(item.receiptId)!}:{}),
         sequence: Number(item.sequence),
         documentQuantity: Number(item.documentQuantity),
         receiptDocumentQuantity: Number(item.receiptDocumentQuantity),
@@ -528,7 +551,7 @@ export async function readReceivingBoard(
       rootCorrectable: row.root_correctable,
       rootDeletable: row.root_deletable,
       rootMutable: row.root_mutable,
-    }));
+    };});
     const rows = allRows;
     const differenceQuantity = Number(summary.difference_quantity);
     const documentQuantity = Number(summary.document_quantity);

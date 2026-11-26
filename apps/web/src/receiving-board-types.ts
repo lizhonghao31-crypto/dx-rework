@@ -17,6 +17,7 @@ export type ReceivingHistoryItem = Readonly<{
   differenceQuantity: number;
   receivedAt: string;
   receiverName: string;
+  pendingQualification?:string;
 }>;
 export type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
 export type DifferenceResolution = Readonly<{
@@ -36,6 +37,7 @@ export type BoardRow = Readonly<{
   actualQuantity: number;
   defectiveQuantity: number;
   currentActualQuantity: number;
+  nativeQualification?:{effectiveQuantity:number|null;pendingReceiptCount:number};
   currentDefectiveQuantity: number;
   cumulativeActualQuantity: number;
   differenceQuantity: number;
