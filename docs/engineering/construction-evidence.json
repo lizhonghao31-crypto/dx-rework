@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "9ae90510626ef70398529d647b16d69d89193cd4",
-  "sourceFingerprint": "812c5c442abd6de23c7a8e6c2b73c0c69354c81d112b1ef43cfbe6a43bb36bea",
+  "base": "3323c5e063ebca305f5850f73bf1fc3daa5835f7",
+  "sourceFingerprint": "68a43e4b216b51a38b9ffcb846d701567b566e500830afa7c65e9e41d1c1f902",
   "risk": "full",
   "rules": [
     {
@@ -112,7 +112,7 @@
       "endedAt": "2026-11-26T15:20:46Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 业务链原配置 maxWorkers=2。定向复验证真实 PG 生命周期/Acceptance 场景锁、G1 本地回滚、两次硬停止、双写者和实际下载。18 项已在初始候选通过且未受影响的场景未重复执行。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
       "log": "/tmp/dx-g1-evidence/review-fix/anchors-final.log",
       "logSha256": "9a70ba556e489eb94ca97ef7260536858a34e9b687aa05ae8f4c006fe53ff961",
       "passed": 11,
@@ -160,7 +160,7 @@
       "endedAt": "2026-11-26T15:19:14Z",
       "exitCode": 0,
       "status": "passed",
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback 55437, marked database, non-superuser dedicated schema; registered and cleaned via original owned-resource runner. 普通 PostgreSQL 配置 maxWorkers=1；完整原批准及回传循环。 比对新基座 9ae9051 的变动，仅 G9 原批写入与其测试发生变化，本核验实际不走收货更正；其余上述合同、时钟、夹具、测试和锁定依赖输入逐字相同。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
       "log": "/tmp/dx-g1-evidence/review-fix/originals.log",
       "logSha256": "84b324a1ccfe8ccae84452de3850f84dfa96cdda3698000c1eb3ad38b5345750",
       "inputPaths": [
@@ -212,7 +212,7 @@
       "passed": 1,
       "failed": 0,
       "skipped": 141,
-      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback，按原 DB 资源协议登记清理，工作树已合并实际 9ae9051 并处理实际证据冲突。只运行上一 exact-head Full 唯一失败的历史合同夹具，141 项旧例未自动重跑。",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10 / PostgreSQL 16.14 loopback，按原 DB 资源协议登记清理，工作树已合并实际 9ae9051 并处理实际证据冲突。只运行上一 exact-head Full 唯一失败的历史合同夹具，141 项旧例未自动重跑。 G3 合并只增加仓库状态列及其单测，所列原检查输入在正式新基座 3323c5e 继续逐字相同；保留原执行来源。",
       "log": "/tmp/dx-g1-evidence/review-fix/new-base-historical.log",
       "logSha256": "5f5bba42132da9f2a9fe88531985df180ba9aebd548cbcac56dc0e630341b822",
       "resultReports": [
@@ -220,7 +220,23 @@
           "format": "vitest-json",
           "sha256": "93607a056327a365ab969bc0865db7ee472f5e7f5e40addd3e930346e7728d51"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/api",
+        "apps/web/src/cutting-query.ts",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "tests/acceptance",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "39618c8d2035ad4fcc063ccc241314924cf394f06732dd32fecb9409e2865709"
     }
   ]
 }
