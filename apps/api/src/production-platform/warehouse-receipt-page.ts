@@ -7,7 +7,8 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {assignedWarehousePreparationResources} from './warehouse-assigned-resources.js';
 import {developmentReadTables} from './development-amendment-repository.js';
-import {currentPreparationMaterials,instructionInvestmentMaterials,preparationHandoverCurrent,preparationHash,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
+import {attachCurrentPreorderApplicability,currentPreparationMaterials,instructionInvestmentMaterials,materialBasisChanged,preparationHandoverCurrent,preparationHash,sourceHandoverChanged,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
+import {readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
@@ -15,7 +16,7 @@ import {issuedOrderNumbers} from './order-number-repository.js';
 
 type Source={kind:'source'|'order';id:string;order_id:string|null;source_id:string|null;order_number:string|null;customer_code:string|null;
  source_style_no:string|null;workbench_generated_number:boolean|null;workbench_number_root_id:string|null;
- assignee_name:string|null;development_version:number|null;development:DevelopmentDocument|null;instruction_version:number|null;instruction:InstructionDocument|null;
+ assignee_name:string|null;development_version:number|null;development_round:number;development:DevelopmentDocument|null;instruction_version:number|null;instruction:InstructionDocument|null;
  lines:{lineId:string;color:string;orderQuantity:number;poNumber:string|null;formalStyleNo:string|null;temporaryStyleNo:string|null}[]};
 type Raw={record_id:string;version:number;resource_kind:PreparationResource['kind'];resource_id:string;kind:PreparationMaterialFact['kind'];
  scope_ref:string;state:PreparationMaterialFact['state'];occurred_at:Date|null;recorded_at:Date;actor_id:string;evidence_valid:boolean;
@@ -62,6 +63,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
      to_jsonb(s)->>'workbench_number_root_id' AS workbench_number_root_id,
      COALESCE(o.customer_code,s.customer_code) AS customer_code,worker.display_name AS assignee_name,
      COALESCE(round.document_version,d.version) AS development_version,COALESCE(round.document,d.document) AS development,
+     COALESCE(round.round_number,1) AS development_round,
      instruction.version AS instruction_version,instruction.document AS instruction,
      COALESCE((SELECT jsonb_agg(jsonb_build_object('lineId',p.line_id,'color',p.color,'poNumber',COALESCE(p.po_number,p.formal_style_no),
       'formalStyleNo',p.formal_style_no,'temporaryStyleNo',p.temporary_style_no,
@@ -71,7 +73,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     LEFT JOIN digital_production_orders o ON k.kind='order' AND o.production_order_id=k.id
     LEFT JOIN digital_production_sources s ON s.source_id=CASE WHEN k.kind='source' THEN k.id ELSE o.source_id END
     LEFT JOIN ${views.documents} d ON d.source_id=s.source_id
-    LEFT JOIN LATERAL(SELECT r.document_version,r.document FROM ${views.rounds} r WHERE r.source_id=s.source_id ORDER BY r.round_number DESC LIMIT 1) round ON true
+    LEFT JOIN LATERAL(SELECT r.round_number,r.document_version,r.document FROM ${views.rounds} r WHERE r.source_id=s.source_id ORDER BY r.round_number DESC LIMIT 1) round ON true
     LEFT JOIN digital_instruction_documents instruction ON instruction.production_order_id=o.production_order_id
     JOIN app_users worker ON worker.id=$2
     WHERE o.production_order_id IS NOT NULL OR d.status='published' OR
@@ -89,6 +91,8 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     WHERE m.kind IN ('design_handover','material_investment','fabric_receipt','accessories_ready')
     ORDER BY m.recorded_at DESC,m.version DESC,m.record_id`,[JSON.stringify([...nativeKeys.values()])])).rows;
    const indexed=new Map<string,Raw[]>();
+   const preorderProofs=await readPreorderApplicabilityProofs(db,[...new Set(history.flatMap(row=>
+    row.kind==='design_handover'&&row.resource_kind==='source'&&row.body.investmentScopeBasis?.preorder?[row.resource_id]:[]))]);
    const demands=await readWarehouseInstructionDemands(db,context.flatMap(row=>row.order_id?[row.order_id]:[]));
    for(const row of history){
     const key=`${row.resource_kind}:${row.resource_id}`,values=indexed.get(key)??[];values.push(row);indexed.set(key,values);
@@ -103,12 +107,15 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
    for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
-    const materialHistory=nativeRows.map(row=>({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
+    const rawHistory=nativeRows.map(row=>({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,
      resource:{kind:row.resource_kind,id:row.resource_id},recordId:row.record_id,version:row.version,occurredAt:iso(row.occurred_at),
      recordedAt:iso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:'',valid:validMaterialEvidence(row,scope),
-     invalidReasons:[],quantities:row.body.quantities??[],evidenceIds:row.body.evidenceIds??[],
+     invalidReasons:!row.evidence_valid?['原凭证已失效或尚未完成上传']:validMaterialEvidence(row,scope)?[]:
+      [row.kind==='design_handover'?sourceHandoverChanged:materialBasisChanged],quantities:row.body.quantities??[],evidenceIds:row.body.evidenceIds??[],
      note:row.body.note??'',expectedVersion:row.body.expectedVersion??0,recipientId:row.body.recipientId??null,
      sourceDocumentVersion:row.body.sourceDocumentVersion??null})) as PreparationMaterialFact[];
+    const materialHistory=await attachCurrentPreorderApplicability(db,rawHistory,scope.source_id,scope.development&&scope.development_version!==null?
+     {document:scope.development,version:scope.development_version,round_number:scope.development_round}:null,preorderProofs);
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
     const work=deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined);
     if(!work.length)continue;

@@ -48,16 +48,17 @@ export function ProductionReadinessPanel({resource,sourceDocumentVersion,focusKi
  const [people,setPeople]=useState<Array<{id:string;displayName:string;roles:string[]}>>([]),[warehouse,setWarehouse]=useState(''),[color,setColor]=useState(''),[colorRole,setColorRole]=useState(''),[reason,setReason]=useState(''),[responsibilityDirty,setResponsibilityDirty]=useState(false),[responsibilityVersion,setResponsibilityVersion]=useState(0),[adoptionReason,setAdoptionReason]=useState(''),[adoptionDirty,setAdoptionDirty]=useState(false);
  const [deliveryRecipient,setDeliveryRecipient]=useState(''),[deliveryAt,setDeliveryAt]=useState(''),[deliveryNote,setDeliveryNote]=useState(''),[deliveryVersion,setDeliveryVersion]=useState(''),[deliveryDirty,setDeliveryDirty]=useState(false);
  const [reminderCloseReason,setReminderCloseReason]=useState('');
- type Form='materials'|'responsibility'|'delivery'|'adoption'|'materialReminder';
- const writing=useRef(false),attempts=useRef({materials:new SubmissionAttempt(),responsibility:new SubmissionAttempt(),delivery:new SubmissionAttempt(),adoption:new SubmissionAttempt(),materialReminder:new SubmissionAttempt()}),activeForm=useRef<Form>('materials'),mounted=useRef(true),context=useRef(0);
+ const [proofMaterial,setProofMaterial]=useState(''),[proofNote,setProofNote]=useState(''),[proofFile,setProofFile]=useState<File|null>(null),[proofAttachment,setProofAttachment]=useState<string|null>(null);
+ type Form='materials'|'responsibility'|'delivery'|'adoption'|'materialReminder'|'investmentApplicability';
+ const writing=useRef(false),attempts=useRef({materials:new SubmissionAttempt(),responsibility:new SubmissionAttempt(),delivery:new SubmissionAttempt(),adoption:new SubmissionAttempt(),materialReminder:new SubmissionAttempt(),investmentApplicability:new SubmissionAttempt()}),activeForm=useRef<Form>('materials'),mounted=useRef(true),context=useRef(0);
  const responsibilityEdited=useRef(false);responsibilityEdited.current=responsibilityDirty;
  const pending=Object.values(attempts.current).some(a=>a.hasPending);
- useDigitalDetailNavigationGuard(dirty||responsibilityDirty||deliveryDirty||adoptionDirty||Boolean(reminderCloseReason.trim()),busy||pending,writing,'本次物料、人员或交付记录尚未保存，确认离开？');
+ useDigitalDetailNavigationGuard(dirty||responsibilityDirty||deliveryDirty||adoptionDirty||Boolean(reminderCloseReason.trim()||proofMaterial||proofNote||proofFile),busy||pending,writing,'本次物料、人员或交付记录尚未保存，确认离开？');
  const handoverVersion=(value:ProductionReadinessState|null)=>value?.orderInstructionVersion===undefined
   ?value?.sourceDocumentVersion??sourceDocumentVersion??null:value.orderInstructionVersion;
  const usesInstruction=sheet!==null&&(sheet.orderInstructionVersion!==undefined||!sheet.sourceId);
  const apply=(next:ProductionReadinessState)=>{setSheet(next);if(responsibilityEdited.current)return;setResponsibilityVersion(next.responsibility.version);setWarehouse(next.responsibility.warehouseWorkerId??'');setColor(next.responsibility.colorConfirmationWorkerId??'');setColorRole(next.responsibility.colorConfirmationRole??'');};
- useEffect(()=>{let live=true;context.current++;writing.current=false;setBusy(false);mounted.current=true;setSheet(null);setError('');setReceipt('');setExpanded(designHandoverOnly);setDirty(false);setKind('design_handover');setState('ready');setAt('');setNote('');setName('');setQuantity('');setQuantityIndex(null);setMaterialId('');setUnit('');setLineId('');setRecipient('');setEvidence([]);setFile(null);setReason('');setDeliveryVersion('');setDeliveryRecipient('');setDeliveryAt('');setDeliveryNote('');setReminderCloseReason('');attempts.current={materials:new SubmissionAttempt(),responsibility:new SubmissionAttempt(),delivery:new SubmissionAttempt(),adoption:new SubmissionAttempt(),materialReminder:new SubmissionAttempt()};setResponsibilityDirty(false);responsibilityEdited.current=false;setDeliveryDirty(false);setAdoptionDirty(false);setAdoptionReason('');void digitalRequest<ProductionReadinessState>(base).then(async value=>{if(!live)return;apply(value);setEditingDocumentVersion(handoverVersion(value));setEditingVersion(value.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole')?.version??0);if(!investmentOnly&&((!designHandoverOnly&&value.canAssign)||(!readonly&&value.canRecord.includes('design_handover')))){const candidates=await digitalRequest<typeof people>('access/candidates');if(live)setPeople(candidates);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;mounted.current=false;};},[base,designHandoverOnly,investmentOnly,readonly]);
+ useEffect(()=>{let live=true;context.current++;writing.current=false;setBusy(false);mounted.current=true;setSheet(null);setError('');setReceipt('');setExpanded(designHandoverOnly);setDirty(false);setKind('design_handover');setState('ready');setAt('');setNote('');setName('');setQuantity('');setQuantityIndex(null);setMaterialId('');setUnit('');setLineId('');setRecipient('');setEvidence([]);setFile(null);setReason('');setDeliveryVersion('');setDeliveryRecipient('');setDeliveryAt('');setDeliveryNote('');setReminderCloseReason('');setProofMaterial('');setProofNote('');setProofFile(null);setProofAttachment(null);attempts.current={materials:new SubmissionAttempt(),responsibility:new SubmissionAttempt(),delivery:new SubmissionAttempt(),adoption:new SubmissionAttempt(),materialReminder:new SubmissionAttempt(),investmentApplicability:new SubmissionAttempt()};setResponsibilityDirty(false);responsibilityEdited.current=false;setDeliveryDirty(false);setAdoptionDirty(false);setAdoptionReason('');void digitalRequest<ProductionReadinessState>(base).then(async value=>{if(!live)return;apply(value);setEditingDocumentVersion(handoverVersion(value));setEditingVersion(value.facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole')?.version??0);if(!investmentOnly&&((!designHandoverOnly&&value.canAssign)||(!readonly&&value.canRecord.includes('design_handover')))){const candidates=await digitalRequest<typeof people>('access/candidates');if(live)setPeople(candidates);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;mounted.current=false;};},[base,designHandoverOnly,investmentOnly,readonly]);
  const choose=async(next:PreparationMaterialKind)=>{if(dirty&&!await confirmInApp('切换办理项会放弃本次未保存输入，确认切换？'))return;if(writing.current)return;const fact=sheet?.facts.find(f=>f.kind===next&&f.scopeRef==='whole');setKind(next);setEditingVersion(fact?.version??0);setEditingDocumentVersion(handoverVersion(sheet));setState(fact?.state??'ready');setAt(local(materialEntryTime(next,fact)));setNote('');setEvidence(fact?.evidenceIds??[]);setRecipient(fact?.recipientId??'');setQuantityIndex(fact?.quantities.length?0:null);setMaterialId(fact?.quantities[0]?.materialId??'');setName(fact?.quantities[0]?.name??'');setQuantity(fact?.quantities[0]?.quantity.toString()??'');setUnit(next==='style_label_ready'?'枚':fact?.quantities[0]?.unit??'');setLineId(fact?.quantities[0]?.lineId??'');setDirty(false);setFile(null);};
  const feedback=async(operation:()=>Promise<void>,retry=false)=>{
   if(writing.current)return;const generation=context.current,active=attempts.current[activeForm.current];writing.current=true;setBusy(true);setError('');setReceipt('');
@@ -66,10 +67,10 @@ export function ProductionReadinessPanel({resource,sourceDocumentVersion,focusKi
    if(result.kind==='failure')setError(result.failure.message);else if(result.kind==='needs-recovery')setError('上次结果尚未确认，请使用原内容核对');else if(result.kind==='expired')setError('原请求已超过安全恢复窗口，请管理员核对原记录，不重复新增');
   }finally{if(generation===context.current){writing.current=false;if(mounted.current)setBusy(false);}}
  };
- const send=(path:string,input:unknown,method='POST')=>{if(writing.current||pending)return;const form:Form=path==='/materials'?'materials':path==='/responsibility'?'responsibility':path==='/instruction-deliveries'?'delivery':path==='/material-investment-reminder/close'?'materialReminder':'adoption';activeForm.current=form;const key=createClientRequestId(),generation=context.current,active=attempts.current[form];return feedback(async()=>{const result=await digitalRequest<ProductionReadinessState>(base+path,method,input,key);active.markConfirmed();if(!mounted.current||generation!==context.current)return;
+ const send=(path:string,input:unknown,method='POST')=>{if(writing.current||pending)return;const form:Form=path==='/materials'?'materials':path==='/responsibility'?'responsibility':path==='/instruction-deliveries'?'delivery':path==='/material-investment-reminder/close'?'materialReminder':path==='/material-investment/confirm-applicability'?'investmentApplicability':'adoption';activeForm.current=form;const key=createClientRequestId(),generation=context.current,active=attempts.current[form];return feedback(async()=>{const result=await digitalRequest<ProductionReadinessState>(base+path,method,input,key);active.markConfirmed();if(!mounted.current||generation!==context.current)return;
   if(form==='responsibility'){responsibilityEdited.current=false;setResponsibilityDirty(false);}apply(result);
   if(form==='materials'){setEditingVersion(result.facts.find(f=>f.kind===(input as {kind:string}).kind&&f.scopeRef==='whole')?.version??0);if(quantityIndex===null&&quantity&&name&&unit)setQuantityIndex((input as {quantities:unknown[]}).quantities.length-1);setDirty(false);}
-  if(form==='materialReminder')setReminderCloseReason('');if(form==='delivery')setDeliveryDirty(false);if(form==='adoption')setAdoptionDirty(false);setReceipt('已保存原业务记录');onChanged?.();});};
+  if(form==='materialReminder')setReminderCloseReason('');if(form==='investmentApplicability'){setProofMaterial('');setProofNote('');setProofFile(null);setProofAttachment(null);}if(form==='delivery')setDeliveryDirty(false);if(form==='adoption')setAdoptionDirty(false);setReceipt('已保存原业务记录');onChanged?.();});};
  useEffect(()=>{if(!sheet||sheet.resource.kind!==resource.kind||sheet.resource.id!==resource.id||!requestedKind||!(PREPARATION_MATERIAL_KINDS as readonly string[]).includes(requestedKind))return;
   const stamp=base+':'+requestedKind;if(located.current===stamp)return;located.current=stamp;if(dirty||writing.current)return;
   setExpanded(true);if(!readonly&&sheet.canRecord.includes(requestedKind as PreparationMaterialKind))void choose(requestedKind as PreparationMaterialKind);
@@ -115,8 +116,39 @@ export function ProductionReadinessPanel({resource,sourceDocumentVersion,focusKi
  const selectedFact=sheet.facts.find(f=>f.kind===kind&&f.scopeRef==='whole');
  const handover=sheet.facts.find(row=>row.kind==='design_handover'&&row.scopeRef==='whole'&&row.state==='ready'&&row.valid);
  const handedMaterials=(handover?.handoverMaterials??[]).filter(row=>row.materialId&&handover?.investmentScopeBasis?.materialIds.includes(row.materialId));
+ const applicability=sheet.preorderApplicabilityCandidates??[],chosenProof=applicability.find(candidate=>candidate.materialId===proofMaterial);
+ const uploadProof=async()=>{
+  if(!proofFile||writing.current||pending)return;
+  const generation=context.current;writing.current=true;setBusy(true);setError('');
+  try{const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
+   const attachment=await uploadDevelopmentMaterial(base,proofFile,'工艺开发板',limits.maxUploadBytes);
+   if(mounted.current&&generation===context.current){setProofAttachment(attachment);setProofFile(null);}
+  }catch(error){if(mounted.current&&generation===context.current)setError(error instanceof Error?error.message:'原投料凭证上传未完成');}
+  finally{if(generation===context.current){writing.current=false;if(mounted.current)setBusy(false);}}
+ };
+
  return <section ref={locator} className="preparation-readiness">{showOtherActions&&<PreparationWindows state={sheet}/>}<details open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}><summary>{designHandoverOnly?'原设计资料交接':investmentOnly?'本单投面辅料记录':'产前物料办理'} · {factCount}项已有记录</summary>
  <Action variant="secondary" disabled={disabled} onClick={reload}>{designHandoverOnly?'刷新交接记录':'刷新物料记录'}</Action>{showOtherActions&&<p>本页登记原物料和交接事实，复用已有凭证。部分备料不代表整单齐料；款号唛须为进裁床前的实物。</p>}
+ {!designHandoverOnly&&handover?.preorderApplicability?.quantityDemand&&<ul aria-label="有效需求变更与原实际投料">
+  {Object.entries(handover.preorderApplicability.quantityDemand).map(([id,row])=><li key={id}>
+   {handedMaterials.find(material=>material.materialId===id)?.name} · 现需 {row.requested} {row.unit} · 实投 {row.originallyRecorded} {row.unit} · 差额 {row.remaining} {row.unit}
+  </li>)}
+ </ul>}
+ {!readonly&&!designHandoverOnly&&applicability.length>0&&<fieldset aria-label="确认原已投材料补齐资料" disabled={disabled}>
+  <legend>确认原已投材料补齐资料</legend>
+  <label>本次补齐的原材料<select value={proofMaterial} onChange={event=>{setProofMaterial(event.target.value);setProofAttachment(null);setProofFile(null);}}>
+   <option value="">请选择</option>{applicability.map(candidate=><option value={candidate.materialId} key={candidate.materialId}>{candidate.name}</option>)}
+  </select></label>
+  {chosenProof&&<><p>{chosenProof.reason}</p><label>原实物凭证<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+   onChange={event=>{setProofAttachment(null);setProofFile(event.target.files?.[0]??null);}}/></label>
+   {proofFile&&<Action variant="secondary" onClick={()=>void uploadProof()}>上传原实物凭证</Action>}
+   {proofAttachment&&<p role="status">原实物凭证已就绪</p>}
+   <label>同一实际材料确认说明<textarea value={proofNote} maxLength={1000} onChange={event=>setProofNote(event.target.value)}/></label>
+   <Action disabled={!proofAttachment||!proofNote.trim()} onClick={()=>void send('/material-investment/confirm-applicability',{
+    materialId:chosenProof.materialId,sourceVersion:chosenProof.sourceVersion,roundNumber:chosenProof.roundNumber,
+    handover:chosenProof.handover,investment:chosenProof.investment,note:proofNote,evidenceIds:[proofAttachment],
+   })}>确认采用原实际投料</Action></>}
+ </fieldset>}
  {!designHandoverOnly&&sheet.materialInvestmentReminder&&<div aria-label="投面辅料提醒">
   <strong>投面辅料截止：{time(sheet.materialInvestmentReminder.dueAt)}{sheet.materialInvestmentReminder.exclusive?' 前':''}</strong>
   {sheet.materialInvestmentReminder.termination?<p>{sheet.materialInvestmentReminder.status==='overdue'?'已终止，本项终止前已逾期':'本项计时已终止'}</p>

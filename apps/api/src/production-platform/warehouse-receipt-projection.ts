@@ -31,12 +31,14 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
  return original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
-  const handover=original.facts.find(fact=>fact.kind==='design_handover'&&fact.scopeRef===investment.scopeRef&&
-   fact.resource.kind===investment.resource.kind&&fact.resource.id===investment.resource.id&&fact.valid&&fact.state==='ready'&&
-   fact.recordId===scope.handoverRecordId&&fact.version===scope.handoverVersion&&fact.investmentScopeBasis?.fingerprint===scope.fingerprint);
+  const matches=(fact:PreparationMaterialFact)=>fact.kind==='design_handover'&&fact.scopeRef===investment.scopeRef&&
+   fact.resource.kind===investment.resource.kind&&fact.resource.id===investment.resource.id&&(fact.valid||fact.preorderApplicability)&&fact.state==='ready'&&
+   fact.recordId===scope.handoverRecordId&&fact.version===scope.handoverVersion&&fact.investmentScopeBasis?.fingerprint===scope.fingerprint;
+  const handover=original.facts.find(matches)??original.history.find(fact=>fact.preorderApplicability&&matches(fact));
   if(!handover)return [];
   return investment.quantities.flatMap(row=>{
-   if(!row.materialId||row.lineId&&!original.lines.some(line=>line.lineId===row.lineId))return [];
+   if(!row.materialId||row.lineId&&!original.lines.some(line=>line.lineId===row.lineId)||
+    handover.preorderApplicability&&handover.preorderApplicability.originalFingerprints[row.materialId]!==scope.materialFingerprints[row.materialId])return [];
    const materials=handover.handoverMaterials?.filter(material=>material.materialId===row.materialId)??[];
    if(materials.length!==1||!materials[0]?.category)return [];
    const material=materials[0];

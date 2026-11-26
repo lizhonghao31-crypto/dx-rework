@@ -9,6 +9,8 @@ import {businessNow,acceptanceBusinessContext} from '../acceptance-clock/busines
 import {digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {deriveStyleLabelOccurrences} from './style-label-evidence.js';
+import {originalPreorderDemandBalance,projectPreorderInvestmentApplicability,readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
+import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 
 export type PreparationDB=Pick<Pool|PoolClient,'query'>;
 export const preparationHash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -31,7 +33,7 @@ export async function enrollPreparation(db:PreparationDB,resource:PreparationRes
   VALUES($1,$2,$3,1,$4,$5,$6,$7,$8,$8,$9,$10)`,[randomUUID(),resource.kind,resource.id,PREPARATION_RULE_VERSION,`creation:${creationEventId}`,'新建档案采用本次产前规则；没有补造物料、批复或完成事实',JSON.stringify({draftMinutes:1440,finalMinutes:1440}),actorId,creationEventId,JSON.stringify({now:businessNow().toISOString(),scenarioId:acceptanceBusinessContext()?.scenarioId??null})]);
 }
 type InvestmentMaterial=Pick<DevelopmentMaterial,'materialId'|'category'|'name'|'quantity'|'color'|'specification'|'supplier'>
- &Partial<Pick<DevelopmentMaterial,'width'|'weight'|'composition'|'supplierReference'>>
+ &Partial<Pick<DevelopmentMaterial,'width'|'weight'|'composition'|'supplierReference'|'quantityUnit'|'garmentColor'>>
  &{instructionSpecifications?:readonly string[]};
 
 export function instructionInvestmentMaterials(document:Pick<InstructionDocument,'fabrics'|'accessories'|'fabricType'|'composition'>):InvestmentMaterial[]{
@@ -73,8 +75,10 @@ export function warehouseReceiptMaterialCurrent(kind:PreparationResource['kind']
  const row=preparationInvestmentScope(rows,kind==='source'?'source':'instruction').rows[0];
  return Boolean(row&&preparationHash(row)===evidence.materialFingerprint);
 }
-export function preparationInvestmentComplete(handover:Pick<PreparationMaterialFact,'investmentScopeBasis'>|undefined,investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'investmentMaterialOccurrences'>|undefined){
+export function preparationInvestmentComplete(handover:Pick<PreparationMaterialFact,'investmentScopeBasis'|'preorderApplicability'>|undefined,investment:Pick<PreparationMaterialFact,'state'|'valid'|'quantities'|'investmentMaterialOccurrences'>|undefined){
  if(investment?.state!=='ready'||!investment.valid)return false;
+ if(Object.entries(handover?.preorderApplicability?.quantityDemand??{}).some(([id,row])=>
+  originalPreorderDemandBalance(row.requested,row.unit,investment.quantities.filter(quantity=>quantity.materialId===id))?.remaining!=='0'))return false;
  const required=handover?.investmentScopeBasis?.materialIds;
  return !required||required.length>0&&required.every(id=>investment.quantities.some(row=>row.materialId===id)
   &&investment.investmentMaterialOccurrences?.[id]?.fingerprint===handover!.investmentScopeBasis!.materialFingerprints[id]);
@@ -82,12 +86,53 @@ export function preparationInvestmentComplete(handover:Pick<PreparationMaterialF
 
 /** Version-only changes do not invalidate an explicitly handed-over preorder.
  * A different material set always requires an additional real handover. */
-export function preparationHandoverCurrent(handover:Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'>,
+export function preparationHandoverCurrent(handover:Pick<PreparationMaterialFact,'sourceDocumentVersion'|'orderInstructionVersion'|'investmentScopeBasis'|'preorderApplicability'>,
  document:{version:number;materials:readonly InvestmentMaterial[]}|null,origin:'source'|'instruction'='source'){
  const version=origin==='source'?handover.sourceDocumentVersion:handover.orderInstructionVersion;
  if(!document)return origin==='instruction'&&version===undefined;
+ if(origin==='source'&&version!==document.version&&handover.preorderApplicability?.sourceVersion===document.version)return handover.preorderApplicability.full;
  return version===document.version||Boolean(handover.investmentScopeBasis&&
   preparationInvestmentScope(document.materials,origin).fingerprint===handover.investmentScopeBasis.fingerprint);
+}
+
+export const materialBasisChanged='物料要求已变化，请核对本轮实际适用性；原物料记录保留';
+export const sourceHandoverChanged='设计交接所引用资料已有新版本';
+
+export async function attachCurrentPreorderApplicability(db:PreparationDB,history:PreparationMaterialFact[],
+ sourceId:string|null,document:{document:DevelopmentDocument;version:number;round_number:number}|null|undefined,
+ preloadedProofs?:Awaited<ReturnType<typeof readPreorderApplicabilityProofs>>){
+ if(!sourceId||!document)return history;
+ const investment=history.find(fact=>fact.kind==='material_investment'&&fact.scopeRef==='whole'&&fact.resource.kind==='source'&&fact.resource.id===sourceId);
+ const handovers=history.filter(fact=>fact.kind==='design_handover'&&fact.scopeRef==='whole'&&fact.resource.kind==='source'&&fact.resource.id===sourceId);
+ const initial=handovers[0],purchaseBasis=investment?.investmentScopeBasis;
+ const origin=purchaseBasis&&handovers.find(fact=>fact.recordId===purchaseBasis.handoverRecordId&&fact.version===purchaseBasis.handoverVersion);
+ const choices=[...new Set([initial,origin])].filter((handover):handover is PreparationMaterialFact=>
+  Boolean(handover?.investmentScopeBasis?.preorder&&handover.sourceDocumentVersion!==document.version&&handover.state==='ready'&&
+   !handover.invalidReasons.some(reason=>reason!==sourceHandoverChanged)));
+ if(!choices.length)return history;
+ const proofs=preloadedProofs??await readPreorderApplicabilityProofs(db,[sourceId]);
+ const projections=new Map(choices.flatMap(handover=>{
+  const projected=projectPreorderInvestmentApplicability(handover,investment,{version:document.version,roundNumber:document.round_number,
+   materials:document.document.materials},proofs);
+  return projected?[[handover,projected] as const]:[];
+ }));
+ return history.map(fact=>{
+  const projection=projections.get(fact);
+  if(projection){
+   const invalidReasons=fact.invalidReasons.filter(reason=>reason!==sourceHandoverChanged);
+   if(!projection.full)invalidReasons.push(sourceHandoverChanged);
+   return {...fact,preorderApplicability:projection,invalidReasons,valid:!invalidReasons.length};
+  }
+  const receipt=fact.warehouseReceipt;
+  const prior=origin??initial,applied=prior?projections.get(prior):undefined;
+  if(fact.resource.kind==='source'&&fact.resource.id===sourceId&&receipt&&applied&&
+    prior?.investmentScopeBasis?.materialFingerprints[receipt.materialId]===receipt.materialFingerprint){
+   const invalidReasons=fact.invalidReasons.filter(reason=>reason!==materialBasisChanged);
+   if(applied.originalFingerprints[receipt.materialId]!==receipt.materialFingerprint)invalidReasons.push(materialBasisChanged);
+   return {...fact,invalidReasons,valid:!invalidReasons.length};
+  }
+  return fact;
+ });
 }
 
 export async function preparationMaterialHistory(db:PreparationDB,context:Awaited<ReturnType<typeof preparationContext>>):Promise<PreparationMaterialFact[]>{
@@ -98,27 +143,27 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
  const result:PreparationMaterialFact[]=[];
  const orderInstruction=context.orderId&&rows.some(row=>row.kind==='design_handover'&&row.body.orderInstructionVersion!==undefined||row.resource_kind==='order'&&row.body.warehouseReceipt)
   ?await directInvestmentInstruction(db,context.orderId):null;
- const receiptSource=context.sourceId&&rows.some(row=>row.resource_kind==='source'&&row.body.warehouseReceipt)?await developmentDocumentRow(db,context.sourceId):null;
+ const receiptSource=context.sourceId&&rows.some(row=>row.resource_kind==='source'&&(row.body.warehouseReceipt||row.kind==='design_handover'))?await developmentDocumentRow(db,context.sourceId):null;
  const instructionBasis=orderInstruction?{version:orderInstruction.version,materials:instructionInvestmentMaterials(orderInstruction.document)}:null;
  for(const row of rows){
   const missing: string[]=[];
   const receipt=row.body.warehouseReceipt as WarehouseReceiptBatchEvidence|undefined;
   if(receipt?!warehouseReceiptMaterialCurrent(row.resource_kind,receipt,receiptSource?.document.materials??null,orderInstruction?.document??null)
-   :row.body.materialBasis&&row.body.materialBasis!==await preparationMaterialBasis(db,context,row.kind))missing.push('物料要求已变化，请核对本轮实际适用性；原物料记录保留');
+   :row.body.materialBasis&&row.body.materialBasis!==await preparationMaterialBasis(db,context,row.kind))missing.push(materialBasisChanged);
   if(row.kind==='design_handover'){
    if(row.body.orderInstructionVersion!==undefined&&context.orderId){
     if(!preparationHandoverCurrent(row.body,instructionBasis,'instruction'))
      missing.push('设计交接所引用的本单制单资料已有新版本');
    }else if(context.sourceId&&(row.resource_kind==='source'||row.body.sourceDocumentVersion!=null)){
-    const document=await developmentDocumentRow(db,context.sourceId);
+    const document=receiptSource??await developmentDocumentRow(db,context.sourceId);
     if(!preparationHandoverCurrent(row.body,document?{version:document.version,materials:document.document.materials}:null))
-     missing.push('设计交接所引用资料已有新版本');
+     missing.push(sourceHandoverChanged);
    }
   }
   if(row.body.evidenceIds?.length){const ready=(await db.query("SELECT count(*)::int AS n FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready'",[row.body.evidenceIds])).rows[0].n;if(ready!==row.body.evidenceIds.length)missing.push('原凭证已失效或尚未完成上传');}
   result.push({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,recordId:row.record_id,version:row.version,resource:{kind:row.resource_kind,id:row.resource_id},occurredAt:preparationIso(row.occurred_at),recordedAt:preparationIso(row.recorded_at)!,recordedBy:row.actor_id,operatorName:row.display_name??'',valid:!missing.length,invalidReasons:missing});
  }
- return result;
+ return attachCurrentPreorderApplicability(db,result,context.sourceId,receiptSource);
 }
 /** An existing order stream keeps authority after source attachment. Source-only records are adopted by reference, never copied as receipts. */
 export function currentPreparationMaterials(history:PreparationMaterialFact[],orderId:string|null){
@@ -160,7 +205,23 @@ function correctedInvestmentQuantities(prior:readonly Quantity[],correction:NonN
  return prior.map((row,index)=>index===correction.index?replacement:row);
 }
 
-function investmentQuantitiesWithEvidence(input:PreparationMaterialRecord,prior:PreparationMaterialFact|undefined,scope:MaterialInvestmentScopeBasis|undefined,quantities:Quantity[]){
+function preorderPhysicalScopeChanges(prior:PreparationMaterialFact|undefined,handover:PreparationMaterialFact|undefined,history:readonly PreparationMaterialFact[]){
+ const previous=prior?.investmentScopeBasis,next=handover?.investmentScopeBasis;
+ if(!previous?.preorder||!next?.preorder||previous.handoverRecordId===next.handoverRecordId&&previous.handoverVersion===next.handoverVersion)return new Set<string>();
+ const original=history.find(row=>row.kind==='design_handover'&&row.recordId===previous.handoverRecordId&&row.version===previous.handoverVersion&&
+  row.resource.kind===prior?.resource.kind&&row.resource.id===prior.resource.id);
+ return new Set(previous.materialIds.filter(id=>{
+  const before=original?.handoverMaterials?.filter(row=>row.materialId===id),after=handover?.handoverMaterials?.filter(row=>row.materialId===id);
+  if(before?.length!==1||after?.length!==1)return true;
+  const old=before[0]!,current=after[0]!;
+  // The historic display-based fingerprint does not distinguish equal supplier labels or physical ranges.
+  return old.supplierId!==current.supplierId||(old.garmentColor??'')!==(current.garmentColor??'')||
+   (old.quantityUnit??'')!==(current.quantityUnit??'');
+ }));
+}
+
+function investmentQuantitiesWithEvidence(input:PreparationMaterialRecord,prior:PreparationMaterialFact|undefined,scope:MaterialInvestmentScopeBasis|undefined,quantities:Quantity[],
+ changedPhysicalScope?:ReadonlySet<string>){
  const original=prior?.quantities??[],previous=new Map(original.map(row=>[investmentRowKey(row),row]));
  const evidence={...prior?.investmentQuantityOccurrences};
  if(!prior?.investmentQuantityOccurrences&&prior?.investmentMaterialOccurrences){
@@ -172,6 +233,7 @@ function investmentQuantitiesWithEvidence(input:PreparationMaterialRecord,prior:
    if(id&&occurrence&&counts.get(id)===1)evidence[investmentRowKey(row)]=occurrence;
   }
  }
+ for(const row of original)if(row.materialId&&changedPhysicalScope?.has(row.materialId))delete evidence[investmentRowKey(row)];
  const correction=input.investmentQuantityCorrection;
  if(correction)delete evidence[investmentRowKey(correction.previous)];
  const selected=input.quantities.filter(row=>row.materialId&&row.materialId===input.investmentMaterialId);
@@ -207,6 +269,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  const materialInputs:readonly InvestmentMaterial[]|undefined=directInstruction?instructionInvestmentMaterials(directInstruction.document):handedDocument?.document.materials;
  const handoverMaterials=materialInputs?.map(m=>({
   materialId:m.materialId,category:m.category,supplier:m.supplier,name:m.name,quantity:m.quantity,color:m.color,specification:m.specification,
+  ...(!directInstruction?{width:m.width??'',weight:m.weight??'',composition:m.composition??'',quantityUnit:m.quantityUnit??'',garmentColor:m.garmentColor??''}:{}),
   ...(m.supplierReference?{supplierId:m.supplierReference.supplierId}:{})
  }));
  const investmentHandover=input.kind==='material_investment'?current.find(row=>row.kind==='design_handover'
@@ -215,6 +278,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  let scopeBasis:MaterialInvestmentScopeBasis|undefined;
  let investmentMaterialOccurrences:PreparationMaterialFact['investmentMaterialOccurrences'];
  let investmentQuantityOccurrences:PreparationMaterialFact['investmentQuantityOccurrences'];
+ let preorderApplicabilityAnchorVersion:number|undefined;
  const preorder=handedDocument?.status==='draft'&&handedDocument.document.customerOrderDraft?.withOrder===true
   &&handedDocument.document.customerOrderDraft.stage==='preorder';
  if(materialInputs&&input.state==='ready'&&input.scopeRef==='whole'
@@ -227,11 +291,14 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
  }
  if(input.kind==='material_investment'){
   scopeBasis=investmentHandover?.investmentScopeBasis;
+  if(scopeBasis?.preorder&&prior?.investmentScopeBasis?.handoverRecordId===scopeBasis.handoverRecordId&&
+   prior.investmentScopeBasis.handoverVersion===scopeBasis.handoverVersion)preorderApplicabilityAnchorVersion=prior.preorderApplicabilityAnchorVersion;
   const original=prior?.quantities??[],correction=input.investmentQuantityCorrection;
   const corrected=correction?correctedInvestmentQuantities(original,correction,input.quantities[0]!):null;
   if(scopeBasis&&(input.state==='ready'||input.state==='partial')){
    const quantities=corrected??[...new Map([...original,...input.quantities].map(row=>[investmentRowKey(row),row])).values()];
-   const {rowOccurrences,materialOccurrences}=investmentQuantitiesWithEvidence(input,prior,scopeBasis,quantities);
+   const {rowOccurrences,materialOccurrences}=investmentQuantitiesWithEvidence(input,prior,scopeBasis,quantities,
+    preorderPhysicalScopeChanges(prior,investmentHandover,history));
    investmentQuantityOccurrences=rowOccurrences;
    investmentMaterialOccurrences=materialOccurrences;
    const complete=preparationInvestmentComplete(investmentHandover,{state:input.state,valid:true,quantities,investmentMaterialOccurrences});
@@ -251,7 +318,7 @@ export async function appendPreparationMaterial(db:PreparationDB,context:Awaited
   context.lines.map(row=>({lineId:String(row.line_id),quantity:Number(row.order_quantity)})),
   {...input,recordId,version,resource:target,valid:true},prior):null;
  await db.query(`INSERT INTO digital_preparation_material_versions(record_id,version,resource_kind,resource_id,kind,scope_ref,state,occurred_at,body,actor_id,recorded_at)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...(warehouse?{warehouseReceipt:warehouse.evidence}:{materialBasis:await preparationMaterialBasis(db,context,input.kind)}),...labels,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{})}),actorId]);
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,[recordId,version,target.kind,target.id,input.kind,input.scopeRef,input.state,input.occurredAt,JSON.stringify({...snapshot,...(warehouse?{warehouseReceipt:warehouse.evidence}:{materialBasis:await preparationMaterialBasis(db,context,input.kind)}),...labels,...(handoverMaterials?{handoverMaterials}:{}),...(scopeBasis?{investmentScopeBasis:scopeBasis}:{}),...(investmentMaterialOccurrences?{investmentMaterialOccurrences}:{}),...(investmentQuantityOccurrences?{investmentQuantityOccurrences}:{}),...(preorderApplicabilityAnchorVersion?{preorderApplicabilityAnchorVersion}:{})}),actorId]);
  return {recordId,version};
 }
 

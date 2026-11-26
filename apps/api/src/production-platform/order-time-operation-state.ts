@@ -132,17 +132,21 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
     ?{fabric:scope.fabric,accessories:scope.accessories,reference:'order:'+orderId+':'+scope.fingerprint}:null;
   }else if(plan.company.framework&&!priorFramework&&sourceId&&document&&development){
    const scope=preparationInvestmentScope(development.materials);
+   let originalScopeFingerprint:string|undefined;
    if(await preparationAvailable(db)){
-    const evidence=(await db.query(`SELECT state,body,NOT EXISTS(SELECT 1
-      FROM jsonb_array_elements_text(coalesce(body->'evidenceIds','[]'::jsonb)) file(id)
-      WHERE NOT EXISTS(SELECT 1 FROM attachments WHERE attachment_id::text=file.id AND status='ready')) AS files_ready
-     FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover' AND scope_ref='whole'
-     ORDER BY recorded_at DESC,version DESC LIMIT 1`,[sourceId])).rows[0];
-    preorder=Boolean(evidence?.body?.investmentScopeBasis?.preorder&&evidence.state==='ready'&&evidence.files_ready
-     &&preparationHandoverCurrent(evidence.body,{version:document.version,materials:development.materials}));
+    const context=await preparationContext(db,{kind:'source',id:sourceId});
+    const facts=currentPreparationMaterials(await preparationMaterialHistory(db,context),context.orderId);
+    const evidence=facts.find(row=>row.kind==='design_handover'&&row.scopeRef==='whole'&&row.resource.kind==='source'&&row.resource.id===sourceId);
+    preorder=Boolean(evidence?.investmentScopeBasis?.preorder&&evidence.state==='ready'&&evidence.valid&&
+     preparationHandoverCurrent(evidence,{version:document.version,materials:development.materials}));
+    if(preorder&&evidence?.preorderApplicability?.full){
+     originalScopeFingerprint=evidence.investmentScopeBasis?.fingerprint;
+     sourceVersion.preorderMaterialApplicability={sourceVersion:evidence.preorderApplicability.sourceVersion,
+      basisRevisions:evidence.preorderApplicability.basisRevisions,handover:{recordId:evidence.recordId,version:evidence.version}};
+    }
    }
    materialInvestmentScope=scope.rows.length?{fabric:scope.fabric,accessories:scope.accessories,
-    reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+scope.fingerprint}:null;
+    reference:(preorder?'preorder:':'source:')+sourceId+':round:'+round+':'+(originalScopeFingerprint??scope.fingerprint)}:null;
   }else if(plan.company.framework)materialInvestmentScope=priorFramework?priorScope:null;
   // Only an explicit formal arrangement can resolve the first date on an
   // already identified material scope. Match the same native handover exactly.

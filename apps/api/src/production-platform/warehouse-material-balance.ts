@@ -30,6 +30,16 @@ function decimal(value: WarehouseMaterialQuantity | null, unit: string | null): 
   return { coefficient: BigInt(whole + fraction), scale: fraction.length };
 }
 
+/** Compare two positive quantities already expressed in the same actual unit. */
+export function comparePositiveMaterialQuantities(left:WarehouseMaterialQuantity,right:WarehouseMaterialQuantity){
+  if(left.unit!==right.unit)return null;
+  const a=decimal(left,left.unit),b=decimal(right,left.unit);
+  if(!a||!b||a.coefficient<=0n||b.coefficient<=0n)return null;
+  const scale=Math.max(a.scale,b.scale);
+  const lhs=a.coefficient*10n**BigInt(scale-a.scale),rhs=b.coefficient*10n**BigInt(scale-b.scale);
+  return lhs<rhs?-1:lhs>rhs?1:0;
+}
+
 function difference(left: Decimal | null, right: Decimal | null): string | null {
   if (!left || !right) return null;
   const scale = Math.max(left.scale, right.scale);
