@@ -2,7 +2,7 @@
   "version": 1,
   "base": "eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
   "risk": "full",
-  "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
+  "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
   "rules": [
     {
       "rule": "客户评语按原评语与图片发起、继续或查看来回版本；内部复版和客户真实独立复版真实发布最新表单，审核等待不创建半套任务",
@@ -54,6 +54,7 @@
         "apps/api/src/production-platform/development-revision-comment-basis.ts",
         "apps/api/src/production-platform/development-round-service.ts",
         "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
         "apps/web/src/development-technical-workspace.tsx",
         "packages/contracts/src/digital-development-technical.ts",
         "scripts/deploy/acceptance-migration-requirements.json",
@@ -70,7 +71,7 @@
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "tests/integration/development-technical-postgres.test.ts"
       ],
-      "expectation": "实际在已发布 B 上再次明确修改成 C，并重放原请求两次；同评语的原事件不变，两个继任身份有序无重。真实旧读只展示该版评语和原图，原报价的准确正式用量集无变化。",
+      "expectation": "实际在已发布 B 上打开原评语图片、保存 C 草稿并刷新恢复，然后从原版单直发并重放原请求。原意见原件权限不扩大，C 的同版打印准确显示原意见版本、日期及图片，两个继任身份有序无重，旧版和原报价的正式用量集不变。",
       "checks": [
         "native",
         "quote",
@@ -85,107 +86,107 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/exact-r6/native.sh",
+      "command": "bash /workspace/scratch/r3-evidence/review-fix/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "原真实 Chromium 和 PostgreSQL 客户评语、复版、审批及历史打印",
-      "startedAt": "2026-11-26T09:26:48.460935+00:00",
-      "endedAt": "2026-11-26T09:31:09.821536+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/native.log",
-      "logSha256": "6cdf83acd83b90701bce51a673eda822619fdb86544542bcb269f4eb7661fd12",
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "真实普通设计师 Chromium 原评语链接、刷新恢复直接发布及原版 A4 客户评语打印；原短交期 PG",
+      "startedAt": "2026-11-26T09:44:53.780576+00:00",
+      "endedAt": "2026-11-26T09:48:10.694622+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/native.log",
+      "logSha256": "86859cf2f823e1f388966a68307a6d95e8488210cb6164bd48a7a5273185e6eb",
       "passed": 66,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c3986917e7bc7ba65e5e682f37ef016a05b57160bbc990883e4ba8e4ef60e498"
+          "sha256": "c3abb6f839cdf736190d74a961b02340bba50e52c2eb3aaab32bdfb966eb90a1"
         }
       ]
     },
     {
       "id": "quote",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/exact-r6/quote.sh",
+      "command": "bash /workspace/scratch/r3-evidence/review-fix/quote.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "R6 合并后原报价技术成果、实际成本与跨来源负例的完整 PG 套件",
-      "startedAt": "2026-11-26T09:26:48.420520+00:00",
-      "endedAt": "2026-11-26T09:28:42.687310+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/quote.log",
-      "logSha256": "505841bc3bbbaa8307ed9d4470a45c993441895ef9c822a0b23d730adbc2b038",
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "原技术评语与 R6 真实报价交叉 PG",
+      "startedAt": "2026-11-26T09:48:10.965072+00:00",
+      "endedAt": "2026-11-26T09:48:53.274395+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/quote.log",
+      "logSha256": "155bef68de508a59b761cc789379aa6175883f29fffae72daebc6d67978bc529",
       "passed": 45,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "abccc188838fb5fdb57979a1e77dceb24858a3d2fcb07161e88b06d538520bef"
+          "sha256": "fae4a9dae5a6afa4ade57087680db678e329cb154b44d7e958c6ec0fde37e7e6"
         }
       ]
     },
     {
       "id": "mapped-other",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/exact-r6/mapped-other.sh",
+      "command": "bash /workspace/scratch/r3-evidence/review-fix/mapped-other.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "当前 R3 风险映射剩余七个完整实际 PostgreSQL 文件",
-      "startedAt": "2026-11-26T09:26:48.355233+00:00",
-      "endedAt": "2026-11-26T09:33:21.873197+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/mapped-other.log",
-      "logSha256": "faa0e40760fda16433264ff6abcd818e2dbc93641d93231c1641d66613da6d37",
-      "passed": 141,
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "当前 release 差异映射余下八套真实 PostgreSQL 含原附件预览",
+      "startedAt": "2026-11-26T09:48:53.472386+00:00",
+      "endedAt": "2026-11-26T09:53:33.766272+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/mapped-other.log",
+      "logSha256": "f06253983db55b702084274435673dc7111a1ca02405c63658e4cbb1db2b8117",
+      "passed": 147,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3f5d8a1cad52686f420ad69872d0a79c846b34383e3255305bcdc255d88bb972"
+          "sha256": "7097b7e6048aa3190b246f55628ce9dda952476504b543b2ad946f64a4f2620e"
         }
       ]
     },
     {
       "id": "non-db",
       "kind": "tests",
-      "command": "bash /workspace/scratch/r3-evidence/exact-r6/non-db.sh",
+      "command": "bash /workspace/scratch/r3-evidence/review-fix/non-db.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "实际复版契约、打印、原历史评语时钟和重建后的启动配置",
-      "startedAt": "2026-11-26T09:26:48.360492+00:00",
-      "endedAt": "2026-11-26T09:26:52.690873+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/non-db.log",
-      "logSha256": "e17d072eac5086efb3d91d6142a4906c815db5f1ec10fec7fddcfbcfc4363991",
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "原版单规则、原打印对与配置契约非数据库",
+      "startedAt": "2026-11-26T09:44:53.778047+00:00",
+      "endedAt": "2026-11-26T09:44:56.973891+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/non-db.log",
+      "logSha256": "12a1f594a04ffd1044ac3f272de4ff8c6b1d4a3296a453e1196649d05bfe55da",
       "passed": 43,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6fc1d246da78e790243650b57a6f589d0662b132290c29516b3228c0d781f3fa"
+          "sha256": "f57f808a45bbbc215c2ddf65a73e411b1509240b6959cfecde0b8dd595cb0831"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "bash /workspace/scratch/r3-evidence/exact-r6/static.sh eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
+      "command": "bash /workspace/scratch/r3-evidence/review-fix/static.sh eb91c63da99fcb8ac9ae1a11d8d0787e58248242",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "当前实际 R6 发布基点预检、类型、迁移及原时间来源",
-      "startedAt": "2026-11-26T09:26:00.774416+00:00",
-      "endedAt": "2026-11-26T09:26:57.479929+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/static.log",
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "实际依赖和权限范围类型、迁移、时间与凭证静态检查",
+      "startedAt": "2026-11-26T09:44:53.780881+00:00",
+      "endedAt": "2026-11-26T09:45:42.475724+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/static.log",
       "logSha256": "606fdc807bf92b4db9493a0f71b520b4f7bd409eaf73d37ac345ebb37af6ab60"
     },
     {
@@ -194,17 +195,17 @@
       "command": "node --test scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/impact-shadow-binding.test.mjs scripts/ci/impact-shadow.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/settings-browser-fonts.test.mjs scripts/ci/test-execution-contract.test.mjs scripts/ci/verify-actions-policy.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b0aeedf171a3dd29a42192c966f892200a63b916",
-      "sourceFingerprint": "0c72bdf9ef0aa6cf67a9e21ebfa3285cfe952a97f8516d775f8e1b97708ca63a",
-      "context": "原治理门禁、实际时间与原 release 机制协议测试",
-      "startedAt": "2026-11-26T09:26:00.770799+00:00",
-      "endedAt": "2026-11-26T09:26:08.512211+00:00",
-      "log": "/workspace/scratch/r3-evidence/exact-r6/protocol.log",
-      "logSha256": "df7ce08a32146a2176398116e12b285beb0cf6dd05569bd58462eed3b94bf1d7",
+      "testedHead": "043a263f3304046be73c53a23753c649d0adc313",
+      "sourceFingerprint": "95662e17d4a3976cc349ed637b4b0a4acf96369788fdfadc32129b343b88de38",
+      "context": "原治理门禁、实际时间与 release 机制协议测试",
+      "startedAt": "2026-11-26T09:44:57.351472+00:00",
+      "endedAt": "2026-11-26T09:45:03.107919+00:00",
+      "log": "/workspace/scratch/r3-evidence/review-fix/protocol.log",
+      "logSha256": "e77a570badadee5a9008f572ca580c56a86edf46cd88b5a7d315f00d6bfd6cdc",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "df7ce08a32146a2176398116e12b285beb0cf6dd05569bd58462eed3b94bf1d7"
+          "sha256": "e77a570badadee5a9008f572ca580c56a86edf46cd88b5a7d315f00d6bfd6cdc"
         }
       ],
       "passed": 285,
