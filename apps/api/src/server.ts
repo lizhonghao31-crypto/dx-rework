@@ -371,6 +371,7 @@ const app = buildApp({
   },
   rework: {
     authenticate: (token) => auth.authenticate(token),
+    originalCraftQuality: true,
     service: reworkService,
     v2DraftService: reworkV2DraftService,
     v2SubmissionService: reworkV2SubmissionService,
