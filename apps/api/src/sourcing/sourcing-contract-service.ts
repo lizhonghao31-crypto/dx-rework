@@ -4,6 +4,7 @@ import { SourcingTransferContractTodos } from "./sourcing-transfer-contract-todo
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
+import type { RootAuthority } from "../access/root-authority.js";
 import type { AcceptanceClockRuntime } from "../acceptance-clock/runtime.js";
 import { acceptanceClockLockKey } from "../acceptance-clock/repository.js";
 import { renderRecoveryContract } from "./sourcing-contract-recovery-render.js";
@@ -37,6 +38,9 @@ const ROOT_ROLE = "root_superuser";
 const MERCHANDISER_ROLE = "order_merchandiser";
 const READ_CAPABILITY = "sourcing:view";
 const CONTRACT_CAPABILITY = "sourcing:contract:record";
+const NUMBER_CORRECTION_AUDIT = "digital_production:numbers:correct";
+const DOCUMENT_ID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const originalSupplementNeedsReview = () => new ApplicationError("CONFLICT", "操作已登记，原合同版本待核，可从本单历史核对。", 409);
 const FIELD_NAMES = [
   "address","contractEntityName","partyBRepresentative",
   "payeeName","bankAccount","bankName",
@@ -110,6 +114,7 @@ export class SourcingContractService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     todos?: Pick<TodoProjectionService,"actionableForAllAssignedRole"|"cancelOpenByDedupePrefix">,
+    private readonly rootAuthority?: Pick<RootAuthority,"isRootUser">,
   ) { this.transferTodos = new SourcingTransferContractTodos(database); this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments,undefined,undefined,todos); }
 
   async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
@@ -170,10 +175,13 @@ export class SourcingContractService {
         if (options.stop?.()) break;
         const jobTimeout = AbortSignal.timeout(options.jobTimeoutMs ?? 240_000);
         const signal = options.signal ? AbortSignal.any([options.signal, jobTimeout]) : jobTimeout;
-        const result = await this.generateIfReady(identity.actor, candidate.case_id, candidate.document_id, {
+        const args = [identity.actor, candidate.case_id, candidate.document_id, {
           recoveryVersion: candidate.version, signal,
           ...(clock ? { clock } : {}), ...(options.report ? { report: options.report } : {}),
-        });
+        }] as const;
+        const result = identity.numberCorrection
+          ? await this.generateIfReady(...args, true)
+          : await this.generateIfReady(...args);
         if (result.item?.status === "ready") ready++;
       } catch (error) {
         if (options.signal?.aborted) break;
@@ -184,16 +192,56 @@ export class SourcingContractService {
     return { cursor, candidates: batch.rows.length, advanced, ready, waitingMs: Number(batch.rows[0]?.waiting_ms ?? 0) };
   }
 
-  private async recoveryIdentity(db: Pick<Pool, "query">, candidate: RecoveryCandidate): Promise<{ actor: TrustedActorContext; scenarioId: string | null } | null> {
+  private async numberPublisherScope(db: Pick<Pool, "query">, actorId: string, caseId: string, documentId: string) {
+    return (await db.query<{created_by:string;primary_merchandiser_id:string|null}>(`
+      SELECT orders.created_by,orders.primary_merchandiser_id FROM sourcing_contract_documents document
+      JOIN sourcing_style_revisions revision ON revision.sourcing_case_id=document.sourcing_case_id
+        AND revision.revision=document.identity_version AND revision.changed_by=document.prepared_by
+      JOIN operation_events event ON event.event_id=revision.operation_event_id AND event.authorization_capability=$4
+      JOIN digital_production_child_links link ON link.module='sourcing' AND link.child_id=document.sourcing_case_id
+      JOIN digital_production_orders orders USING(production_order_id)
+      WHERE document.sourcing_contract_document_id=$1 AND document.sourcing_case_id=$2 AND document.prepared_by=$3`,
+      [documentId,caseId,actorId,NUMBER_CORRECTION_AUDIT])).rows[0];
+  }
+
+  private numberRoleCanPublish(actor: TrustedActorContext, scope: Awaited<ReturnType<SourcingContractService["numberPublisherScope"]>>) {
+    return !!scope && (actor.actorRoles.includes(ROOT_ROLE) || actor.actorRoles.includes("owner_group")
+      || actor.actorRoles.includes("production_management")
+      || (actor.actorRoles.includes("sample_designer") && scope.created_by===actor.actorId)
+      || (actor.actorRoles.includes("order_merchandiser") && scope.primary_merchandiser_id===actor.actorId));
+  }
+
+  private async numberPublicationActor(db: Pick<Pool, "query">, actor: TrustedActorContext, caseId: string, documentId: string, trustedRoot: boolean): Promise<TrustedActorContext | null> {
+    const scope=await this.numberPublisherScope(db,actor.actorId,caseId,documentId);
+    if (!scope) return null;
+    if (actor.actorRoles.includes(ROOT_ROLE) && (trustedRoot || await this.rootAuthority?.isRootUser(actor.actorId,db))) return actor;
+    // Match the actual capabilities used by guard_sourcing_style_revision for
+    // the number-correction audit label. This grants no contract-read access.
+    const role = (await db.query<{ role: string; capability: string }>(`
+      SELECT eligible.role,eligible.capability FROM (VALUES
+        (1,'sample_designer','pattern_room:orders:create'),(2,'order_merchandiser','sourcing:inquiry:create'),
+        (3,'production_management','sourcing:decision:record'),(4,'owner_group','sourcing:owner:approve')
+      ) eligible(priority,role,capability)
+      WHERE eligible.role=ANY($2::text[]) AND digital_sourcing_actor_can_write($1,ARRAY[eligible.role],eligible.capability)
+      ORDER BY eligible.priority LIMIT 1`,[actor.actorId,actor.actorRoles.filter(role=>this.numberRoleCanPublish({...actor,actorRoles:[role]},scope))])).rows[0];
+    return role ? {...actor,actorRoles:[role.role],authorizationCapability:role.capability} : null;
+  }
+
+  async generateChangedNumberDocument(actor: TrustedActorContext, caseId: string, documentId: string): Promise<void> {
+    const publisher = await this.numberPublicationActor(this.database,actor,caseId,documentId,true);
+    if (publisher) await this.generateIfReady(publisher,caseId,documentId,undefined,true);
+  }
+
+  private async recoveryIdentity(db: Pick<Pool, "query">, candidate: RecoveryCandidate): Promise<{ actor: TrustedActorContext; scenarioId: string | null; numberCorrection?: true } | null> {
     const row = (await db.query<{
-      actor_id: string; capability: string; generation: string | null; order_count: number; scenario_id: string | null;
+      actor_id: string; capability: string; actor_roles: string[] | null; generation: string | null; order_count: number; scenario_id: string | null;
     }>(`SELECT COALESCE(event.actor_id,document.prepared_by) AS actor_id,
          COALESCE(event.authorization_capability,'sourcing:contract:record') AS capability,
-         source.workflow_generation AS generation, links.order_count, links.scenario_id
+         event.actor_roles, source.workflow_generation AS generation, links.order_count, links.scenario_id
        FROM sourcing_contract_documents document JOIN sourcing_cases source USING(sourcing_case_id)
        JOIN sourcing_approval_snapshots approved ON approved.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id
        LEFT JOIN LATERAL (
-         SELECT operation.actor_id,operation.authorization_capability FROM operation_events operation
+         SELECT operation.actor_id,operation.authorization_capability,operation.actor_roles FROM operation_events operation
          WHERE operation.event_id IN (
            SELECT operation_event_id FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1
            UNION ALL SELECT operation_event_id FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=$1
@@ -213,6 +261,11 @@ export class SourcingContractService {
        WHERE document.sourcing_contract_document_id=$1 AND source.deleted_at IS NULL
          AND user_account.enabled AND NOT user_account.manual_access_disabled`, [candidate.document_id])).rows[0];
     if (!row || row.order_count > 1 || (row.generation === "digital_production_v1" && row.order_count !== 1)) return null;
+    const requestId = `sourcing-contract-resume:${candidate.document_id}`;
+    if (row.capability === NUMBER_CORRECTION_AUDIT) {
+      const actor = await this.numberPublicationActor(db,{actorId:row.actor_id,actorRoles:row.actor_roles??[],authorizationCapability:row.capability,requestId},candidate.case_id,candidate.document_id,false);
+      return actor ? {actor,scenarioId:row.scenario_id,numberCorrection:true} : null;
+    }
     const roles = (await db.query<{ roles: string[] }>(
       "SELECT access_authorized_actor_roles($1,$2) AS roles, access_authorized_actor_roles($1,$3) AS reader_roles",
       [row.actor_id, row.capability, READ_CAPABILITY],
@@ -220,16 +273,19 @@ export class SourcingContractService {
     if (!roles?.length) return null;
     return {
       actor: { actorId: row.actor_id, actorRoles: roles, authorizationCapability: row.capability,
-        authorizationCapabilities: [READ_CAPABILITY, row.capability], requestId: `sourcing-contract-resume:${candidate.document_id}` },
+        authorizationCapabilities: [READ_CAPABILITY, row.capability], requestId },
       scenarioId: row.scenario_id,
     };
   }
 
+  async prepareForApproval(client: Pick<PoolClient, "query">, approvalSnapshotId: string, actor: TrustedActorContext): Promise<string>;
+  async prepareForApproval(client: Pick<PoolClient, "query">, approvalSnapshotId: string, actor: TrustedActorContext, newDocumentOnly: true): Promise<string | null>;
   async prepareForApproval(
     client: Pick<PoolClient, "query">,
     approvalSnapshotId: string,
     actor: TrustedActorContext,
-  ): Promise<string> {
+    newDocumentOnly = false,
+  ): Promise<string | null> {
     // Serialize with style corrections, approvals and dispatch before reading the revision.
     await client.query(`SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=(
       SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1) FOR UPDATE`,[approvalSnapshotId]);
@@ -280,7 +336,7 @@ export class SourcingContractService {
       `INSERT INTO sourcing_contract_documents(
          sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,
          sourcing_decision_id,contract_version,contract_number,template_version,
-         approval_snapshot,missing_fields,status,prepared_by,identity_version,revision_of
+         approval_snapshot,missing_fields,status,prepared_by,identity_version,revision_of,information_revision
        )
        SELECT $1,snapshot.sourcing_case_id,snapshot.sourcing_approval_snapshot_id,
               snapshot.sourcing_decision_id,GREATEST(snapshot.decision_version,(SELECT COALESCE(max(contract_version),0)+1 FROM sourcing_contract_documents WHERE sourcing_case_id=snapshot.sourcing_case_id)),
@@ -323,7 +379,7 @@ export class SourcingContractService {
               missing.fields,
               CASE WHEN cardinality(missing.fields)>0
                 THEN 'pending_supplement' ELSE 'generation_pending' END,
-              $2,$4,previous.sourcing_contract_document_id
+              $2,$4,previous.sourcing_contract_document_id,0
        FROM sourcing_approval_snapshots snapshot
        LEFT JOIN LATERAL (SELECT * FROM sourcing_contract_documents
          WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
@@ -365,14 +421,13 @@ export class SourcingContractService {
     if (inserted.rows[0]) await this.inheritFactoryContent(client,documentId);
     const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
       `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
-       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3
-       ORDER BY contract_version DESC LIMIT 1`,
+       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3 AND information_revision=0`,
       [approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const id = inserted.rows[0]?.sourcing_contract_document_id
       ?? existing?.rows[0]?.sourcing_contract_document_id;
     if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在或关联缺失；请订单跟单在本单合同页核对当前批准方案，由Root核查合同关联，不要重复点击批准", 409);
-    return id;
+    return newDocumentOnly && !inserted.rows[0] ? null : id;
   }
 
   private async inheritFactoryContent(client: Pick<PoolClient,"query">,documentId:string):Promise<void> {
@@ -392,6 +447,10 @@ export class SourcingContractService {
     db: Pick<Pool, "query"> = this.database,
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
+    return this.readContract(actor,sourcingCaseId,sourcingContractDocumentId,db);
+  }
+
+  private async readContract(actor: TrustedActorContext,sourcingCaseId: string,sourcingContractDocumentId: string | undefined,db: Pick<Pool,"query">): Promise<SourcingContractStateResponse> {
     const result = await db.query<ContractRow>(
       `SELECT document.*,source_case.created_by,
               EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned,
@@ -417,14 +476,23 @@ export class SourcingContractService {
     const entries = Object.entries(input) as Array<[SourcingContractMissingField,string]>;
     const scope = "sourcing.contract.supplement";
     const client = await this.database.connect();
+    let generationDocumentId: string | undefined;
     try {
       await client.query("BEGIN");
       await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
-      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
-      await this.idempotency.execute(client, {
+      const source = (await client.query<{created_by: string}>(
+        "SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId],
+      )).rows[0];
+      if (!source) throw new ApplicationError("NOT_FOUND", "合同准备记录不存在", 404);
+      if (!actor.actorRoles.includes(ROOT_ROLE) && (
+        await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId
+        || !await memberCanWriteModule(client,actor.actorId,"sourcing")
+      )) throw new ApplicationError("FORBIDDEN", "仅订单跟单或Root可补充合同缺项", 403);
+      const outcome = await this.idempotency.execute(client, {
         scope,actorKey: actor.actorId,key: idempotencyKey,
         requestHash: requestHash(scope,{ sourcingCaseId,input }),
         expiresAt: new Date(Date.now()+24*60*60*1000),
+        retainReceipt: true,
       }, async () => {
         const current = await client.query<ContractRow>(
           `SELECT document.*,source_case.created_by
@@ -436,9 +504,6 @@ export class SourcingContractService {
         );
         const row = current.rows[0];
         if (!row) throw new ApplicationError("NOT_FOUND", "合同准备记录不存在", 404);
-        if (!actor.actorRoles.includes(ROOT_ROLE) && await effectiveSourcingMerchandiser(client,sourcingCaseId,row.created_by) !== actor.actorId) {
-          throw new ApplicationError("FORBIDDEN", "仅订单跟单或Root可补充合同缺项", 403);
-        }
         if (row.status !== "pending_supplement") {
           throw new ApplicationError("INVALID_STATE_TRANSITION", "合同已冻结，不能直接修改；请订单跟单在本单合同页核对当前版本，资料不符时提供合同链接给Root核查，不能覆盖原批准内容", 409);
         }
@@ -471,18 +536,28 @@ export class SourcingContractService {
            WHERE sourcing_contract_document_id=$1`,
           [row.sourcing_contract_document_id,remaining],
         );
-        if (remaining.length===0) await this.inheritFactoryContent(client,row.sourcing_contract_document_id);
+        if (remaining.length===0) {
+          await this.inheritFactoryContent(client,row.sourcing_contract_document_id);
+          generationDocumentId = row.sourcing_contract_document_id;
+        }
         return { statusCode: 200,response: { documentId: row.sourcing_contract_document_id } };
       });
+      const documentId = outcome.response?.documentId;
+      if (typeof documentId !== "string" || !DOCUMENT_ID.test(documentId)) throw originalSupplementNeedsReview();
+      if (outcome.reused || !generationDocumentId) {
+        const original = await this.getCurrent(actor,sourcingCaseId,documentId,client);
+        if (!original.item) throw originalSupplementNeedsReview();
+        await client.query("COMMIT");
+        return original;
+      }
       await client.query("COMMIT");
-      await this.generateIfReady(actor, sourcingCaseId);
-      return this.getCurrent(actor, sourcingCaseId);
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {
       client.release();
     }
+    return this.generateIfReady(actor,sourcingCaseId,generationDocumentId);
   }
 
   async generateIfReady(
@@ -490,7 +565,9 @@ export class SourcingContractService {
     sourcingCaseId: string,
     sourcingContractDocumentId?: string,
     recovery?: GenerationOptions,
+    numberCorrection?: true,
   ): Promise<SourcingContractStateResponse> {
+    if (numberCorrection && !sourcingContractDocumentId) throw new ApplicationError("INVALID_STATE_TRANSITION","数字补号必须指定本次合同文档",409);
     const attemptId = randomUUID();
     const signal = recovery?.signal;
     const db = contractRecoveryDatabase(this.database, signal);
@@ -515,9 +592,11 @@ export class SourcingContractService {
       [sourcingCaseId, sourcingContractDocumentId ?? null, recovery?.recoveryVersion ?? null, attemptId],
     );
     const row = claimed.rows[0];
-    if (!row) return this.getCurrent(actor, sourcingCaseId, sourcingContractDocumentId, db);
+    const readPrepared = (documentId?: string) => numberCorrection
+      ? this.readContract(actor,sourcingCaseId,documentId,db) : this.getCurrent(actor,sourcingCaseId,documentId,db);
+    if (!row) return readPrepared(sourcingContractDocumentId);
     const documentId = row.sourcing_contract_document_id;
-    const read = () => this.getCurrent(actor, sourcingCaseId, documentId, db);
+    const read = () => readPrepared(documentId);
     const refs = { caseId: sourcingCaseId, documentId, version: Number(row.contract_version), attemptId };
     recovery?.report?.(refs, "contract generation claimed");
 
@@ -590,6 +669,12 @@ export class SourcingContractService {
         }
       }
       await lockDigitalSourcingHandover(client, sourcingCaseId, actor);
+      if (numberCorrection) {
+        const validRoot = !actor.actorRoles.includes(ROOT_ROLE) || !this.rootAuthority || await this.rootAuthority.isRootUser(actor.actorId,client,true);
+        if (!validRoot || !this.numberRoleCanPublish(actor,await this.numberPublisherScope(client,actor.actorId,sourcingCaseId,documentId))) {
+          throw new ApplicationError("FORBIDDEN", "数字补号的原办理人或合同关联已变化",403);
+        }
+      }
       const liveCase = await client.query(
         "SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
       );

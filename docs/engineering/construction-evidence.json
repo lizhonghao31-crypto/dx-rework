@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
+  "base": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
   "risk": "full",
-  "sourceFingerprint": "5b51fdb0f58a1e8126e931d532c25f969789f6c162060f641da20ccd16ccc6a1",
+  "sourceFingerprint": "10322db119dbc01fc4d07e43813229fdf93f9e3a75e1589fa8590e52a51045ca",
   "rules": [
     {
       "rule": "原大货产前准备组只有授权报价目的地时，桌面在原位置直达；其余组、手机入口及 AuthGate 沿用原规则。",
@@ -67,12 +67,13 @@
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
-        "scripts",
         "vitest.config.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
         "tests/unit/finance-navigation-hierarchy.test.ts",
         "tests/unit/platform-modules.test.ts"
       ],
-      "inputFingerprint": "5fca9574eea314e19270afd6022746ad35a67bb53bd06b67bb3485a176eb67f0"
+      "inputFingerprint": "eb0cf9d360cb6fb0ef787c38a6b1ed2a99ad3e3a0a36071a536e4fdfa01047dc"
     },
     {
       "id": "g6-compiled-web",
