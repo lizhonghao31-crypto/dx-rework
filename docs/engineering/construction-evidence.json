@@ -2,7 +2,7 @@
   "version": 1,
   "base": "03be9f081da7c5f7ff9df8e4ecca04ec80c7441e",
   "risk": "full",
-  "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
+  "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
   "rules": [
     {
       "rule": "资料未齐的面料是实际预估风险，不成为只因未知而禁止的普通开发发布；原明确短交期仍按原审批办理",
@@ -15,7 +15,8 @@
         "apps/api/src/production-platform/order-time-request-service.ts",
         "packages/contracts/src/digital-development.ts",
         "packages/contracts/src/order-time-requests.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/unit/workbench-material-amount.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-operation-state.ts",
@@ -32,7 +33,8 @@
         "native",
         "order-time",
         "static",
-        "protocol"
+        "protocol",
+        "non-db"
       ]
     },
     {
@@ -51,14 +53,16 @@
         "apps/web/src/order-time-request-page.tsx"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts#M05 lets paper and cutting proceed"
+        "tests/integration/development-technical-postgres.test.ts#M05 lets paper and cutting proceed",
+        "tests/unit/workbench-material-amount.test.ts"
       ],
       "expectation": "实际窗口只把必要辅料预计分配给车板；纸样裁板先行，实际文员验证前车板依然不能冒充可办。",
       "checks": [
         "native",
         "order-time",
         "static",
-        "protocol"
+        "protocol",
+        "non-db"
       ]
     }
   ],
@@ -66,85 +70,108 @@
     {
       "id": "native",
       "kind": "tests",
-      "command": "/workspace/scratch/r2-evidence/revised/native.sh",
+      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/native.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
-      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
-      "context": "Real signed browser and isolated PostgreSQL 16 including ordinary publication and both sufficiently timed and late combined formal approval guards.",
-      "startedAt": "2026-11-26T07:05:35.448643+00:00",
-      "endedAt": "2026-11-26T07:06:12.289937+00:00",
-      "log": "/workspace/scratch/r2-evidence/revised/native.log",
-      "logSha256": "0f5473f5048d875433cfd50a5c2d6361254142c4f179d3c84db17728fb4b64a0",
+      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
+      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+      "context": "Native API, authenticated Chromium and real local PostgreSQL isolated original business routes including A02/A03 and exact formal-boundary cases.",
+      "startedAt": "2026-11-26T07:20:53.269169+00:00",
+      "endedAt": "2026-11-26T07:21:50.657600+00:00",
+      "log": "/workspace/scratch/r2-evidence/ci-corrected/native.log",
+      "logSha256": "79e30c087df6d369e57a4f383c9116cbe13cbfcdffdc7082b1e82e6917740cf5",
       "passed": 7,
       "failed": 0,
       "skipped": 95,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "288e717891971f11a5b287aba372e30f821a5b97c70ea5e1654ff4abbc476a13"
+          "sha256": "63d3ff696d9161408b431c8d92c6c1667b01616366d1b3412f4051de78a03e94"
         }
       ]
     },
     {
       "id": "order-time",
       "kind": "tests",
-      "command": "/workspace/scratch/r2-evidence/revised/order-time.sh",
+      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/order-time.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
-      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
-      "context": "Isolated PostgreSQL 16 on the exact revised R2 source. Native approval and production order checks.",
-      "startedAt": "2026-11-26T07:05:35.421882+00:00",
-      "endedAt": "2026-11-26T07:06:19.130273+00:00",
-      "log": "/workspace/scratch/r2-evidence/revised/order-time.log",
-      "logSha256": "f3b567c160dc6bf50f258b567e334c0e3b3611386bf3ad96042066c795e460ab",
+      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
+      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+      "context": "Real local PostgreSQL original check, submit, approval and arrangement integration regression.",
+      "startedAt": "2026-11-26T07:20:53.227702+00:00",
+      "endedAt": "2026-11-26T07:22:04.471957+00:00",
+      "log": "/workspace/scratch/r2-evidence/ci-corrected/order-time.log",
+      "logSha256": "8f0b8a0843cdc6404a908b6d33d5ffd387000be4876bdca68ec15394b3080c9c",
       "passed": 40,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1facbaedaddb5de8cad8e332f10f67898c367df71b33e7932e62447b5f0e73b0"
+          "sha256": "342a1e465395d4285e113c4a1ce2c9be51bd46c56bf3e33ae35197b9ace5e078"
         }
       ]
     },
     {
       "id": "static",
       "kind": "command",
-      "command": "/workspace/scratch/r2-evidence/revised/static.sh",
+      "command": "bash /workspace/scratch/r2-evidence/ci-corrected/static.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
-      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
-      "context": "Locked workspace typecheck and touched-file ESLint with secret scan.",
-      "startedAt": "2026-11-26T07:05:35.422818+00:00",
-      "endedAt": "2026-11-26T07:06:24.062275+00:00",
-      "log": "/workspace/scratch/r2-evidence/revised/static.log",
+      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
+      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+      "context": "Exact TypeScript, changed lint, Git diff and repository secret controls.",
+      "startedAt": "2026-11-26T07:20:53.217756+00:00",
+      "endedAt": "2026-11-26T07:21:51.740883+00:00",
+      "log": "/workspace/scratch/r2-evidence/ci-corrected/static.log",
       "logSha256": "ddc102e1d94073db6ef6bf56578a697dbcd137c82ecba2edaaed0da873ff59bd"
     },
     {
       "id": "protocol",
       "kind": "tests",
-      "command": "bash -lc 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
+      "command": "bash -c 'source /workspace/.dx-cloud/activate.sh && node --test scripts/ci/*.test.mjs'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ce59493b78007dbd91865c724a9f4ed6faa57c50",
-      "sourceFingerprint": "82f32865e5cc353faebbd21d7d94735a1732315e11d62071a44764b00f13fd14",
-      "context": "Actual preflight Node TAP suite at the revised R2 source on the approved unchanged inventory.",
-      "startedAt": "2026-11-26T07:05:35.422775+00:00",
-      "endedAt": "2026-11-26T07:05:42.334967+00:00",
-      "log": "/workspace/scratch/r2-evidence/revised/protocol.log",
-      "logSha256": "4671a4a311ebaf4efe34b03c81ba76203ec92f5694b6b0d522d50db547e074a2",
+      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
+      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+      "context": "Original CI protocol guard suite with exact inventory and gate checks.",
+      "startedAt": "2026-11-26T07:20:53.219189+00:00",
+      "endedAt": "2026-11-26T07:21:02.657292+00:00",
+      "log": "/workspace/scratch/r2-evidence/ci-corrected/protocol.log",
+      "logSha256": "1f471e4dff76f5c6c0b66549ade5974512aba023bdb6cf232f0a838616fcc98d",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "4671a4a311ebaf4efe34b03c81ba76203ec92f5694b6b0d522d50db547e074a2"
+          "sha256": "1f471e4dff76f5c6c0b66549ade5974512aba023bdb6cf232f0a838616fcc98d"
         }
       ],
       "passed": 285,
       "failed": 0,
       "skipped": 0
+    },
+    {
+      "id": "non-db",
+      "kind": "tests",
+      "command": "bash -c 'source /workspace/.dx-cloud/activate.sh && DATABASE_URL= TEST_DATABASE_URL= ACCEPTANCE_CLOCK_TEST_DATABASE_URL= node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/scratch/r2-evidence/ci-corrected/non-db.json'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4a3255b8b3e53e62ca1deebd2016073941fe0ce0",
+      "sourceFingerprint": "ee01c2595cdbe6f7a816f9330e10bd3d0c9619b86a92e96c2042bb5da93e8124",
+      "context": "Original Full non-DB lane with databases explicitly empty, full unchanged selector plus exact required-accessory controls.",
+      "startedAt": "2026-11-26T07:20:53.221236+00:00",
+      "endedAt": "2026-11-26T07:26:44.042148+00:00",
+      "log": "/workspace/scratch/r2-evidence/ci-corrected/non-db.log",
+      "logSha256": "9a645bdbe8a4b13cdbf386f7ca4242c6a931d63c7885029c6627a6c0e99bf5f5",
+      "passed": 4664,
+      "failed": 0,
+      "skipped": 15,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "80164f73aee733ae61523360506a3c550fbe301441b3a3467477159f4eb7cdde"
+        }
+      ]
     }
   ]
 }
