@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "b35937512cafcffedb9464bd9fd00e3aeec78d13",
+  "base": "4730d98ee85def1b16e2ca48c72b5407f4dc0750",
   "risk": "full",
-  "sourceFingerprint": "fdbe6ccfb7ae0e30c4dc8122187c2f92c7d1314a7bd06738a7f2ec26c2b636b4",
+  "sourceFingerprint": "6301037b8a946f229495f4a25eb9715ae736722d9bfd23f0aad8f32ce2cb2475",
   "rules": [
     {
       "rule": "G7 开发岗位看板只有同一授权筛选确知全空时显示一条整板文案。",
@@ -30,7 +30,7 @@
       "checks": [
         "g7-unit",
         "g7-browser",
-        "g7-aligned-native-browser",
+        "g7-g2-native-browser",
         "g7-web-typecheck",
         "g7-lint"
       ]
@@ -63,7 +63,7 @@
       "checks": [
         "g7-unit",
         "g7-browser",
-        "g7-aligned-native-browser",
+        "g7-g2-native-browser",
         "g7-lint"
       ]
     }
@@ -80,7 +80,7 @@
       "endedAt": "2026-11-26T16:39:05.493518+00:00",
       "log": "/workspace/scratch/dx-governance-evidence/g7/g7-unit.log",
       "logSha256": "b7052f2fef3725347abda4848f0aad8c688550714a77a108acf5b09cad20b0cb",
-      "context": "Node 22.22.2, Vitest 4.1.10 nonDB worker=1 with no database URL. Original R2 suite, 12 G7 and 7 earlier cases. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 alignment.",
+      "context": "Node 22.22.2, Vitest 4.1.10 nonDB worker=1 with no database URL. Original R2 suite, 12 G7 and 7 earlier cases. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments. The two added G2 integration suites contain TEST_DATABASE_URL and remain excluded under the original nonDB runner; the selected test entry and its dependencies are unchanged.",
       "kind": "tests",
       "passed": 19,
       "failed": 0,
@@ -115,7 +115,7 @@
       "endedAt": "2026-11-26T16:39:13.098587+00:00",
       "log": "/workspace/scratch/dx-governance-evidence/g7/g7-browser.log",
       "logSha256": "97f0c66e80af723f1bad62cc9da5bfa8ba21751e0e62064d132216bea32ec41f",
-      "context": "Node 22.22.2, Chromium 151.0.7922.173, same Vite fixture built with exact release and candidate workspace. 12 paired checks, identical GET sequences, zero writes. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 alignment.",
+      "context": "Node 22.22.2, Chromium 151.0.7922.173, same Vite fixture built with exact release and candidate workspace. 12 paired checks, identical GET sequences, zero writes. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments.",
       "kind": "command",
       "inputPaths": [
         "apps/web",
@@ -129,16 +129,16 @@
       "inputFingerprint": "05e2dccfd1446271fe14e464e55e94893d2251096c744617c68da96b62ea9ea0"
     },
     {
-      "id": "g7-aligned-native-browser",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/workspace-page-native-browser-postgres.test.ts -t 'shows15 current native|keeps available rows' --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/aligned-native-browser.json",
+      "id": "g7-g2-native-browser",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/workspace-page-native-browser-postgres.test.ts -t 'shows15 current native|keeps available rows' --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-governance-evidence/g7/g2-native-browser.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "2e2b5c9faef367206c6442414253f8010afd4732",
-      "sourceFingerprint": "fdbe6ccfb7ae0e30c4dc8122187c2f92c7d1314a7bd06738a7f2ec26c2b636b4",
-      "startedAt": "2026-11-26T16:46:05.002956+00:00",
-      "endedAt": "2026-11-26T16:46:32.857354+00:00",
-      "log": "/workspace/scratch/dx-governance-evidence/g7/g7-aligned-native-browser.log",
-      "logSha256": "d7dff7f5565abf553db5a40959e89ed88431ae9ce179c27f146b59effbc31a4b",
+      "testedHead": "12fd7a61f816654ce5464bbf6229cd6b65b77c8b",
+      "sourceFingerprint": "6301037b8a946f229495f4a25eb9715ae736722d9bfd23f0aad8f32ce2cb2475",
+      "startedAt": "2026-11-26T17:31:50.250565+00:00",
+      "endedAt": "2026-11-26T17:32:19.863960+00:00",
+      "log": "/workspace/scratch/dx-governance-evidence/g7/g7-g2-native-browser.log",
+      "logSha256": "063e9b9949aebcb1aeadb56765907d897fa8e42d3bec5525fc19a2a99f38aa18",
       "kind": "tests",
       "passed": 2,
       "failed": 0,
@@ -146,10 +146,10 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bfdafc882678d3ce61b8ae6e68305122dac8a12032d612c8d39c82a4f08055f1"
+          "sha256": "01e75a7792c3a1f585e17996a020a4fbf8bff9d5b3fdf4e2dea8247cf1ef8378"
         }
       ],
-      "context": "Re-executed against the G4 release alignment. Node 22.22.2, Vitest business-chain workers=2 cap, Chromium 151, PostgreSQL 16.14 marked loopback non-privileged role. Signed original app, two board-consuming cases selected, one designer-only case excluded."
+      "context": "Re-executed after G2 updated the original App fixture sourcing/identity/repository dependencies. Node 22.22.2, Vitest business-chain workers=2 cap, Chromium 151, PostgreSQL 16.14 marked loopback non-privileged role. Two board-consuming cases selected, one designer-only case excluded."
     },
     {
       "id": "g7-lint",
@@ -162,7 +162,7 @@
       "endedAt": "2026-11-26T16:39:00.115501+00:00",
       "log": "/workspace/scratch/dx-governance-evidence/g7/g7-lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node 22.22.2, repository ESLint, four affected source/unit/browser files only. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 alignment.",
+      "context": "Node 22.22.2, repository ESLint, four affected source/unit/browser files only. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments.",
       "kind": "command",
       "inputPaths": [
         "eslint.config.js",
@@ -186,7 +186,7 @@
       "endedAt": "2026-11-26T16:39:24.642148+00:00",
       "log": "/workspace/scratch/dx-governance-evidence/g7/g7-web-typecheck.log",
       "logSha256": "066040c403a19ee44e1e4219d42897b2f745315345f6cbd663f50348792122ef",
-      "context": "Node 22.22.2, npm 10.9.9, existing web workspace TypeScript configuration with compiled workspace contracts. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 alignment.",
+      "context": "Node 22.22.2, npm 10.9.9, existing web workspace TypeScript configuration with compiled workspace contracts. Exact tested Head is an ancestor and the tracked input set is byte-identical after the G4 and G2 alignments.",
       "kind": "command",
       "inputPaths": [
         "apps/web",
