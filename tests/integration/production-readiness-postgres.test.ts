@@ -2044,6 +2044,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(found.productionRequired).toBeNull();
    const page=await receipts.warehouseReceipts(warehouse,{search:'TEST H1 原 PO 主布',status:'open',page:1});
    expect(page.items).toMatchObject([{lineId:a!.lineId,materialId:perPO,received:{quantity:'20',unit:'米'},balance:{procurementRemaining:'40'}}]);
+   const poLabels=(await h.db.query<{po_number:string}>('SELECT coalesce(po_number,formal_style_no) AS po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[orderId])).rows;
+   const byPo=(position:number)=>receipts.warehouseReceipts(warehouse,{search:poLabels[position]!.po_number,status:'open',page:1});
+   const [poA,poB]=await Promise.all([byPo(0),byPo(1)]);
+   expect(poA.items.map(row=>row.materialId).sort()).toEqual([perPO,shared].sort());
+   expect(poB.items.map(row=>row.materialId)).toEqual([shared]);
+   expect(poA.items.find(row=>row.materialId===perPO)).toMatchObject({received:{quantity:'20',unit:'米'},balance:{procurementRemaining:'40'}});
+   expect(poB.items[0]).toMatchObject({received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
    expect((await work()).find(row=>row.materialId===shared)).toMatchObject({lineId:null,received:{quantity:'10',unit:'米'},balance:{procurementRemaining:'50'}});
    const oldOverlap=await old(1,[{...purchase,quantity:22}]);
    expect((await work()).find(row=>row.materialId===perPO)).toMatchObject({received:null,balance:{procurementRemaining:null},
