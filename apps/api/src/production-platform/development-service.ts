@@ -15,12 +15,12 @@ import {readDevelopmentOrderRush} from './development-order-rush.js';
 import {readDevelopmentMaterialSuppliers,validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
 import {materialReadiness} from "./development-material-readiness.js";
 import { beijingCalendarDate } from "@dx-rework/contracts/digital-production";
-import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
+import {developmentDocumentRow,developmentRoundsAvailable,readDevelopmentWorkbenchBasics} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { SaveDevelopmentDesignerCorrectionSchema,type SaveDevelopmentDesignerCorrection,DevelopmentWorkbenchBasicsSchema,SaveDevelopmentWorkbenchBasicsSchema,type DevelopmentWorkbenchBasics,type SaveDevelopmentWorkbenchBasics,DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentCreationBasicsIssues,developmentPreparationQuantityIssues,projectDevelopmentSewingRows,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
+import { SaveDevelopmentDesignerCorrectionSchema,type SaveDevelopmentDesignerCorrection,SaveDevelopmentWorkbenchBasicsSchema,type SaveDevelopmentWorkbenchBasics,DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentCreationBasicsIssues,developmentPreparationQuantityIssues,projectDevelopmentSewingRows,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -137,14 +137,6 @@ export class DigitalDevelopmentService {
     if(source.draft_reserved)return observedBusinessTime(this.now).now;
     return (await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at;
   }
-  private async workbenchBasics(db:Database,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentWorkbenchBasics|undefined>{
-    const row=(await db.query<{value:unknown}>(`SELECT after_state->'basics' AS value FROM audit_events
-      WHERE entity_type='digital_development' AND entity_id=$1 AND action='development_workbench_basics_saved'
-        AND after_state->>'roundNumber'=$2 AND after_state->>'documentVersion'=$3
-      ORDER BY ((after_state->'basics')->>'revision')::integer DESC LIMIT 1`,
-    [sourceId,String(roundNumber),String(documentVersion)])).rows[0];
-    return row?DevelopmentWorkbenchBasicsSchema.parse(row.value):undefined;
-  }
   async saveWorkbenchBasics(actor:TrustedActorContext,sourceId:string,raw:SaveDevelopmentWorkbenchBasics,key:string){
     const input=SaveDevelopmentWorkbenchBasicsSchema.parse(raw);
     return this.command(actor,sourceId,'workbench_basics',key,input,async db=>{
@@ -154,7 +146,7 @@ export class DigitalDevelopmentService {
       if(!sheet.document?.workbenchSheet||!(sheet.status==='published'||sheet.preorderPublication)||
          sheet.version!==input.documentVersion||(sheet.roundNumber??1)!==input.roundNumber)
         conflict('本单有效版单已更新，请核对后再编辑基础信息');
-      const prior=await this.workbenchBasics(db,sourceId,input.roundNumber,input.documentVersion);
+      const prior=await readDevelopmentWorkbenchBasics(db,sourceId,input.roundNumber,input.documentVersion);
       if((prior?.revision??0)!==input.expectedRevision)conflict('基础信息已更新，请核对后再保存');
       const basics={brand:input.brand,referenceNote:input.referenceNote,revision:input.expectedRevision+1};
       await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
@@ -184,7 +176,7 @@ export class DigitalDevelopmentService {
         conflict('本单已正式确认，采购数量请从原投料更正入口办理');
       const original=basis.document as DevelopmentDocument,document=structuredClone(original);
       const changes:Array<{field:string;materialId?:string;before:string;after:string}>=[];
-      const notes=await this.workbenchBasics(db,sourceId,input.roundNumber,input.expectedDocumentVersion);
+      const notes=await readDevelopmentWorkbenchBasics(db,sourceId,input.roundNumber,input.expectedDocumentVersion);
       const fields=original.workbenchSheet??{version:1 as const,styleName:'',brand:'',referenceNote:'',gender:null,boardType:null,processingSelected:false,sewingRows:[]};
       for(const field of ['styleName','brand','referenceNote'] as const){
         const from=(field==='brand'||field==='referenceNote')?notes?.[field]??fields[field]:fields[field],value=input[field];
@@ -248,7 +240,7 @@ export class DigitalDevelopmentService {
       const orderRush=(result.status==='published'||result.preorderPublication)
         &&(await readDevelopmentOrderRush(db,[{sourceId,orderId:null}])).has(`source:${sourceId}`);
       const basics=enableWorkbenchBasics&&result.document?.workbenchSheet&&result.version>0
-        ?await this.workbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
+        ?await readDevelopmentWorkbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
       const basicsEditable=enableWorkbenchBasics&&result.canEdit&&result.document?.workbenchSheet&&
         (result.status==='published'||result.preorderPublication)&&(isRootActor(actor)||actor.actorRoles.includes('sample_designer')&&
         (await db.query("SELECT 1 FROM digital_production_sources WHERE source_id=$1 AND created_by=$2",[sourceId,actor.actorId])).rowCount&&

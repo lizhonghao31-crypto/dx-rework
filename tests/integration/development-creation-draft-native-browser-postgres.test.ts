@@ -1,3 +1,4 @@
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import {DEVELOPMENT_MEASUREMENTS} from '@dx-rework/contracts/digital-development';
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
@@ -696,6 +697,67 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(current).toMatchObject({roundNumber:1,version:published.version+1,document:{workbenchSheet:{referenceNote:'TEST 原参考说明'},
      materials:[{materialId,quantity:'500',quantityUnit:'米'}]}});
    }catch(error){await writeFile(join(h.evidence,'ui02-original-conversion-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ it.each([true,false])('confirms the original legacy sheet with numbered creation=%s and the matching effective basics policy',async(enabled)=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-review-confirmation-')),{fullApp:true,workbenchNumberedCreation:enabled});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+   const style='TEST-UI02-EFFECTIVE-'+randomUUID(),{sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,
+    temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const doc=initialDevelopmentDocument(),materialId=randomUUID();
+   Object.assign(doc,{templateConfirmed:true,sizeTableInitialized:true,quantity:2,documentFormatVersion:2,sizes:['M'],sizeQuantities:[2],measurements:[],
+    workbenchSheet:{version:1,styleName:'TEST 原品名',brand:'TEST 当前发布夹具前置',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',
+     sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:2}]},files:[{attachmentId:await h.f.image(designer),kind:'款图'}]});
+   doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉',
+    ...(enabled?{quantity:'500',quantityUnit:'米'}:{})}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
+   // Isolated historical input: pre-UI-02 allowed an empty brand in this exact
+   // shape. Seed the one prior publication from a draft without changing a
+   // published row or asking today's new-publication guard to allow it.
+   const client=await h.db.connect();
+   try{
+    await client.query('BEGIN');
+    const {taskId}=await new DigitalProductionTaskService(h.db).createWithClient(client,designer,{resource:{kind:'source',id:sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:h.f.people['development-clerk']!.actorId});
+    expect((await client.query(`UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$3,
+     document=jsonb_set(document,'{workbenchSheet,brand}',to_jsonb(''::text)),version=version+1
+     WHERE source_id=$1 AND version=$2 AND status='draft'`,[sourceId,saved.version,taskId])).rowCount).toBe(1);
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   const published=await forms.read(designer,sourceId);expect(published.document?.workbenchSheet?.brand).toBe('');
+   const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
+   try{
+    const {page}=tab;
+    const original=new URL(`/api/digital-production/sources/${sourceId}/development`,page.url()).href;
+    const notes=await page.request.put(original+'/workbench-basics',{headers:{'idempotency-key':randomUUID()},
+     data:{roundNumber:1,documentVersion:published.version,expectedRevision:0,brand:'TEST 已有效登记的品牌',referenceNote:'TEST 此版原登记说明'}});
+    expect(notes.status(),await notes.text()).toBe(enabled?200:404);
+    if(enabled){
+     const read=await (await page.request.get(original)).json();
+     expect(read).toMatchObject({version:published.version,workbenchBasics:{brand:'TEST 已有效登记的品牌'},document:{workbenchSheet:{brand:''}}});
+     await page.reload();
+    }
+    await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
+    const form=page.getByRole('region',{name:'客户意见',exact:true});
+    await form.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill(style+'-PO');
+    await form.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('黑');
+    await form.getByRole('textbox',{name:'尺码列 1',exact:true}).fill('M');
+    await form.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('2');
+    await form.locator('#development-po-date-1').fill('2027-04-30');
+    await form.getByLabel('辅料是否需要对色',{exact:true}).selectOption('no');
+    if(await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).isVisible()){
+     await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).selectOption('known');
+     await form.getByRole('combobox',{name:'大货是否预缩',exact:true}).selectOption('no');
+    }
+    expect(await form.getByRole('group',{name:'转正前补齐原开发资料',exact:true}).count()).toBe(0);
+    const confirmed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/confirm`));
+    await form.getByRole('button',{name:'确认下单',exact:true}).click();
+    const response=await confirmed;expect(response.status(),await response.text()).toBe(200);
+    expect((await forms.read(designer,sourceId)).version).toBe(published.version);
+    expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
+    expect((await h.db.query('SELECT 1 FROM digital_development_amendments WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+   }catch(error){await writeFile(join(h.evidence,'original-review-confirmation-failure.txt'),await tab.page.locator('body').innerText());throw error;}
    finally{await tab.close();}
   }finally{await h.writeEvidence();await h.dispose();}
  });

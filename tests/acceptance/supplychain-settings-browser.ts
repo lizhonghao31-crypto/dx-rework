@@ -102,7 +102,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   }
   app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:e.statusCode??500).send({error:{code:e.code,message:e.message}});});
   const notifications=(options?.orderTimeFlow||options?.merchandiserWorkbench)?new DigitalProductionNotificationService(db):undefined,todos=notifications?new TodoService(db,undefined,undefined,undefined,notifications):undefined,patternOrders=todos?new PatternRoomOrderService(db,new TodoProjectionService(todos),{ordersEnabled:true}):undefined;
-  const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;
+  const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders,undefined,options.workbenchNumberedCreation===true)):undefined;
   let controlToken:string|undefined;
   if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});}
   if(todos)registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos,merchandiserWorkbench:options?.merchandiserWorkbench});

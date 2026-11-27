@@ -37,7 +37,7 @@ s=importlib.util.spec_from_file_location('maintenance','scripts/deploy/prepare-a
 m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 r=json.load(open('scripts/deploy/acceptance-migration-requirements.json'))
 print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
-`,JSON.stringify(pending)],{encoding:'utf8'})) as string;
+`,JSON.stringify(pending)],{encoding:'utf8',maxBuffer:4*1024*1024})) as string;
    const preflight=async()=>{
     await client.query('BEGIN READ ONLY');
     try {
@@ -83,6 +83,18 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    await admin.query(`ALTER VIEW ${schema}.digital_development_source_lifecycle OWNER TO dx_rework_acceptance_app`);
    await expect(preflight()).rejects.toThrow('digital_development_source_lifecycle');
    await admin.query(`ALTER VIEW ${schema}.digital_development_source_lifecycle OWNER TO dx_rework_acceptance`);
+   await expect(preflight()).resolves.toBeUndefined();
+   // Designer corrections replace the existing effective documents view, not a new view.
+   const beforeDesignerCorrection='0317_development_draft_discard_ownership';
+   for(const next of pending.filter(row=>row.version>firstPublication&&row.version<=beforeDesignerCorrection)){
+    const migration=catalog.find(entry=>entry.version===next.version)!;
+    await client.query('BEGIN');await client.query(migration.sql);
+    await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[next.version,next.checksum]);await client.query('COMMIT');
+   }
+   await expect(preflight()).resolves.toBeUndefined();
+   await admin.query(`ALTER VIEW ${schema}.digital_development_effective_documents OWNER TO dx_rework_acceptance_app`);
+   await expect(preflight()).rejects.toThrow('digital_development_effective_documents');
+   await admin.query(`ALTER VIEW ${schema}.digital_development_effective_documents OWNER TO dx_rework_acceptance`);
    await expect(preflight()).resolves.toBeUndefined();
    const upgraded=await applyMigrations(target.toString());
    expect(upgraded.currentVersion).toBe(catalog.at(-1)!.version);

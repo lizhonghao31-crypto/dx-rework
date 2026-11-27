@@ -39,7 +39,7 @@ export async function currentOrderTimeOperation(db:PoolClient,operation:OrderTim
   default:return operation;
  }
 }
-export function orderTimeNativeExecutor(database:Pool,creationEnabled:boolean,patternOrders?:PatternRoomOrderService,sourcing?:SourcingService):OrderTimeNativeExecutor{
+export function orderTimeNativeExecutor(database:Pool,creationEnabled:boolean,patternOrders?:PatternRoomOrderService,sourcing?:SourcingService,workbenchNumberedCreation=false):OrderTimeNativeExecutor{
  return async(db,actor,operation,key)=>{
   const identity=new DigitalProductionIdentityService(database,creationEnabled,sourcing).inTransaction(db);
   switch(operation.kind){
@@ -49,11 +49,11 @@ export function orderTimeNativeExecutor(database:Pool,creationEnabled:boolean,pa
     const calendar=time?{serverToday:beijingCalendarDate(time),minimumInitialCustomerDate:minimumInitialCustomerDate(time),orderTimeEnabled:true}:await identity.orderCalendar(actor,operation.sourceId);
     const input=publicationFormalInput(sheet.document,calendar,Boolean(admission?.plan.company.framework));
     if(input){
-     const order=await identity.createOrder(actor,input,key+':formal',operation.sourceId);return {sourceId:operation.sourceId,orderId:order.productionOrderId};
+     const order=await identity.createOrder(actor,input,key+':formal',operation.sourceId,workbenchNumberedCreation);return {sourceId:operation.sourceId,orderId:order.productionOrderId};
     }
     return {sourceId:operation.sourceId,orderId:null};
    }
-   case 'confirm_order':{const order=await identity.createOrder(actor,operation.input,key,operation.sourceId);return {sourceId:operation.sourceId,orderId:order.productionOrderId};}
+   case 'confirm_order':{const order=await identity.createOrder(actor,operation.input,key,operation.sourceId,workbenchNumberedCreation);return {sourceId:operation.sourceId,orderId:order.productionOrderId};}
    case 'direct_order':{const order=await identity.createOrder(actor,{...operation.input,productionPlanning:operation.route},key);return {sourceId:order.sourceId,orderId:order.productionOrderId};}
    case 'instruction_publish':{
     const readiness=await new ProductionReadinessService(database).read(actor,{kind:'order',id:operation.orderId},db);

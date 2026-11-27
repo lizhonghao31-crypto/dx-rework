@@ -114,8 +114,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [correctionPending,setCorrectionPending]=useState(false);
   const correctionScope=Boolean(source&&existingDraft?.document&&(numberedCreation||document.templateConfirmed&&document.workbenchSheet)&&workbenchNumberedCreation);
   const conversionNotes=existingDraft?.version===conversionVersion?existingDraft.workbenchBasics:undefined;
-  const conversionNeedsChanges=correctionScope&&Boolean(developmentCreationBasicsIssues(conversionNotes&&document.workbenchSheet?
-   {workbenchSheet:{...document.workbenchSheet,brand:conversionNotes.brand}}:document).length||developmentPreparationQuantityIssues(document,true).length);
+  const conversionNeedsChanges=correctionScope&&Boolean(developmentCreationBasicsIssues(document,conversionNotes).length||developmentPreparationQuantityIssues(document,true).length);
 
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>(creation?.snapshot?.fileKind??"款图");
   const measurementIds=useRef(creation?.snapshot?.measurementIds??document.measurements.map(()=>createClientRequestId()));

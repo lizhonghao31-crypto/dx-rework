@@ -23,7 +23,7 @@ export function DevelopmentDesignerCorrection({sourceId,round,version,document,n
  const dirty=basics.styleName!==original.styleName||basics.brand!==original.brand||basics.referenceNote!==original.referenceNote||Boolean(reason.trim())||Object.keys(materials).length>0;
  useDigitalDetailNavigationGuard(dirty||uncertain||received!==null,busy,writing,'原资料订正尚未保存或确认，仍要离开吗？');
  const quantityIssues=developmentPreparationQuantityIssues(document,true);
- const missing=developmentCreationBasicsIssues(document).length>0||quantityIssues.length>0;
+ const missing=developmentCreationBasicsIssues(document,notes).length>0||quantityIssues.length>0;
  const route=`sources/${sourceId}/development`;
  const install=async(expected:number)=>{
   const sheet=await digitalRequest<DevelopmentSheet>(route+'?round='+round);

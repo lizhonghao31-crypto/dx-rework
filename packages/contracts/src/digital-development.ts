@@ -386,9 +386,10 @@ export function developmentWorkbenchPublishIssues(sheet:WorkbenchDevelopmentShee
 export const DEVELOPMENT_AUXILIARY_QUANTITY_UNITS=['个','米','条','箱'] as const;
 
 /** New submission only. An immutable original can still lack these two fields. */
-export function developmentCreationBasicsIssues(document:Pick<DevelopmentDocument,'workbenchSheet'>){
+export function developmentCreationBasicsIssues(document:Pick<DevelopmentDocument,'workbenchSheet'>,effectiveBasics?:Pick<DevelopmentWorkbenchBasics,'brand'>){
  const labels={styleName:'款式（品名）',brand:'品牌'} as const;
- return (['styleName','brand'] as const).filter(field=>!document.workbenchSheet?.[field]?.trim())
+ const values={styleName:document.workbenchSheet?.styleName,brand:effectiveBasics?.brand??document.workbenchSheet?.brand};
+ return (['styleName','brand'] as const).filter(field=>!values[field]?.trim())
   .map(field=>({field,label:labels[field],message:`请填写${labels[field]}`}));
 }
 
