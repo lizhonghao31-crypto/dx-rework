@@ -94,11 +94,14 @@ export const DesignerQuotationStatusSchema=z.object({
 }).strict();
 export type DesignerQuotationStatus=z.infer<typeof DesignerQuotationStatusSchema>;
 const quotationSnapshotDecimal=z.string().regex(/^\d+(?:\.\d{1,12})?$/);
-export const QuotationConfirmedPricingSnapshotSchema=z.object({
-  quoteVersion:z.number().int().positive(),cost:quotationSnapshotDecimal,input:QuotationPricingInputSchema,status:z.literal('calculated'),
-  customerUnitPrice:quotationSnapshotDecimal,multiplierPercent:quotationSnapshotDecimal.nullable(),
-  exactMultiplierPercent:z.object({numerator:z.string().regex(/^\d+$/),denominator:z.string().regex(/^[1-9]\d*$/)}).strict().nullable(),
-}).strict();
+const quotationSnapshotBasis=z.object({quoteVersion:z.number().int().positive(),cost:quotationSnapshotDecimal,
+  input:QuotationPricingInputSchema,customerUnitPrice:quotationSnapshotDecimal}).strict();
+export const QuotationConfirmedPricingSnapshotSchema=z.discriminatedUnion('status',[
+  quotationSnapshotBasis.extend({status:z.literal('calculated'),multiplierPercent:quotationSnapshotDecimal.nullable(),
+    exactMultiplierPercent:z.object({numerator:z.string().regex(/^\d+$/),denominator:z.string().regex(/^[1-9]\d*$/)}).strict().nullable()}),
+  quotationSnapshotBasis.extend({status:z.literal('zero_cost'),cost:z.string().regex(/^0+(?:\.0{1,12})?$/),
+    input:QuotationPricingInputSchema.extend({field:z.literal('customerUnitPrice')}),multiplierPercent:z.null(),exactMultiplierPercent:z.null()}),
+]);
 export type QuotationConfirmedPricingSnapshot=z.infer<typeof QuotationConfirmedPricingSnapshotSchema>;
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;

@@ -1128,6 +1128,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      expect((await h.db.query('SELECT quote_id,quote_version FROM digital_budget_quote_conversions WHERE production_order_id=$1',[orderId])).rows)
       .toEqual([{quote_id:confirmed.quoteId,quote_version:frozen}]);
     }finally{await follow.close();}
+    // Same normal authority and original confirmation entry. A true zero
+    // internal cost still supports a direct customer price, not a multiplier.
+    const beforeZero=await quotes.read(designer,resource);
+    const ieRow=beforeZero.rows.find(row=>row.name==='IE加工单价')!;
+    const zeroFabric=await quotes.fillRow(designer,resource,materialId,{expectedVersion:beforeZero.version,unitPrice:'0'},randomUUID());
+    const zeroCost=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:zeroFabric.version,unitPrice:'0'},randomUUID());
+    await d.page.reload();
+    const zeroInput=d.page.getByLabel('对客户单价（元/件）',{exact:true});
+    await zeroInput.focus();await zeroInput.fill('7.5');
+    expect(await zeroInput.inputValue()).toBe('7.5');
+    await d.page.getByText('成本为零，报价倍率无法计算。',{exact:true}).waitFor();
+    await d.page.getByRole('button',{name:'用于本单客户确认',exact:true}).click();
+    await d.page.getByLabel('客户真实确认时间',{exact:true}).fill('2026-10-21T09:00');
+    await d.page.getByLabel('客户确认依据',{exact:true}).fill('TEST 成本真实为零，客户另明确确认 7.5');
+    const zeroResponse=d.page.waitForResponse(response=>response.url()===confirmationPath&&response.request().method()==='POST');
+    await d.page.getByRole('button',{name:'确认报价',exact:true}).click();
+    const zeroReceipt=await zeroResponse;expect(zeroReceipt.status(),await zeroReceipt.text()).toBe(200);
+    const actualZero=(await h.db.query('SELECT workbench_pricing FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[confirmed.quoteId,zeroCost.version])).rows[0]!.workbench_pricing;
+    const zeroSnapshot={quoteVersion:zeroCost.version,status:'zero_cost',cost:'0',customerUnitPrice:'7.5',multiplierPercent:null,exactMultiplierPercent:null};
+    expect(actualZero).toMatchObject(zeroSnapshot);
+    expect(await readSheet()).toMatchObject({version:zeroCost.version,confirmedPricing:zeroSnapshot});
+    expect(await readSheet(d.page,'?version='+zeroCost.version)).toMatchObject({version:zeroCost.version,confirmedPricing:zeroSnapshot});
+    await expect.poll(()=>amountPanel.locator('dd').allTextContents()).toEqual(['0','—','7.5']);
+    expect(await readSheet(d.page,'?version='+frozen)).toMatchObject({version:frozen,
+     confirmedPricing:{quoteVersion:frozen,status:'calculated',cost:'40',customerUnitPrice:'42',multiplierPercent:'105'}});
+    await d.page.getByLabel('查看报价版本',{exact:true}).selectOption(String(zeroCost.version));
+    await expect.poll(()=>amountPanel.locator('dd').allTextContents()).toEqual(['0','—','7.5']);
     await d.page.screenshot({path:join(h.evidence,'designer-1165.png'),fullPage:true});
     await w.page.screenshot({path:join(h.evidence,'worker-1165.png'),fullPage:true});
     // Same authenticated session after native role revocation, not a Lab role switch.

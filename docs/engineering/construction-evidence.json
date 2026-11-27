@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
   "risk": "full",
-  "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
+  "sourceFingerprint": "71e436126043016b6f75e9d6db8c14de28e7f5a062e20174899bea0a5a89dfcd",
   "rules": [
     {
       "rule": "由授权报价读取统一生成当前报价状态及适用进度，既有确认前置与部分可见角色不变，设计区对同一报价来源展示价格负责人、真实缺项和原依据。",
@@ -37,11 +37,12 @@
     {
       "rule": "原报价确认证据仍显示确认时采用的成本、倍率及客户单价，历史现价互不替换，保原报价精度及 R6 一次 IE 采用链。",
       "source": "已批准 UI-04 第5节 T23–T25；同源 calculateQuotationPricing 与 workbench_pricing 的确认快照，不新增计算。",
-      "initialization": "历史真实缺失标未登记，既有金额及客户整单口径原样，未确认测算不是正式客户确认。",
+      "initialization": "历史真实缺失标未登记，已确认零成本直接客户价保留零值和客户价，倍率依批准规则留空。原金额及客户整单口径不变，未确认测算不是正式客户确认。",
       "dateAndPermission": "历史按确认版本授权且不对未授权岗位公开，R6 预算/外发继续采用同一正式 IE 报价。",
       "writes": [
         "apps/api/src/production-platform/quotation-service.ts",
         "apps/web/src/quotation-workbench-pricing.tsx",
+        "packages/contracts/src/digital-quotation.ts",
         "apps/web/src/digital-quotation-panel.tsx",
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
@@ -54,7 +55,7 @@
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
         "tests/integration/customer-quotation-postgres.test.ts"
       ],
-      "expectation": "原报价本地浏览器和 PostgreSQL 两套共13项，客户确认原版保持真实40/105%/42和价格依据；R6实际报价至预算和选厂，保无第二IE任务。外洗真实现地观察另记。",
+      "expectation": "真实确认两条原报价版本。常规版本保持40/105%/42；成本0且客户价7.5的确认在当前及指定历史版仍显示0/不可计算倍率/7.5，不误读为无记录。原R6实际报价至预算和选厂，不生成第二IE任务。外洗真实现地观察另记。",
       "checks": [
         "ui04-native",
         "ui04-postgres"
@@ -68,20 +69,20 @@
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-current/ui04-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
-      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
-      "context": "Original signed designer, IE, checkout and craft App on Chromium plus PostgreSQL. Mixed materials, confirmation and R6; rerun on fixture fix exact inputs.",
-      "startedAt": "2026-11-27T01:53:02.791117+00:00",
-      "endedAt": "2026-11-27T01:54:28.897513+00:00",
+      "testedHead": "c056d0a1bfc68ffcb1ac0fcbc48b10cd119f0150",
+      "sourceFingerprint": "71e436126043016b6f75e9d6db8c14de28e7f5a062e20174899bea0a5a89dfcd",
+      "context": "Original signed pricing, zero-cost confirmed freeze vs positive confirmed original, and R6 across native Chromium and PostgreSQL.",
+      "startedAt": "2026-11-27T02:29:59.679751+00:00",
+      "endedAt": "2026-11-27T02:31:41.802785+00:00",
       "log": "/workspace/scratch/ui04-current/ui04-native.log",
-      "logSha256": "98fe73c3017adf92c517dd0305441c00aea49c8552a90083f4f8df58a6ca4855",
+      "logSha256": "0096eaf7e69060152d51bd31c988545d92aee10623c74822ae162e1e0d67da75",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "de49e4045bcd8656aa6e92a22cba3f95dfc8fe6b2fcf8ff98e271f216a813919"
+          "sha256": "5b78f9c69c65c03aeac664d507149bd5f4d0bb7eb5aca46d13b5eb18018dc776"
         }
       ]
     },
@@ -91,20 +92,20 @@
       "command": "node --test '--test-name-pattern=cheap CI preflight includes|keeps the reviewed responsibility' scripts/ci/pr-gate-controller.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
-      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
-      "context": "The two original light assertions, on final exact fixture-fix inputs.",
-      "startedAt": "2026-11-27T01:54:19.676892+00:00",
-      "endedAt": "2026-11-27T01:54:20.664923+00:00",
+      "testedHead": "c056d0a1bfc68ffcb1ac0fcbc48b10cd119f0150",
+      "sourceFingerprint": "71e436126043016b6f75e9d6db8c14de28e7f5a062e20174899bea0a5a89dfcd",
+      "context": "Original two targeted gate protocol assertions on zero-cost read fix candidate",
+      "startedAt": "2026-11-27T02:34:22.467306+00:00",
+      "endedAt": "2026-11-27T02:34:23.565447+00:00",
       "log": "/workspace/scratch/ui04-current/ui04-protocol.log",
-      "logSha256": "e8200c2f6379df29e29222e335a27e8a7cb86e9416bf33071449cca966d98302",
+      "logSha256": "4c6a23f3f49d2e13030197be068cf5d6c7d137500ef5c2e9e353dc9b1309d2ed",
       "passed": 2,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "e8200c2f6379df29e29222e335a27e8a7cb86e9416bf33071449cca966d98302"
+          "sha256": "4c6a23f3f49d2e13030197be068cf5d6c7d137500ef5c2e9e353dc9b1309d2ed"
         }
       ]
     },
@@ -114,20 +115,20 @@
       "command": "npx vitest run --config vitest.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-current/ui04-postgres.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
-      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
-      "context": "Isolated PostgreSQL with the existing canonical 0300 quotation review migration. Original signed quote, budget, confirmation and permissions regression.",
-      "startedAt": "2026-11-27T01:52:51.204280+00:00",
-      "endedAt": "2026-11-27T01:52:55.717581+00:00",
+      "testedHead": "c056d0a1bfc68ffcb1ac0fcbc48b10cd119f0150",
+      "sourceFingerprint": "71e436126043016b6f75e9d6db8c14de28e7f5a062e20174899bea0a5a89dfcd",
+      "context": "Isolated PostgreSQL with existing canonical 0300 review migration. Original signed quote, budget, confirmation and permissions regression on zero-cost read fix candidate.",
+      "startedAt": "2026-11-27T02:34:22.467304+00:00",
+      "endedAt": "2026-11-27T02:34:26.562827+00:00",
       "log": "/workspace/scratch/ui04-current/ui04-postgres.log",
-      "logSha256": "749fd4ee4c87cc6d8250b13059ddadd81b29dd3c5912ebb622f2976b8c2eec95",
+      "logSha256": "b470b05bcb337623326c59664eca507afa51dbde59d6ebf712c9636d519bd2ab",
       "passed": 17,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a1cba0b711b7ee4d206a4d2c3646be7e8d879d29e0a279d659065de35dddb6bb"
+          "sha256": "0dfc5259027038e34d0655d295c9ebaace5a7c90959fe6d4bd3a906bc332e1cd"
         }
       ]
     }
