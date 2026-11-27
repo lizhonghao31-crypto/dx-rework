@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
   "risk": "full",
-  "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
+  "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
   "rules": [
     {
       "rule": "由授权报价读取统一生成当前报价状态及适用进度，既有确认前置与部分可见角色不变，设计区对同一报价来源展示价格负责人、真实缺项和原依据。",
@@ -15,11 +15,13 @@
         "apps/api/src/production-platform/quotation-workbench.ts",
         "packages/contracts/src/digital-quotation.ts",
         "apps/web/src/digital-quotation-panel.tsx",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/web/src/designer-order-workbench.tsx"
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/api/migrations/0300_workbench_quotation_review.sql"
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
@@ -28,7 +30,8 @@
       "expectation": "同一真实报价中用量不符的主料缺资料，已采用同版技术的辅料继续显示已填有效，并精确计入已完成。现有资料、价格或审批的真实正式门槛仍为整单。原授权范围和技术角色不变。",
       "checks": [
         "ui04-native",
-        "ui04-protocol"
+        "ui04-protocol",
+        "ui04-postgres"
       ]
     },
     {
@@ -48,11 +51,13 @@
       ],
       "oldTests": [
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "expectation": "原报价本地浏览器和 PostgreSQL 两套共13项，客户确认原版保持真实40/105%/42和价格依据；R6实际报价至预算和选厂，保无第二IE任务。外洗真实现地观察另记。",
       "checks": [
-        "ui04-native"
+        "ui04-native",
+        "ui04-postgres"
       ]
     }
   ],
@@ -63,20 +68,20 @@
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-current/ui04-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a7503dffc489c571512a5127407df20bbdc40d56",
-      "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
-      "context": "Post-review local candidate; original signed designer, IE, checkout and craft App, PostgreSQL Chromium; mixed materials, save, confirmation and R6 regression",
-      "startedAt": "2026-11-27T01:25:25.990899+00:00",
-      "endedAt": "2026-11-27T01:26:50.320022+00:00",
+      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
+      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
+      "context": "Original signed designer, IE, checkout and craft App on Chromium plus PostgreSQL. Mixed materials, confirmation and R6; rerun on fixture fix exact inputs.",
+      "startedAt": "2026-11-27T01:53:02.791117+00:00",
+      "endedAt": "2026-11-27T01:54:28.897513+00:00",
       "log": "/workspace/scratch/ui04-current/ui04-native.log",
-      "logSha256": "9b8ba723eb265e515df16413d294a00d2d3006a1ce458a733f6d7bcecd103406",
+      "logSha256": "98fe73c3017adf92c517dd0305441c00aea49c8552a90083f4f8df58a6ca4855",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "538241be2e99a03fde69238e4783fe05d4347235fb40ffe92d8efca4cf94b10a"
+          "sha256": "de49e4045bcd8656aa6e92a22cba3f95dfc8fe6b2fcf8ff98e271f216a813919"
         }
       ]
     },
@@ -86,20 +91,43 @@
       "command": "node --test '--test-name-pattern=cheap CI preflight includes|keeps the reviewed responsibility' scripts/ci/pr-gate-controller.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f62da5144efbd457d4995462119762dec97c2db6",
-      "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
-      "context": "Resolved the existing authorized quotation GET clock-inventory entry only; protocol regression scoped to the two exact failed assertions from first Light",
-      "startedAt": "2026-11-27T01:29:07.825745+00:00",
-      "endedAt": "2026-11-27T01:29:08.554428+00:00",
+      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
+      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
+      "context": "The two original light assertions, on final exact fixture-fix inputs.",
+      "startedAt": "2026-11-27T01:54:19.676892+00:00",
+      "endedAt": "2026-11-27T01:54:20.664923+00:00",
       "log": "/workspace/scratch/ui04-current/ui04-protocol.log",
-      "logSha256": "3b90ba64e0b4a21b73aeb0b5cf0d3429715115b26f30a9e6e0e4ccb13569bf3f",
+      "logSha256": "e8200c2f6379df29e29222e335a27e8a7cb86e9416bf33071449cca966d98302",
       "passed": 2,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "3b90ba64e0b4a21b73aeb0b5cf0d3429715115b26f30a9e6e0e4ccb13569bf3f"
+          "sha256": "e8200c2f6379df29e29222e335a27e8a7cb86e9416bf33071449cca966d98302"
+        }
+      ]
+    },
+    {
+      "id": "ui04-postgres",
+      "kind": "tests",
+      "command": "npx vitest run --config vitest.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-current/ui04-postgres.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "01dec373115faaaa245d6bac716cc2a7cd2366a1",
+      "sourceFingerprint": "a294e0a642995ea9d3e0ff65a6f7f1cde616d9adfb6b912e56adf219dbe67f2d",
+      "context": "Isolated PostgreSQL with the existing canonical 0300 quotation review migration. Original signed quote, budget, confirmation and permissions regression.",
+      "startedAt": "2026-11-27T01:52:51.204280+00:00",
+      "endedAt": "2026-11-27T01:52:55.717581+00:00",
+      "log": "/workspace/scratch/ui04-current/ui04-postgres.log",
+      "logSha256": "749fd4ee4c87cc6d8250b13059ddadd81b29dd3c5912ebb622f2976b8c2eec95",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a1cba0b711b7ee4d206a4d2c3646be7e8d879d29e0a279d659065de35dddb6bb"
         }
       ]
     }

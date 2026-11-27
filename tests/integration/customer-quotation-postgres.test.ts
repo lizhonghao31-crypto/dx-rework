@@ -71,6 +71,7 @@ const url=process.env.TEST_DATABASE_URL;
  olderStyle=`TEST-BEFORE-WORKBENCH-${randomUUID()}`;
  olderSource=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:olderStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
  await database.query(await readFile(new URL('../../apps/api/migrations/0298_designer_workbench_commercial_policy.sql',import.meta.url),'utf8'));
+ await database.query(await readFile(new URL('../../apps/api/migrations/0300_workbench_quotation_review.sql',import.meta.url),'utf8'));
  });
  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('enrols every new formal order at database boundary and preserves historical budgets without fabricated quotes',async()=>{
