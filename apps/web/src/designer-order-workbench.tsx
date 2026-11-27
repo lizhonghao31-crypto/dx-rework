@@ -267,20 +267,22 @@ function CurrentDevelopmentAreas({sourceId,actorId,revision,changed,region,sheet
 
 function DesignerShippingForm({taskId,controller}:{taskId:string;controller:ReturnType<typeof useDevelopmentExecution>}){
  const [date,setDate]=useState(''),[tracking,setTracking]=useState(''),[note,setNote]=useState('');
- const {busy,uncertainWrite,committedWrite,writeError}=controller;
+ const {busy,uncertainWrite,writeOutcome,writeError}=controller;
  useDigitalDetailNavigationGuard(Boolean(date||tracking||note)||uncertainWrite,busy,controller.writing,
   '本轮寄样内容尚未保存或确认，确定离开吗？');
  const submit=()=>controller.run('route',{taskId,result:'通过',sentDate:date,trackingNo:tracking.trim(),note,
   nextAssigneeId:null,craftExecution:null});
  const disabled=busy||uncertainWrite;
- return <form onSubmit={event=>{event.preventDefault();if(!busy&&date&&tracking.trim())void submit();}}>
+ const saved=writeOutcome?.path==='route'&&writeOutcome.phase==='committed';
+ return <form onSubmit={event=>{event.preventDefault();if(!disabled&&date&&tracking.trim())void submit();}}>
   <div className="development-basic-grid"><DevelopmentEntryDate label="实际寄出日期" visibleLabel isRequired value={date}
     isDisabled={disabled} onChange={value=>setDate(value??'')}/>
    <DevelopmentEntryText label="快递号" visibleLabel isRequired value={tracking} maxLength={100} isDisabled={disabled} onChange={setTracking}/>
    <DevelopmentEntryText label="备注" visibleLabel value={note} maxLength={2000} isDisabled={disabled} onChange={setNote}/>
   </div>
   {writeError&&<p role="alert">{writeError}</p>}
-  {uncertainWrite&&committedWrite?<DevelopmentEntryAction type="button" disabled={busy} onClick={()=>void controller.recheck()}>重新读取已保存寄样</DevelopmentEntryAction>:
-   <DevelopmentEntryAction type="submit" variant="primary" disabled={busy||!date||!tracking.trim()}>{uncertainWrite?'用原内容核对寄样结果':'记录寄出'}</DevelopmentEntryAction>}
+  {uncertainWrite?<DevelopmentEntryAction type="button" disabled={busy} onClick={()=>void controller.recheck()}>
+   {saved?'重新读取已保存寄样':'用原内容核对寄样结果'}
+  </DevelopmentEntryAction>:<DevelopmentEntryAction type="submit" variant="primary" disabled={busy||!date||!tracking.trim()}>记录寄出</DevelopmentEntryAction>}
  </form>;
 }

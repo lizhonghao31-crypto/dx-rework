@@ -2134,6 +2134,55 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   finally{await context.close();}
  });
 
+ it.each(['lost-ack','server-error'] as const)('recovers the original signed shipping submission with one receipt after %s',async(fault)=>{
+  const designer=f.people['sample-designer']!;
+  const [made]=await exerciseDevelopmentSlaNative(f.db,new RootAwareTodoProjectionService(new TodoService(f.db)),f.root,
+   f.people['pattern-room-worker']!.actorId,undefined,[['无','免洗']],{fixedCraftSteps:[],quotationAuthor:designer});
+  const sourceId=made!.sourceId,original=await execution.read(f.root,sourceId);
+  const task=original.tasks.find(row=>row.taskKind==='development_shipping')!;
+  expect(task).toMatchObject({state:'ready',routeVersion:1,assigneeId:designer.actorId});
+  const context=await browser.newContext({viewport:{width:1165,height:900}});
+  await context.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+  const page=await context.newPage(),tracking='TEST-ORIGINAL-UI03-'+fault,date=beijingCalendarDate(businessNow());
+  page.setDefaultTimeout(12000);
+  const target=`/api/digital-production/sources/${sourceId}/execution/route`;
+  const attempts:{key:string;body:unknown}[]=[];
+  const stored=async()=> (await execution.read(f.root,sourceId)).routeFacts.filter(fact=>fact.kind==='寄出'&&fact.taskId===task.taskId);
+  try{
+   await page.goto(base+`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
+   const shipping=page.locator('details.designer-order-area:has(> #designer-order-shipping)');
+   await shipping.locator('summary').getByText('待寄出',{exact:true}).waitFor();
+   await shipping.locator('summary').click();
+   await shipping.getByLabel('实际寄出日期',{exact:false}).fill(date);
+   const input=shipping.getByRole('textbox',{name:'快递号',exact:false});
+   await input.fill(tracking);
+   await page.route(url=>url.pathname===target,async route=>{
+    attempts.push({key:route.request().headers()['idempotency-key']??'',body:route.request().postDataJSON()});
+    if(attempts.length!==1){await route.continue();return;}
+    if(fault==='lost-ack'){
+     const original=await route.fetch();expect(original.status(),await original.text()).toBe(200);
+     await route.abort('failed');
+    }else await route.fulfill({status:503,json:{error:{code:'TEST_SHIP_UNAVAILABLE',message:'TEST 原寄样服务响应丢失'}}});
+   });
+   await shipping.getByRole('button',{name:'记录寄出',exact:true}).click();
+   const recheck=shipping.getByRole('button',{name:'用原内容核对寄样结果',exact:true});
+   await recheck.waitFor();
+   expect(attempts).toHaveLength(1);
+   expect(await input.isDisabled()).toBe(true);
+   expect(await input.inputValue()).toBe(tracking);
+   expect(await stored()).toHaveLength(fault==='lost-ack'?1:0);
+   await recheck.click();
+   await expect.poll(()=>attempts.length,{timeout:5000}).toBe(2);
+   await shipping.locator('summary').getByText('已寄出',{exact:true}).waitFor();
+   await shipping.getByText(tracking,{exact:true}).waitFor();
+   expect(attempts[0]?.key).toBeTruthy();
+   expect(attempts[1]).toEqual(attempts[0]);
+   expect(attempts[0]?.body).toMatchObject({taskId:task.taskId,sentDate:date,trackingNo:tracking});
+   expect(await stored()).toMatchObject([{routeVersion:1,payload:{sentDate:date,trackingNo:tracking}}]);
+   expect((await new DigitalProductionTaskService(f.db).history(f.root,task.taskId)).events.filter(event=>event.kind==='completed')).toHaveLength(1);
+  }finally{await context.close();}
+ });
+
  it('renders the real shipping date and native unknown then verified correction in the authenticated workbench',async()=>{
   const [made]=await exerciseDevelopmentSlaNative(f.db,new RootAwareTodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,undefined,[['无','免洗']],{fixedCraftSteps:[],routeActualTime:kind=>kind==='development_confirmation'?{precision:'instant',at:businessNow().toISOString()}:undefined});
   const current=await execution.read(f.root,made!.sourceId),shipping=current.tasks.find(task=>task.taskKind==='development_shipping')!,date=beijingCalendarDate(businessNow());
