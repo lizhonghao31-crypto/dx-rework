@@ -2241,7 +2241,7 @@ async function originalWarehouseReadiness(db:Pool){
     colorConfirmationRole:null,reason:'TEST original warehouse assignment'},randomUUID());
    const receiptProof=await h.f.image(warehouse),batchProof=await h.f.image(warehouse);
    const originalState=await readiness.record(warehouse,resource,{...defaults,kind:'fabric_receipt',state:'partial',
-    quantities:[{...purchase,materialId:null,quantity:300}],note:'TEST original unbound receipt row',evidenceIds:[receiptProof]},randomUUID());
+    quantities:[{...purchase,materialId:null,lineId:null,quantity:300}],note:'TEST original unbound receipt row',evidenceIds:[receiptProof]},randomUUID());
    const original=originalState.facts.find(row=>row.kind==='fabric_receipt')!;
    const first=await get(),{basis}=first;
    const receipt=await app.inject({method:'POST',url:`${base}/warehouse-receipts`,headers:headers('warehouse'),
@@ -2304,12 +2304,28 @@ async function originalWarehouseReadiness(db:Pool){
    }finally{query.mockRestore();client.release();}
    expect(await readNative()).toEqual(nativeBefore);
    expect(await readWindows()).toEqual(windowBefore);
-   const revoked=await post('warehouse',{...scope,action:'revoke',expectedGeneration:1,note:'TEST append-only revoke original link'});
+   const revoked=await post('warehouse',{legacy:scope.legacy,action:'revoke',expectedGeneration:1,note:'TEST append-only revoke original link'});
    expect(revoked.statusCode,revoked.body).toBe(200);
    expect((await get()).reconciliation).toMatchObject({received:null,verified:{quantity:'20'},pending:[{bindingState:'revoked'}]});
    expect((await get(liningId)).reconciliation).toMatchObject({received:null,verified:{quantity:'10'},pending:[{generation:2,bindingState:'revoked'}]});
    expect((await h.db.query("SELECT generation,state FROM digital_warehouse_receipt_reconciliations WHERE resource_id=$1 ORDER BY generation",[orderId])).rows)
     .toEqual([{generation:1,state:'confirmed'},{generation:2,state:'revoked'}]);
+   const reconfirmed=await post('warehouse',{...payload,expectedGeneration:2});
+   expect(reconfirmed.statusCode,reconfirmed.body).toBe(200);
+   await readiness.record(merch,resource,{...defaults,kind:'material_investment',expectedVersion:1,
+    quantities:[{...purchase,lineId:other!.lineId}],note:'TEST original purchase correction moves the PO',
+    investmentQuantityCorrection:{index:0,previous:purchase}},randomUUID());
+   const moved=await get();
+   expect(moved).toMatchObject({lineId:other!.lineId,reconciliation:{received:null,pending:[{bindingState:'other_scope',generation:3}]}});
+   const revokeMoved={legacy:scope.legacy,action:'revoke',expectedGeneration:3,note:'TEST revoke original immutable binding after PO correction'};
+   const nativeAfterPurchase=await readNative(),windowsAfterPurchase=await readWindows();
+   expect((await post('merch',revokeMoved)).statusCode).toBe(403);
+   expect((await post('warehouse',{...revokeMoved,expectedGeneration:2})).statusCode).toBe(409);
+   const retired=await post('warehouse',revokeMoved);
+   expect(retired.statusCode,retired.body).toBe(200);
+   expect((await get()).reconciliation).toMatchObject({received:null,pending:[{bindingState:'revoked',generation:4}]});
+   expect(await readNative()).toEqual(nativeAfterPurchase);
+   expect(await readWindows()).toEqual(windowsAfterPurchase);
    const existingRoles=(await h.db.query(`SELECT assignment_id,role_code FROM user_role_assignments
     WHERE user_id=$1 AND role_code IN ('warehouse_receiver','warehouse_supervisor') AND revoked_at IS NULL`,[warehouse.actorId])).rows;
    const retained=await h.f.access.assignRole(root,{userId:warehouse.actorId,roleCode:'finance_read',reason:'TEST retain auth session after warehouse role withdrawal'});

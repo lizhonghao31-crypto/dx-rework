@@ -60,7 +60,7 @@ export function WarehouseReceiptReconciliationPanel({item,resource,base,reload,d
   const attesting=action==='attest_legacy'||action==='attest_batch';
   const request=attesting?WarehouseReceiptAttestationSchema.safeParse({...scope,batch:counterpart?.ref,relation,
    side:action==='attest_legacy'?'legacy':'batch',note}):WarehouseReceiptReconciliationSchema.safeParse(action==='revoke'
-   ?{...scope,action,expectedGeneration:target.generation,note}
+   ?{legacy:scope.legacy,action,expectedGeneration:target.generation,note}
    :{...scope,action,batch:counterpart?.ref,relation,expectedGeneration:target.generation,note,
     proof:mode==='document'?{mode,legacy:left,batch:right}:{mode,legacy:signedLeft,batch:signedRight}});
   if(!retry&&!request.success){setError('请选准确原数量行和对照批，填写说明及两边各自凭证明细。');return;}
@@ -110,7 +110,7 @@ export function WarehouseReceiptReconciliationPanel({item,resource,base,reload,d
    <TextArea label="核对说明或撤销原因" value={note} onChange={setNote} isDisabled={lock} maxLength={1000}/>
    {proof.pending.length>0&&<Selector label="核对哪个原数量行" value={rowKey} onChange={setRowKey} isDisabled={lock}
     options={proof.pending.map(row=>({value:JSON.stringify([row.ref,row.quantityRowKey]),label:`${meter(row.quantity)} · 第 ${row.ref.version} 版 · ${row.occurredAt??'发生时间待核'}`}))}/>}
-   {chosen?.bindingState==='confirmed'&&<Button type="button" variant="secondary" label="撤销已失效的原核对" isDisabled={lock||!note.trim()}
+   {(chosen?.bindingState==='confirmed'||chosen?.bindingState==='other_scope')&&<Button type="button" variant="secondary" label="撤销已失效的原核对" isDisabled={lock||!note.trim()}
     onClick={()=>start('revoke',chosen)}/>}
    {chosen&&chosen.bindingState!=='confirmed'&&chosen.bindingState!=='other_scope'&&<>
     <Selector label="对照原批次" value={batchKey} onChange={setBatchKey} isDisabled={lock}

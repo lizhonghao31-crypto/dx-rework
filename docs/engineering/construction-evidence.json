@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-  "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
+  "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
   "risk": "full",
   "rules": [
     {
@@ -27,7 +27,7 @@
       ],
       "initialization": "原材料证据不迁移或回填。0319仅新建关联表，兼容旧历史和迁移已初始化但尚未有关系时的读取。",
       "dateAndPermission": "原业务生命周期锁、在职岗位与指派、原附件及审计规则。不同角色和撤权原会话不可确认或重放。沿实际时间保留原始版本。",
-      "expectation": "元数据变化不可替换原记录。同键重试同回执，错PO、重复或不一致的凭据拒绝，撤销仅追加，原台账与窗口零变更。",
+      "expectation": "元数据变化不可替换原记录。同键重试同回执，错PO、重复或不一致的凭据拒绝，采购 PO 原入口订正后仍可按原数量行及代次撤销；撤销仅追加，原台账与窗口零变更。",
       "checks": [
         "wh01-pg",
         "wh01-static"
@@ -97,19 +97,19 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
-      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
-      "startedAt": "2026-11-27T07:54:13Z",
-      "endedAt": "2026-11-27T07:54:17Z",
+      "testedHead": "91cb4dbc687d3052f94a02a4b5235c44ae4be188",
+      "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
+      "startedAt": "2026-11-27T07:59:48Z",
+      "endedAt": "2026-11-27T07:59:52Z",
       "log": "/workspace/scratch/wh01-evidence/unit.log",
-      "logSha256": "7b803ca875164396f553b92b7a531b509e31ffaef0aa4f4c6c46e67cc69357a6",
+      "logSha256": "ba45be568302693c1dfa0b9ed2cf8223c92b62b08ccb7a0fd5e129ec5850e9d5",
       "passed": 38,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "28fe2f22727a3ec89e5518fad7a50b9006ced5f41298472554e5e365d3833dd7"
+          "sha256": "ca32e967ebb0b16df7b77029a29bc6417685ead9ebf937fc869ccaeb7dea2cd4"
         }
       ],
       "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
@@ -121,19 +121,19 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
-      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
-      "startedAt": "2026-11-27T07:54:13Z",
-      "endedAt": "2026-11-27T07:54:57Z",
+      "testedHead": "91cb4dbc687d3052f94a02a4b5235c44ae4be188",
+      "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
+      "startedAt": "2026-11-27T07:59:48Z",
+      "endedAt": "2026-11-27T08:00:32Z",
       "log": "/workspace/scratch/wh01-evidence/pg.log",
-      "logSha256": "ca21205613ed839527e3e70ba90552a446bc2d3f4e92f85b9134a823fbe98b86",
+      "logSha256": "ccae1d66c261b507b6082b40f74185b5a24921963cb948f879b9e470c9c398fc",
       "passed": 4,
       "failed": 0,
       "skipped": 96,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "799bef1b25ab8f240bd0f338cc313ff886ed2725c20615c896da4abbe12b70c5"
+          "sha256": "a11e499d70c6d53615d8095bf1d959383f820922e200623f1e0754662c3b4e29"
         }
       ],
       "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
@@ -145,12 +145,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
-      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
-      "startedAt": "2026-11-27T07:54:13Z",
-      "endedAt": "2026-11-27T07:54:54Z",
+      "testedHead": "91cb4dbc687d3052f94a02a4b5235c44ae4be188",
+      "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
+      "startedAt": "2026-11-27T07:59:48Z",
+      "endedAt": "2026-11-27T08:00:29Z",
       "log": "/workspace/scratch/wh01-evidence/static.log",
-      "logSha256": "e4fca4add67d59bf3bc852704a36ca828c00efbaed6574e686f9560bca411b42",
+      "logSha256": "d26c712708acdec6166b31618a92d7b5064f78ab73208c2013f05e3f9fd62a48",
       "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node --test scripts/ci/test-execution-contract.test.mjs; npx eslint --max-warnings=0 <changed TS/TSX>; git diff --check",
       "context": "Node 22.22.2, local exact workspace candidate, original static migration and execution compatibility validation."
     },
@@ -159,12 +159,12 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
-      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
-      "startedAt": "2026-11-27T07:54:55Z",
-      "endedAt": "2026-11-27T07:54:57Z",
+      "testedHead": "91cb4dbc687d3052f94a02a4b5235c44ae4be188",
+      "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
+      "startedAt": "2026-11-27T08:00:09Z",
+      "endedAt": "2026-11-27T08:00:11Z",
       "log": "/workspace/scratch/wh01-evidence/timing.log",
-      "logSha256": "390700a340611681565ea09eb02277c6cb66cf1c05babe8389be3ea4dfedeb8b",
+      "logSha256": "191db5eb36a7023c84a337d9c1778238b848eb1f248cec4db2b8da03b15cc35f",
       "passed": 2,
       "failed": 0,
       "skipped": 0,

@@ -397,16 +397,18 @@ export class ProductionReadinessService{
    const prior=current.find(row=>sameReceiptRef(row.legacy.ref,input.legacy.ref)&&row.legacy.quantityRowKey===input.legacy.quantityRowKey);
    if((prior?.generation??0)!==input.expectedGeneration)conflict('历史收料核对已更新，请重新读取');
    const generation=input.expectedGeneration+1;
-   const item=findWarehouseReceiptReconciliationItem(deriveWarehouseReceiptWork(view,asOf),input);
    let binding:Extract<typeof input,{action:'confirm'}>,proofAttachmentIds:string[]=[];
    if(input.action==='revoke'){
-    if(prior?.state!=='confirmed'||prior.materialId!==item.materialId||prior.lineId!==item.lineId||prior.scopeRef!==item.scopeRef)
-     return conflict('未找到此采购范围内当前可撤销的核对');
+    // The current warehouse assignment owns writes on this original subject.
+    // Revoke the immutable link itself, not a former procurement row that may
+    // have disappeared after a legitimate PO or supplier correction.
+    if(prior?.state!=='confirmed')return conflict('本单没有匹配该原数量行的可撤销核对');
     const {scopeRef,materialId,lineId,supplierId,unit,investment,materialFingerprint,legacy,batch,relation,proof}=prior;
     binding={scopeRef,materialId,lineId,supplierId,unit,investment,materialFingerprint,legacy,batch,relation,proof,
      action:'confirm',note:input.note,expectedGeneration:input.expectedGeneration};
    }else{
-    if(prior?.state==='confirmed')conflict('该原数量行已有有效核对，请先撤销原核对');
+    if(prior?.state==='confirmed')conflict('该原数量行已有核对记录，请先撤销原核对');
+    const item=findWarehouseReceiptReconciliationItem(deriveWarehouseReceiptWork(view,asOf),input);
     const pair=originalWarehouseReconciliationPair(view.history,item,input);
     if(Date.parse(pair.old.occurredAt!)>Date.parse(asOf))conflict('原实收时间不在当前核对范围内');
     proofAttachmentIds=await verifyWarehouseReconciliationProof(db,resource,input,pair,current);

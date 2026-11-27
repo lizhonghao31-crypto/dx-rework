@@ -74,8 +74,8 @@ export const WarehouseReceiptReconciliationSchema=z.discriminatedUnion('action',
  WarehouseReceiptReconciliationScopeSchema.extend({action:z.literal('confirm'),batch:WarehouseReceiptRefSchema,
   relation:z.enum(['independent','same_batch']),expectedGeneration:z.number().int().nonnegative(),
   proof:WarehouseReconciliationProofSchema,note:z.string().trim().min(1).max(1000)}),
- WarehouseReceiptReconciliationScopeSchema.extend({action:z.literal('revoke'),expectedGeneration:z.number().int().positive(),
-  note:z.string().trim().min(1).max(1000)}),
+ z.object({action:z.literal('revoke'),legacy:LegacyReceiptQuantityRefSchema,expectedGeneration:z.number().int().positive(),
+  note:z.string().trim().min(1).max(1000)}).strict(),
 ]);
 export const WarehouseReceiptAttestationSchema=WarehouseReceiptReconciliationScopeSchema.extend({
  batch:WarehouseReceiptRefSchema,side:z.enum(['legacy','batch']),relation:z.enum(['independent','same_batch']),

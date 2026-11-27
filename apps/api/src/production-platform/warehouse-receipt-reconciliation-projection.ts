@@ -65,7 +65,7 @@ export function projectWarehouseReceiptReconciliation(input:{
     if(binding.relation==='independent'&&prior.occurredAt)valid.push({ref,quantityRowKey:rowKey,quantity,occurredAt:prior.occurredAt});
    }else pending.push({ref,quantityRowKey:rowKey,quantity:{quantity:String(value.quantity),unit:value.unit},occurredAt:prior.occurredAt,
     reason:!prior.valid?prior.invalidReasons.join('；')||'原收料证据失效':value.unit!==basis.unit?'原收料单位与采购单位不同':
-     binding?.state==='confirmed'&&!ownsBinding?'该原数量行另有尚待核实的归属，请在原采购范围核对':
+     binding?.state==='confirmed'&&!ownsBinding?'该原数量行曾归于其它采购范围且依据待核，请核对后撤销原关系':
      binding?.state==='confirmed'?'原批、采购版本或核对凭证已变化，请重新核对':'缺少原采购归属及批次关系的有效凭证',
     evidenceIds:prior.evidenceIds,generation:binding?.generation??0,...(binding?{bindingState:binding.state==='confirmed'&&!ownsBinding?'other_scope':binding.state}:{})});
   }
