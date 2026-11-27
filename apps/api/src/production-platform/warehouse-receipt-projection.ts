@@ -102,3 +102,11 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
  }
  return items;
 }
+
+/** Existing typed correction choices are left intact in the warehouse panel.
+ * Current consumers can read the common totals separately from those actions. */
+export function warehouseReceiptCommonView(item:WarehouseReceiptWorkItem,scopesCurrent:boolean):WarehouseReceiptWorkItem{
+ const received=scopesCurrent?item.reconciliation?.received??null:null;
+ return {...item,received,balance:warehouseMaterialBalance({unit:item.basis.unit,invested:item.purchase.invested,
+  received,productionRequired:item.productionRequired,usableAfterOccupancy:null,dispatchRequired:null,dispatched:null})};
+}

@@ -1,3 +1,4 @@
+import {warehouseReceiptCutover} from '../../apps/api/src/production-platform/warehouse-receipt-cutover-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -2157,6 +2158,97 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     await work.getByRole('button',{name:'核对历史实收',exact:true}).click();
     await section.getByText(/实收 320 米，待收 200 米/).waitFor();
     expect((await h.db.query("SELECT count(*)::int AS n FROM digital_preparation_material_versions WHERE resource_id=$1 AND kind='fabric_receipt'",[baseline.orderId])).rows[0]!.n).toBe(2);
+   }finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+});
+
+(url?describe:describe.skip)('WH-02 original warehouse and fabric report pages',()=>{
+ it('submits the original report at 93.6m but rejects looking back to the 90m receipt',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-wh02-native-')),
+   {fullApp:true,workbenchNumberedCreation:true,orderTimeFlow:true,orderTimeModel:true});
+  const first='2026-11-26T17:05:00.000Z',second='2026-11-26T17:08:00.000Z';
+  try{
+   await prepareRewashSettings(h.f);
+   const {warehouse,merchandiser:merch,'sample-designer':designer}=h.f.people;
+   const root=h.f.root,scene=await h.f.scene(first),materialId=randomUUID(),style='TEST-WH02-'+randomUUID(),po=style+'-PO';
+   const requests=h.orderTimeRequests!,readiness=new ProductionReadinessService(h.db),instructions=new ProductionInstructionService(h.db,true);
+   const operation={kind:'direct_order' as const,route:{craftSteps:[],preshrink:false},input:DigitalOrderCreateSchema.parse({
+    customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(new Date(first)),
+    salesYear:2027,salesSeries:'P03',requiresColorMatching:false,primaryMerchandiserId:merch!.actorId,
+    lines:[{formalPoNo:po,color:'黑',customerWarehouseArrivalDate:'2027-06-21',sizes:[{size:'M',quantity:2}]}],
+   })};
+   const submitted=await h.f.runtime.run(scene,designer!,async()=>{
+    const check=await requests.check(designer!,operation);
+    return requests.submit(designer!,{operation,fingerprint:check.fingerprint,reason:'TEST actual original formal order path'},randomUUID());
+   });
+   const orderId=await h.f.runtime.run(scene,root,async()=>{
+    const read=await requests.read(root,submitted.requestId);
+    const applied=await requests.apply(root,read.requestId,{expectedVersion:read.version,fingerprint:read.check.fingerprint,acceptLate:true,overrides:{}},randomUUID());
+    expect(applied.state).toBe('applied');return applied.result!.orderId!;
+   });
+   const resource={kind:'order' as const,id:orderId};
+   const take=async(quantity:string,occurredAt:string)=>{
+    const [item]=await readiness.warehouseReceiptWork(warehouse!,resource);
+    await readiness.recordWarehouseReceiptBatch(warehouse!,resource,{kind:'fabric_receipt',scopeRef:item!.scopeRef,
+     materialId,lineId:item!.lineId,supplierId:item!.basis.supplierId,unit:'米',investment:item!.purchase.original,
+     materialFingerprint:item!.basis.adoptedRef,expectedReceiptVersion:item!.receiptVersion,quantity,occurredAt,
+     note:'TEST original physical warehouse batch',evidenceIds:[]},randomUUID());
+   };
+   await h.f.runtime.run(scene,root,async()=>{
+    const initial=await instructions.read(merch!,orderId);
+    const saved=await instructions.save(merch!,orderId,{expectedVersion:initial.version,orderVersion:initial.currentOrderVersion,
+     document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+      fabrics:[{id:materialId,name:'TEST 104 米实收',part:'本身',colors:{},remarks:''}]}},randomUUID());
+    const common={scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:first,sourceDocumentVersion:null,
+     recipientId:null,evidenceIds:[]};
+    const handover=await readiness.record(root,resource,{...common,kind:'design_handover',orderInstructionVersion:saved.version,
+     recipientId:merch!.actorId,quantities:[],note:'TEST adopted original receipt handover'},randomUUID());
+    await readiness.record(merch!,resource,{...common,kind:'material_investment',note:'TEST original 104m purchasing basis',
+     quantities:[{materialId,lineId:handover.lines[0]!.lineId,name:'TEST 104 米实收',quantity:104,unit:'米'}]},randomUUID());
+    await readiness.assign(root,resource,{expectedVersion:0,warehouseWorkerId:warehouse!.actorId,colorConfirmationWorkerId:null,
+     colorConfirmationRole:null,reason:'TEST actual assigned warehouse operator'},randomUUID());
+    await take('90',first);
+    const sha='a'.repeat(40),prior=await warehouseReceiptCutover(h.db,'status',sha,'test-operator',{resource});
+    await warehouseReceiptCutover(h.db,'activate',sha,'test-operator',{resource,sourceId:prior.sourceId,
+     expectedGeneration:prior.generation,requestId:randomUUID(),reason:'TEST approved 104m atomic cutover',
+     scopes:prior.scopes.map(({key,investment,basisRevision})=>({key,investment,basisRevision}))});
+   });
+   await h.f.advance(scene,second);
+   await h.f.runtime.run(scene,root,()=>take('3.6',second));
+   h.setCollectionScene(scene);
+   const tab=await h.open(warehouse!.actorId,1165,{},'/ui/digital-production?workspace=warehouse');
+   try{
+    const page=tab.page,queue=page.getByRole('region',{name:'待收料',exact:true});
+    await queue.getByRole('textbox',{name:'搜索订单ID、PO 或物料'}).fill(po);
+    const [found]=await Promise.all([page.waitForResponse(response=>response.url().includes('/warehouse/receipts?')&&response.url().includes(po)),
+     queue.getByRole('button',{name:'搜索',exact:true}).click()]);
+    expect(found.status(),await found.text()).toBe(200);
+    expect((await found.json()).items).toMatchObject([{received:{quantity:'93.6',unit:'米'},balance:{procurementRemaining:'10.4'}}]);
+    await queue.getByText(/104 米 \/ 93.6 米 \/ 10.4 米/).waitFor();
+    await queue.getByRole('link',{name:'实际收料',exact:true}).click();
+    await page.getByText(/已实收：93.6 米/).waitFor();
+    await page.goto(h.base+'/ui/digital-production?bulk='+orderId);
+    await page.getByText(/面料验布 · 达到验布门槛/).click();
+    const form=page.locator('.bulk-fabric-panel');
+    expect(await form.getByLabel('到仓时间（北京时间）').inputValue()).toBe('2026-11-27T01:05');
+    await form.getByLabel('本单面料').fill('TEST 本次原面料验布');
+    await form.getByLabel('检验结论').selectOption('不合格');
+    await form.getByLabel('检验情况').fill('TEST 不合格，禁止直接发布或开裁');
+    await form.getByLabel('验布完成（北京时间）').fill('2026-11-27T01:05');
+    await form.getByRole('checkbox',{name:/90 米/}).check();
+    const save=form.getByRole('button',{name:'保存验布报告',exact:true});
+    const submission=()=>page.waitForResponse(r=>r.url().endsWith('/fabric-report')&&r.request().method()==='POST');
+    const [early]=await Promise.all([submission(),save.click()]);
+    expect(early.status()).toBe(409);
+    expect(await early.text()).toContain('90%');
+    await form.getByLabel('验布完成（北京时间）').fill('2026-11-27T01:08');
+    await form.getByRole('checkbox',{name:/3.6 米/}).check();
+    const [accepted]=await Promise.all([submission(),save.click()]);
+    expect(accepted.status(),await accepted.text()).toBe(200);
+    expect((await accepted.json()).fabric).toMatchObject({usable:false,report:{
+     result:'不合格',arrivedAt:first,inspectedAt:second,receiptBatches:[expect.any(Object),expect.any(Object)],
+    }});
    }finally{await tab.close();}
   }finally{await h.writeEvidence();await h.dispose();}
  });

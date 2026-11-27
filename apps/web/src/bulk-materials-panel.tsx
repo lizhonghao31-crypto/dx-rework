@@ -10,7 +10,7 @@ export function BulkMaterialsPanel({sheet,busy,readonly,save,initiallyOpen=false
  const [selected,setSelected]=useState<Record<string,string>>({});
  const [inputs,setInputs]=useState<Record<string,string>>({}),[error,setError]=useState<string|null>(null);
  const m=sheet.materials;if(!m||!m.items.length&&!m.history.length)return null;
- const lotKey=(id:string,ref:{recordId:string;version:number})=>`lot:${id}:${ref.recordId}:${ref.version}`;
+ const lotKey=(id:string,ref:{recordId:string;version:number;quantityRowKey?:string|undefined})=>JSON.stringify([id,ref.recordId,ref.version,ref.quantityRowKey??null]);
  const optionKey=(item:{lineId:string|null;scopeRef:string})=>JSON.stringify([item.lineId,item.scopeRef]);
  const selectedScope=(item:typeof m.items[number])=>item.issueOptions?.find(option=>optionKey(option)===selected[item.id])??(item.issueOptions?.length===1?item.issueOptions[0]:undefined);
  const hasBoundLots=m.items.some(item=>item.issueOptions!==undefined);
@@ -44,8 +44,8 @@ export function BulkMaterialsPanel({sheet,busy,readonly,save,initiallyOpen=false
    {i.issueOptions.length>1&&<Selector label={`${i.name} 发料范围`} value={option?optionKey(option):''} options={i.issueOptions.map(row=>({value:optionKey(row),label:row.poLabel}))}
     onChange={value=>setSelected(current=>({...current,[i.id]:value}))} isDisabled={busy}/>}
    {option&&<div key={optionKey(option)}><small>{option.poLabel} · 采用需用 {option.required} {option.unit} · 本范围可发 {option.remaining} {option.unit}</small>
-    {option.lots.filter(lot=>Number(lot.remaining.quantity)>0).map(lot=>{const key=lotKey(i.id,lot.receipt);return <TextInput key={key}
-     label={`第 ${lot.receipt.version} 批实际发出（${option.unit}，本批可用 ${lot.remaining.quantity}）`} inputMode="decimal" value={inputs[key]??''}
+    {option.lots.filter(lot=>Number(lot.remaining.quantity)>0).map((lot,index)=>{const key=lotKey(i.id,lot.receipt);return <TextInput key={key}
+     label={`${lot.receipt.quantityRowKey?`原收布明细 ${index+1}`:`第 ${lot.receipt.version} 批`}实际发出（${option.unit}，本批可用 ${lot.remaining.quantity}）`} inputMode="decimal" value={inputs[key]??''}
      isDisabled={busy||option.remaining==='0'} onChange={value=>setInputs(current=>({...current,[key]:value}))}/>;})}
    </div>}
   </div>;

@@ -4,7 +4,7 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {WarehouseReceiptBatchSchema,type PreparationResource,type WarehouseReceiptWorkItem} from '@dx-rework/contracts/production-readiness';
+import {WarehouseReceiptBatchSchema,type PreparationResource,type WarehouseReceiptWorkItem,type WarehouseReceiptContinuation} from '@dx-rework/contracts/production-readiness';
 import {designerAstryxCss} from './designer-astryx.js';
 import {createClientRequestId} from './client-request-id.js';
 import {uploadDevelopmentMaterial} from './digital-development-upload.js';
@@ -36,10 +36,12 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   [correction,setCorrection]=useState(''),[quantity,setQuantity]=useState(''),[occurredAt,setOccurredAt]=useState(''),[note,setNote]=useState('');
  const [busy,setBusy]=useState(false),[reading,setReading]=useState(true),[readError,setReadError]=useState<Error|null>(null);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[file,setFile]=useState<File|null>(null),[evidence,setEvidence]=useState<string[]>([]);
+ const [legacy,setLegacy]=useState<(WarehouseReceiptContinuation&{rowIndex:number})|null>(null),[documentNumber,setDocumentNumber]=useState(''),
+  [documentLine,setDocumentLine]=useState(''),[proofAttachment,setProofAttachment]=useState('');
  const [reconciliationPending,setReconciliationPending]=useState(false);
  const active=useRef(true),inflight=useRef<AbortController|null>(null),operation=useRef(new SubmissionAttempt()),writing=useRef(false);
  const current=items?.find(item=>itemKey(item)===selected),prior=current?.activeBatches.find(batch=>String(batch.ref.version)===correction);
- const pending=operation.current.hasPending,dirty=Boolean(quantity||occurredAt||note||file||evidence.length);
+ const pending=operation.current.hasPending,dirty=Boolean(quantity||occurredAt||note||file||evidence.length||legacy||documentNumber||documentLine);
  useDigitalDetailNavigationGuard(dirty,busy||pending||reconciliationPending,writing,'本次收料尚未保存或结果待核，确认离开？');
  useForegroundWait(reading?`warehouse-receipts:${resource.id}`:undefined);
 
@@ -56,14 +58,18 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
  },[base,wanted]);
  useEffect(()=>{active.current=true;void reload();return()=>{active.current=false;inflight.current?.abort();};},[reload]);
 
- const clearInput=()=>{setCorrection('');setQuantity('');setOccurredAt('');setNote('');setFile(null);setEvidence([]);};
+ const clearInput=()=>{setLegacy(null);setDocumentNumber('');setDocumentLine('');setProofAttachment('');setCorrection('');setQuantity('');setOccurredAt('');setNote('');setFile(null);setEvidence([]);};
  const submit=async(retry=false)=>{
   if(writing.current||reconciliationPending||!current)return;
-  if(!retry&&(readError||reading||pending||file))return;
-  const when=prior&&occurredAt===asBeijingLocal(prior.occurredAt)?prior.occurredAt:asBusinessInstant(occurredAt);
+  if(!retry&&(readError||reading||pending||file||current.cutover?.mode==='safe_read'))return;
+  const exactTime=prior?.occurredAt??legacy?.input.occurredAt;
+  const when=exactTime&&occurredAt===asBeijingLocal(exactTime)?exactTime:asBusinessInstant(occurredAt);
+  const attachmentId=proofAttachment||(evidence.length===1?evidence[0]:undefined);
   const parsed=WarehouseReceiptBatchSchema.safeParse({kind:current.kind,scopeRef:current.scopeRef,materialId:current.materialId,lineId:current.lineId,
    supplierId:current.basis.supplierId,unit:current.basis.unit,investment:current.purchase.original,materialFingerprint:current.basis.adoptedRef,expectedReceiptVersion:current.receiptVersion,
-   ...(prior?{replaces:prior.ref}:{}),quantity,occurredAt:when,note,evidenceIds:evidence});
+   ...(prior?{replaces:prior.ref}:{}),...(legacy?{continuesReceipt:{resource:legacy.resource,key:legacy.key,rowIndex:legacy.rowIndex}}:{}),
+   ...(documentNumber&&documentLine&&attachmentId?{receiptEvidenceLine:{attachmentId,documentNumber,line:documentLine}}:{}),
+   quantity,occurredAt:when,note,evidenceIds:evidence});
   if(!retry&&!parsed.success){setError(parsed.error.issues[0]?.message??'请填写实际收料数量、时间和说明');return;}
   writing.current=true;setBusy(true);setError('');setNotice('');
   try{
@@ -93,7 +99,20 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   finally{writing.current=false;if(active.current)setBusy(false);}
  };
  const readOrWriteDisabled=busy||pending||reading||Boolean(readError);
- const disabled=readOrWriteDisabled||reconciliationPending;
+ const paused=current?.cutover?.mode==='safe_read',disabled=readOrWriteDisabled||Boolean(paused)||reconciliationPending;
+ const continueFrom=(request:WarehouseReceiptContinuation,rowIndex:number)=>{
+  const row=request.input.quantities[rowIndex];
+  clearInput();setLegacy({...request,rowIndex});setAtLegacy(request,row?String(row.quantity):'');
+ };
+ const pendingRows=current?.pendingReceipts?.flatMap(request=>request.remainingRows.flatMap(rowIndex=>{
+  const row=request.input.quantities[rowIndex];
+  return request.input.scopeRef===current.scopeRef&&(!row||row.unit===current.basis.unit&&
+   (!row.materialId||row.materialId===current.materialId)&&(!row.lineId||row.lineId===current.lineId))?[{request,row,rowIndex}]:[];
+ }))??[];
+ const setAtLegacy=(request:WarehouseReceiptContinuation,qty:string)=>{
+  setQuantity(qty);setOccurredAt(request.input.occurredAt?asBeijingLocal(request.input.occurredAt):'');
+  setNote(request.input.note);setEvidence(request.input.evidenceIds);
+ };
  return <section className="dx-production-panel dx-designer-astryx" aria-label="仓库实际收料">
   <style>{designerAstryxCss}</style>
   <header><Button type="button" label="返回来源" variant="secondary" onClick={onClose}/><h1>仓库实际收料</h1></header>
@@ -112,11 +131,23 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
     base={base} reload={reload} disabled={readOrWriteDisabled||dirty} onPendingChange={setReconciliationPending}/>
    <p>生产需用：{current.productionRequired?`${current.productionRequired.quantity} ${current.productionRequired.unit}`:'待核'} · 生产欠料：{current.balance.productionShortage??'待核'}</p>
    <p>原验布、预缩及质量放行保持原办理入口。</p>
+   {paused&&<p role="status">本采购范围暂停新增或订正，原批和原提交仍可查看。</p>}
+   {pendingRows.length>0?<section aria-label="原未过账收布">
+    <h3>原未过账收布</h3>
+    {pendingRows.map(({request,row,rowIndex})=><div key={request.resource.id+':'+request.key+':'+rowIndex}>
+     <p>{request.input.occurredAt?asBeijingLocal(request.input.occurredAt).replace('T',' '):'实际时间待核'} · {request.input.note}
+      {row&&` · 原第 ${rowIndex+1} 行 ${row.name} ${row.quantity} ${row.unit}`}</p>
+     <Button type="button" label={request.input.quantities.length>1?`继续原第 ${rowIndex+1} 行`:'继续这笔原提交'} variant="secondary"
+      isDisabled={disabled||dirty} onClick={()=>continueFrom(request,rowIndex)}/>
+    </div>)}
+    {legacy&&<p role="status">已带回原填写内容，核准本物料和实际批次后补齐凭证明细或选择准确订正目标。</p>}
+   </section>:null}
    <Selector label="选择新增或订正原批次" value={correction} options={[{value:'',label:'新增独立收料批次'},...current.activeBatches.map(row=>({
      value:String(row.ref.version),label:`订正第 ${row.ref.version} 批 · ${row.quantity.quantity} ${row.quantity.unit} · ${asBeijingLocal(row.occurredAt).replace('T',' ')}`,
     }))]} isDisabled={disabled} onChange={value=>{
      const row=current.activeBatches.find(item=>String(item.ref.version)===value);
-     setCorrection(value);setQuantity(row?.quantity.quantity??'');setOccurredAt(row?asBeijingLocal(row.occurredAt):'');setNote('');setFile(null);setEvidence([]);
+     setCorrection(value);
+     if(!legacy){setQuantity(row?.quantity.quantity??'');setOccurredAt(row?asBeijingLocal(row.occurredAt):'');setNote('');setFile(null);setEvidence([]);}
     }}/>
    <TextInput label={`本次数量（${current.basis.unit}）`} inputMode="decimal" value={quantity} onChange={setQuantity} isDisabled={disabled}/>
    <label>实际收料时间（北京时间）<input type="datetime-local" step={1} value={occurredAt} disabled={disabled}
@@ -126,6 +157,12 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
     value={file} onChange={value=>setFile(Array.isArray(value)?value[0]??null:value)}/>
    {file&&<Button type="button" label="上传所选凭证" isDisabled={disabled} onClick={()=>void upload()}/>}
    {evidence.length>0&&<p>原凭证已就绪 {evidence.length} 个</p>}
+   {current.cutover&&<>
+    {evidence.length>1&&<Selector label="原凭证明细所用文件" value={proofAttachment} options={evidence.map((id,i)=>({value:id,label:`凭证 ${i+1}`}))}
+     isDisabled={disabled} onChange={setProofAttachment}/>}
+    <TextInput label="原收货凭证号" value={documentNumber} onChange={setDocumentNumber} isDisabled={disabled}/>
+    <TextInput label="原收货凭证明细行" value={documentLine} onChange={setDocumentLine} isDisabled={disabled}/>
+   </>}
    <div className="development-technical-actions">
     <Button type="button" label="清空未提交输入" variant="secondary" isDisabled={disabled||!dirty} onClick={clearInput}/>
     <Button type="submit" label={prior?'保存本次订正':'保存实际收料'} variant="primary" isDisabled={disabled||!quantity||!occurredAt||!note.trim()||Boolean(file)}/>

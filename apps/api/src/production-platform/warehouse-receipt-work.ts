@@ -6,7 +6,9 @@ import {digitalForbidden} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {assignedWarehousePreparationResources} from './warehouse-assigned-resources.js';
-import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
+import {readWarehouseCutover,warehouseCutoverScopesCurrent} from './warehouse-receipt-cutover-repository.js';
+import {pendingLegacyWarehouseReceipts} from './warehouse-receipt-continuation.js';
+import {deriveWarehouseReceiptWork,warehouseReceiptCommonView} from './warehouse-receipt-projection.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
 import {readWarehouseReceiptReconciliations,reconciliationResourceKey} from './warehouse-receipt-reconciliation-repository.js';
 import {acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
@@ -26,13 +28,21 @@ export async function readWarehouseReceiptWork(db:Pool,actor:TrustedActorContext
     Boolean(await workbenchPreorderPublication(connection,resource.id)));
   const adopted=eligible&&resource.kind==='order'?(await readWarehouseInstructionDemands(connection,[resource.id])).get(resource.id):undefined;
   const resources=[resource,...(resource.kind==='order'&&state.sourceId?[{kind:'source' as const,id:state.sourceId}]:[])];
-  const rows=eligible&&includeReconciliation?await readWarehouseReceiptReconciliations(connection,resources):null;
+  const canonical=state.orderId?{kind:'order' as const,id:state.orderId}:resource;
+  const cutover=eligible?await readWarehouseCutover(connection,canonical,state.sourceId):null;
+  const pending=cutover?await pendingLegacyWarehouseReceipts(connection,actor.actorId,
+   [canonical,...(state.sourceId&&canonical.kind==='order'?[{kind:'source' as const,id:state.sourceId}]:[])]):[];
+  const rows=eligible&&(includeReconciliation||cutover)?await readWarehouseReceiptReconciliations(connection,resources):null;
   const bindings=rows?resources.flatMap(scope=>rows.get(reconciliationResourceKey(scope))??[]):undefined;
   const items=eligible?deriveWarehouseReceiptWork(state,businessNow().toISOString(),adopted,bindings):[];
   const context=acceptanceBusinessContext();
   if(context?.scenarioId&&await context.acceptsActor(actor.actorId))for(const item of items){
    if(item.reconciliation)item.reconciliation.allowOperatorAttestation=true;
   }
-  await connection.query('COMMIT');return items;
+  const current=cutover?warehouseCutoverScopesCurrent(items,cutover):true;
+  await connection.query('COMMIT');
+  return cutover?items.map(item=>item.kind!=='fabric_receipt'?item:{
+   ...warehouseReceiptCommonView(item,current),cutover:{generation:cutover.generation,mode:current?cutover.mode:'safe_read'},pendingReceipts:pending,
+  }):items;
  }catch(error){await connection.query('ROLLBACK');throw error;}finally{connection.release();}
 }

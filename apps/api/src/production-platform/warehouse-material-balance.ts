@@ -115,7 +115,7 @@ export type WarehouseReceiptBasis = Readonly<{
   supplierId: string | null;
   unit: string;
 }>;
-type OriginalReceiptRef = Readonly<{recordId:string;version:number}>;
+type OriginalReceiptRef = Readonly<{recordId:string;version:number;quantityRowKey?:string|undefined}>;
 export type WarehouseReceiptMovement = Readonly<{
   basis:WarehouseReceiptBasis;
   original:OriginalReceiptRef;
@@ -126,7 +126,7 @@ export type WarehouseReceiptMovement = Readonly<{
 }>;
 
 function receiptRef(ref:OriginalReceiptRef){
- return ref.recordId&&Number.isSafeInteger(ref.version)&&ref.version>0?JSON.stringify([ref.recordId,ref.version]):null;
+ return ref.recordId&&Number.isSafeInteger(ref.version)&&ref.version>0?JSON.stringify([ref.recordId,ref.version,ref.quantityRowKey??null]):null;
 }
 
 /** Select one physical/adopted stream from authorized native facts. A shared

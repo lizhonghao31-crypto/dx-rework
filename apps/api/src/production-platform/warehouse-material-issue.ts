@@ -45,11 +45,30 @@ export function materialIssuesOnScope(history:readonly MaterialIssueEvent[],inst
  return out;
 }
 
+/** Reconciled historical quantities do not share the root of another row
+ * on the same document. Replacing their comparison batch invalidates the
+ * binding, so the correction cannot silently lose recorded occupations. */
+export function legacyMaterialIssueMovements(item:WarehouseReceiptWorkItem,replaces?:WarehouseLotIssue['allocations'][number]['receipt']){
+ const reconciliation=item.reconciliation;
+ if(!reconciliation?.received)return [];
+ return reconciliation.activeBatches.flatMap(row=>{
+  const quantityRowKey=row.quantityRowKey;
+  if(!quantityRowKey||replaces&&reconciliation.confirmed.some(binding=>binding.quantityRowKey===quantityRowKey&&
+   binding.ref.recordId===row.ref.recordId&&binding.ref.version===row.ref.version&&
+   binding.batch.recordId===replaces.recordId&&binding.batch.version===replaces.version))return [];
+  return [{basis:item.basis,original:{...row.ref,quantityRowKey},quantity:row.quantity,occurredAt:row.occurredAt,valid:true}];
+ });
+}
+
 export function ledgerForMaterialIssue(item:WarehouseReceiptWorkItem,history:readonly PreparationMaterialFact[],issues:readonly WarehouseLotIssue[]|null,
  usableFabricLots?:readonly BulkFabricBatchRef[]){
  if(!item.received&&!usableFabricLots)return null;
- const ledger=projectWarehouseIssueAllocation(item.basis.unit,warehouseReceiptMovements(history,item.basis),issues);
- return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots.filter(lot=>lot.materialId===item.materialId).map(lot=>lot.receipt)):ledger;
+ const movements=warehouseReceiptMovements(history,item.basis);
+ const legacy=legacyMaterialIssueMovements(item);
+ const ledger=projectWarehouseIssueAllocation(item.basis.unit,[...movements,...legacy],issues);
+ return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots
+  .filter(lot=>lot.materialId===item.materialId&&(lot.lineId===undefined||lot.lineId===item.lineId))
+  .map(lot=>({...lot.receipt,...(lot.quantityRowKey?{quantityRowKey:lot.quantityRowKey}:{})}))):ledger;
 }
 
 type IssueApproval={sourcing_case_id:string;sourcing_decision_id:string;sourcing_approval_snapshot_id:string;supplier_id:string};
@@ -75,7 +94,14 @@ export async function readMaterialIssueDestination(db:PreparationDB,orderId:stri
  * make stock ready. Fabrics require the separate, original quality evidence. */
 export function materialIssueOptions(state:ProductionReadinessState,active:ActiveWarehouseInstructionDemand,history:readonly MaterialIssueEvent[],asOf:string,
  destination:(lineId:string|null)=>boolean,poLabels?:ReadonlyMap<string,string>,usableFabricLots?:readonly BulkFabricBatchRef[]){
- const view=deriveWarehouseReceiptWork(state,asOf,active);
+ const view=deriveWarehouseReceiptWork(state,asOf,active).map(item=>{
+  if(item.kind!=='fabric_receipt'||!state.warehouseReceiptCutover)return item;
+  const projected=state.warehouseReceiptFacts?.find(row=>row.kind==='fabric_receipt'&&row.materialId===item.materialId&&
+   row.lineId===item.lineId&&row.scopeRef===item.scopeRef&&row.basis.unit===item.basis.unit&&row.basis.supplierId===item.basis.supplierId&&
+   row.basis.adoptedRef===item.basis.adoptedRef&&row.basis.resource.id===item.basis.resource.id);
+  if(!projected?.reconciliation)return {...item,received:null};
+  return {...item,reconciliation:projected.reconciliation,received:projected.reconciliation.received};
+ });
  const result=new Map<string,{item:WarehouseReceiptWorkItem;ledger:NonNullable<ReturnType<typeof ledgerForMaterialIssue>>;
   option:NonNullable<BulkMaterialsView['items'][number]['issueOptions']>[number]}[]>();
  for(const row of active.demand.rows){

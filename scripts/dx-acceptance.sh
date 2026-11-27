@@ -6,9 +6,12 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 tool_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 command="${1:-help}"
 case "$command" in
-  install|update|diagnose) ;;
-  *) echo 'Usage: dx-acceptance update [40-character SHA] | diagnose [40-character SHA] | install'; exit 64 ;;
+  install|update|diagnose|warehouse-receipt) ;;
+  *) echo 'Usage: dx-acceptance update [40-character SHA] | diagnose [40-character SHA] | install | warehouse-receipt <status|activate|safe-read> <SHA> <scope-file>'; exit 64 ;;
 esac
+if [[ "$command" == warehouse-receipt ]]; then
+  [[ $# == 4 && "$2" =~ ^(status|activate|safe-read)$ && "$3" =~ ^[0-9a-f]{40}$ ]] || exit 64
+fi
 if [[ "$command" == update || "$command" == diagnose || "$command" == install ]]; then
   [[ $# -le 2 ]] || exit 64
   [[ -z "${2:-}" || "$2" =~ ^[0-9a-f]{40}$ ]] || exit 64
@@ -96,16 +99,28 @@ if [[ "$command" == install ]]; then
   echo 'Installed. Run: dx-acceptance update'
   exit 0
 fi
-[[ $# -le 2 ]] || exit 64
+[[ "$command" == warehouse-receipt || $# -le 2 ]] || exit 64
 [[ -f "$tool_root/TOOL_SHA" && "$(stat -c %U "$tool_root")" == root ]]
 [[ "$tool_root" == /opt/dx-rework-acceptance-tools/* ]]
 requested="${2:-}"
+if [[ "$command" == warehouse-receipt ]]; then requested="$3"; fi
 [[ -z "$requested" || "$requested" =~ ^[0-9a-f]{40}$ ]] || exit 64
 src=/opt/dx-rework/source
 root=/opt/dx-rework-acceptance
 [[ -d "$src/.git" && -d "$root/shared" && ! -L "$root" ]]
 exec 8>/run/lock/dx-acceptance-update.lock
 flock -n 8 || { echo 'Another Acceptance update is running.' >&2; exit 1; }
+if [[ "$command" == warehouse-receipt ]]; then
+  [[ -f "$root/locks/release.lock" && ! -L "$root/locks/release.lock" ]] || exit 1
+  [[ -f "$4" && ! -L "$4" && "$(stat -c %u "$4")" == 0 ]] || { echo 'Use a regular root-owned approval file.' >&2; exit 1; }
+  mode_num="$(stat -c %a "$4")"
+  (( (8#$mode_num & 8#022) == 0 )) || { echo 'Approval file may not be writable by others.' >&2; exit 1; }
+  [[ "$(stat -c %s "$4")" -le 262144 ]] || exit 64
+  exec 9>"$root/locks/release.lock"
+  flock -n 9 || { echo 'Acceptance release lock is held.' >&2; exit 1; }
+  runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" DX_REWORK_LOCK_FD=9     bash "$tool_root/scripts/deploy/warehouse-receipt-acceptance.sh" "$tool_root" "$2" "$3" "${SUDO_USER:-root}" < "$4" 7<&-
+  exit $?
+fi
 git_source() { runuser -u dxrework -- git -C "$src" "$@"; }
 origin="$(git_source remote get-url origin)"
 [[ "$origin" == git@github.com:lizhonghao31-crypto/dx-rework.git || "$origin" == https://github.com/lizhonghao31-crypto/dx-rework.git ]]

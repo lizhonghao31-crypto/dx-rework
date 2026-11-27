@@ -13,7 +13,7 @@ const plain=(amount:bigint)=>{
  const fraction=digits.slice(-6).replace(/0+$/,'');
  return digits.slice(0,-6)+(fraction?'.'+fraction:'');
 };
-const ref=(value:WarehouseLotRef)=>JSON.stringify([value.recordId,value.version]);
+const ref=(value:WarehouseLotRef)=>JSON.stringify([value.recordId,value.version,value.quantityRowKey??null]);
 
 /** A correction is a replacement of the same physical lot, not a new
  * entitlement to ship. Occupations retain the original ref for audit. A
