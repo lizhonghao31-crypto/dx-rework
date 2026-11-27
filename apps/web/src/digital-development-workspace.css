@@ -1,8 +1,8 @@
 .dx-production-ui .development-workspace,.dx-production-ui .pattern-workspace{display:grid;gap:18px;min-width:0}
 .development-view-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
 .development-create-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:end}
-.development-create:where(:not(.development-create-wizard)) :is(input,select),.development-create .development-create-readonly-input,.bulk-fabric-panel :is(input,select,textarea),.development-workspace .dx-production-filters input,.pattern-workspace .dx-production-filters input{border:1px solid var(--production-border,#dce3eb);border-radius:8px;background:#fff;color:var(--production-text,#132653);padding:10px 12px;min-height:42px;font:inherit;width:100%}
-.development-create:where(:not(.development-create-wizard)) :is(input,select),.development-create .development-create-readonly-input{box-sizing:border-box}
+.development-create:where(:not(.development-create-wizard)) :is(input,select):where(:not(.dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input), .dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input) *)),.development-create .development-create-readonly-input,.bulk-fabric-panel :is(input,select,textarea),.development-workspace .dx-production-filters input:where(:not(.dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input), .dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input) *)),.pattern-workspace .dx-production-filters input{border:1px solid var(--production-border,#dce3eb);border-radius:8px;background:#fff;color:var(--production-text,#132653);padding:10px 12px;min-height:42px;font:inherit;width:100%}
+.development-create:where(:not(.development-create-wizard)) :is(input,select):where(:not(.dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input), .dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input) *)),.development-create .development-create-readonly-input{box-sizing:border-box}
 .development-create:not(.development-create-wizard) .development-create-grid label{margin:0!important}.development-create:not(.development-create-wizard) .development-create-grid select{width:100%}.development-create .pattern-actions{margin-top:12px}
 .development-create fieldset{border:1px solid var(--production-border,#dce3eb);border-radius:10px;padding:16px;margin:12px 0}
 .development-create>form>fieldset{border:0;padding:0}
@@ -639,3 +639,15 @@
 @media(max-width:600px) {
   .development-create-wizard .development-code-field {grid-column:auto}
 }
+
+.development-creation-columns{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start;gap:var(--dx-space-4,14px)}
+.development-creation-columns>section,.development-creation-followup{min-width:0;border:1px solid var(--production-border,#dce3eb);border-radius:8px;padding:var(--dx-space-4,14px)}
+.development-creation-columns h2,.development-creation-followup h2{margin:0 0 var(--dx-space-3,10px);font-size:inherit}
+.development-creation-entry p{margin:0 0 var(--dx-space-4,14px)}
+.development-creation-draft-rows{list-style:none;margin:var(--dx-space-3,10px) 0 0;padding:0}
+.development-creation-draft-rows>li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--dx-space-3,10px);padding-block:8px;border-block-start:1px solid var(--production-border,#dce3eb);overflow-wrap:anywhere}
+.development-creation-draft-main{display:grid;justify-items:start;gap:2px;min-width:0}
+.development-creation-draft-main>span{font-size:12px;color:var(--production-muted,#44536b)}
+.development-creation-draft-main>button{text-align:start;max-inline-size:100%;white-space:normal}
+.development-creation-followup{margin-block-start:var(--dx-space-4,14px)}
+@media(max-width:780px){.development-creation-columns{grid-template-columns:minmax(0,1fr)}}

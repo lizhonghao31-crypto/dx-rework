@@ -1323,6 +1323,10 @@
     {
       "version": "0316_sourcing_contract_generation_attempts",
       "checksum": "6cb9d8181ba45e3118195d5f91d636687e35f1a530687c041ce685ef3c886d56"
+    },
+    {
+      "version": "0317_development_draft_discard_ownership",
+      "checksum": "efa65d62b825972ac82f9db2c4ef4aac4c15b47f3c2ff6e29dabfb54b4730a87"
     }
   ]
 }

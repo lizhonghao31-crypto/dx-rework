@@ -185,8 +185,8 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
       dependencies.service.bindDraftNumber(await actor(request),id(request,'sourceId'),parse(OrderNumberContextSchema,request.body),key(request)));
   }
   app.get("/digital-production/sources/drafts",async request=>{
-    const trusted=await actor(request),query=parse(DigitalPageSchema.safeExtend({view:cockpitZ.literal('count').optional()}),request.query);
-    return dependencies.service.developmentDrafts(trusted,query.page,query.search,query.view==='count');
+    const trusted=await actor(request),query=parse(DigitalPageSchema.safeExtend({view:cockpitZ.literal('count').optional(),bucket:cockpitZ.enum(['drafts','followup']).optional()}),request.query);
+    return dependencies.service.developmentDrafts(trusted,query.page,query.search,query.view==='count',query.bucket);
   });
   app.get("/digital-production/sources/drafts/receipt",async request=>dependencies.service.developmentDraftReceipt(await actor(request),key(request)));
   app.delete('/digital-production/sources/:sourceId/draft',async request=>{
