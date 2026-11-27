@@ -6,6 +6,7 @@ type Ref=WarehouseReceiptMovement['original'];
 type Purchase=WarehouseReceiptWorkItem['purchase'];
 type Basis=WarehouseReceiptWorkItem['basis'];
 const key=(ref:Ref)=>JSON.stringify([ref.recordId,ref.version]);
+export const warehouseLegacyQuantityIdentity=(ref:Ref,quantityRowKey:string)=>JSON.stringify([ref.recordId,ref.version,quantityRowKey]);
 const same=(a:Ref,b:Ref)=>a.recordId===b.recordId&&a.version===b.version;
 const time=(value:string|null)=>value?Date.parse(value):NaN;
 const original=(row:PreparationMaterialFact)=>({recordId:row.recordId,version:row.version});
@@ -26,7 +27,7 @@ export function warehouseLegacyReceiptHeads(history:readonly PreparationMaterial
 
 export function projectWarehouseReceiptReconciliation(input:{
  basis:Basis;purchase:Purchase;history:readonly PreparationMaterialFact[];movements:readonly WarehouseReceiptMovement[];
- bindings:readonly ReconciliationBinding[];asOf:string;
+ bindings:readonly ReconciliationBinding[];asOf:string;attributedElsewhere?:ReadonlySet<string>;
 }):NonNullable<WarehouseReceiptWorkItem['reconciliation']>{
  const {basis,purchase,history,asOf}=input,cutoff=time(asOf);
  const native=input.movements.filter(row=>!Number.isFinite(time(row.occurredAt))||time(row.occurredAt)<=cutoff);
@@ -45,9 +46,11 @@ export function projectWarehouseReceiptReconciliation(input:{
    if(value.quantity<=0||value.materialId&&value.materialId!==basis.materialId||
     value.lineId&&basis.lineId&&value.lineId!==basis.lineId)continue;
    const ref=original(prior),rowKey=preparationInvestmentRowKey(value);
-   const rowBindings=relevant.filter(row=>same(row.legacy.ref,ref)&&row.legacy.quantityRowKey===rowKey);
+   if(input.attributedElsewhere?.has(warehouseLegacyQuantityIdentity(ref,rowKey)))continue;
+   const rowBindings=input.bindings.filter(row=>same(row.legacy.ref,ref)&&row.legacy.quantityRowKey===rowKey);
    const binding=rowBindings.reduce<ReconciliationBinding|undefined>((old,row)=>!old||row.generation>old.generation?row:old,undefined);
-   const counterpart=binding&&effective.find(row=>same(row.original,binding.batch));
+   const ownsBinding=binding&&relevant.includes(binding);
+   const counterpart=ownsBinding&&effective.find(row=>same(row.original,binding.batch));
    const attachmentIds=binding?.proof.mode==='document'?[...new Set([binding.proof.legacy.attachmentId,binding.proof.batch.attachmentId])]:[];
    const identity=binding?.proof.mode==='document'?JSON.stringify([binding.proof.legacy.documentNumber,binding.proof.legacy.line]):undefined;
    const compatible=binding&&counterpart&&binding.state==='confirmed'&&binding.proofValid&&
@@ -62,8 +65,9 @@ export function projectWarehouseReceiptReconciliation(input:{
     if(binding.relation==='independent'&&prior.occurredAt)valid.push({ref,quantityRowKey:rowKey,quantity,occurredAt:prior.occurredAt});
    }else pending.push({ref,quantityRowKey:rowKey,quantity:{quantity:String(value.quantity),unit:value.unit},occurredAt:prior.occurredAt,
     reason:!prior.valid?prior.invalidReasons.join('；')||'原收料证据失效':value.unit!==basis.unit?'原收料单位与采购单位不同':
+     binding?.state==='confirmed'&&!ownsBinding?'该原数量行另有尚待核实的归属，请在原采购范围核对':
      binding?.state==='confirmed'?'原批、采购版本或核对凭证已变化，请重新核对':'缺少原采购归属及批次关系的有效凭证',
-    evidenceIds:prior.evidenceIds,generation:binding?.generation??0,...(binding?{bindingState:binding.state}:{})});
+    evidenceIds:prior.evidenceIds,generation:binding?.generation??0,...(binding?{bindingState:binding.state==='confirmed'&&!ownsBinding?'other_scope':binding.state}:{})});
   }
  }
  // A different warehouse stream cannot silently complete an unavailable or
@@ -78,7 +82,9 @@ export function projectWarehouseReceiptReconciliation(input:{
  const first=activeBatches.filter(row=>Number(row.quantity.quantity)>0)
   .sort((a,b)=>time(a.occurredAt)-time(b.occurredAt)||key(a.ref).localeCompare(key(b.ref)))[0]??null;
  return {asOf,basisRevision:preparationHash({basis,purchase,native,legacy:priorHeads.map(row=>[original(row),row.valid,row.occurredAt,row.state,row.quantities]),
-  bindings:relevant.map(row=>[row.legacy,row.generation,row.state,row.proofValid]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))}),
+  bindings:input.bindings.filter(row=>priorHeads.some(prior=>same(original(prior),row.legacy.ref)))
+   .map(row=>[row.legacy,row.generation,row.state,row.proofValid,row.materialId,row.lineId])
+   .sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),attributedElsewhere:[...input.attributedElsewhere??[]].sort()}),
   verified,received,pending,confirmed,nativeNeedsReview,activeBatches,firstArrival:!received?null:first,
   procurementRemaining:warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired:null,
    usableAfterOccupancy:null,dispatchRequired:null,dispatched:null}).procurementRemaining,

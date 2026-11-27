@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-  "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
+  "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
   "risk": "full",
   "rules": [
     {
@@ -57,7 +57,7 @@
       ],
       "initialization": "沿原查询的数据快照，以仓库授权范围批量读取1、15、50 项，影子投影不驱动现有流程。",
       "dateAndPermission": "精确物料、PO或共享、物理单位、原采购和证据版本一致才可累计；使用业务asOf，不预读后来批次，不跨范围补量。",
-      "expectation": "20已核加300待核分别体现；证实有两个有效批才得到320、余200，低于468。104米时序只认当时的90和后来93.6，既有验布入口此PR不切换。",
+      "expectation": "20已核加300待核分别体现；证实有两个有效批才得到320、余200，低于468。104米时序只认当时的90和后来93.6，同 PO 的配布仅在主布归属可证实时解开待核，撤销后恢复待核；既有验布入口此PR不切换。",
       "checks": [
         "wh01-unit",
         "wh01-pg",
@@ -97,19 +97,19 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
-      "startedAt": "2026-11-27T07:48:23Z",
-      "endedAt": "2026-11-27T07:48:28Z",
+      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
+      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
+      "startedAt": "2026-11-27T07:54:13Z",
+      "endedAt": "2026-11-27T07:54:17Z",
       "log": "/workspace/scratch/wh01-evidence/unit.log",
-      "logSha256": "1b9ead9e5145df99dce315ec309d9199f63833a564bba3330b50b2d52312cec9",
+      "logSha256": "7b803ca875164396f553b92b7a531b509e31ffaef0aa4f4c6c46e67cc69357a6",
       "passed": 38,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5c73f9fd1aeeacf2e3e26d621e2856219d73c96d293d70e413281234e5e779c2"
+          "sha256": "28fe2f22727a3ec89e5518fad7a50b9006ced5f41298472554e5e365d3833dd7"
         }
       ],
       "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
@@ -121,19 +121,19 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
-      "startedAt": "2026-11-27T07:48:23Z",
-      "endedAt": "2026-11-27T07:49:07Z",
+      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
+      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
+      "startedAt": "2026-11-27T07:54:13Z",
+      "endedAt": "2026-11-27T07:54:57Z",
       "log": "/workspace/scratch/wh01-evidence/pg.log",
-      "logSha256": "d73d6e5d30dac7b751864ad76a7c277b6e3262ca49850d62ebbdb15f10b718a0",
+      "logSha256": "ca21205613ed839527e3e70ba90552a446bc2d3f4e92f85b9134a823fbe98b86",
       "passed": 4,
       "failed": 0,
       "skipped": 96,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "43e22f9965a7a115ca0404ca0a06f8c6f7eb8031bb917bc24996b3624e944d64"
+          "sha256": "799bef1b25ab8f240bd0f338cc313ff886ed2725c20615c896da4abbe12b70c5"
         }
       ],
       "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
@@ -145,12 +145,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
-      "startedAt": "2026-11-27T07:48:23Z",
-      "endedAt": "2026-11-27T07:49:03Z",
+      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
+      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
+      "startedAt": "2026-11-27T07:54:13Z",
+      "endedAt": "2026-11-27T07:54:54Z",
       "log": "/workspace/scratch/wh01-evidence/static.log",
-      "logSha256": "710fca14d6efb74ad961f78ef036aa27c40cac3e50a478b6b6585466e6133164",
+      "logSha256": "e4fca4add67d59bf3bc852704a36ca828c00efbaed6574e686f9560bca411b42",
       "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node --test scripts/ci/test-execution-contract.test.mjs; npx eslint --max-warnings=0 <changed TS/TSX>; git diff --check",
       "context": "Node 22.22.2, local exact workspace candidate, original static migration and execution compatibility validation."
     },
@@ -159,17 +159,17 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
+      "testedHead": "cde713d189ac6deab6de241dc7caf0621529997d",
+      "sourceFingerprint": "7f2f330ef559b17cd9a436b550b8a88371d6c4ffc59fc32cb7a816ed6c33284d",
+      "startedAt": "2026-11-27T07:54:55Z",
+      "endedAt": "2026-11-27T07:54:57Z",
+      "log": "/workspace/scratch/wh01-evidence/timing.log",
+      "logSha256": "390700a340611681565ea09eb02277c6cb66cf1c05babe8389be3ea4dfedeb8b",
       "passed": 2,
       "failed": 0,
       "skipped": 0,
       "command": "node scripts/acceptance/time-site-inventory.mjs && node --test --test-name-pattern='shared time-source inventory|reviewed responsibility sources' scripts/ci/pr-gate-controller.test.mjs",
-      "context": "Exact local source unchanged from first review; updated only five time-site inventory entries. Both protocol assertions that failed in first Light passed after manifest update.",
-      "testedHead": "bd551a149ad96b742d3640efe9f701702fb8cc50",
-      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
-      "log": "/workspace/scratch/wh01-evidence/timing.log",
-      "logSha256": "5d9f59dba39589183c7d62fa39193fb5b089e1ef88f43c42acb1cb66f9a9b86b",
-      "startedAt": "2026-11-27T07:51:44Z",
-      "endedAt": "2026-11-27T07:51:45Z"
+      "context": "Exact candidate, explicit timing-site source identity, two original protocol assertions initially blocked in first Light."
     }
   ]
 }

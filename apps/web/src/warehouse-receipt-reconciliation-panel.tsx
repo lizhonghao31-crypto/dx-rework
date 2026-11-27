@@ -112,7 +112,7 @@ export function WarehouseReceiptReconciliationPanel({item,resource,base,reload,d
     options={proof.pending.map(row=>({value:JSON.stringify([row.ref,row.quantityRowKey]),label:`${meter(row.quantity)} · 第 ${row.ref.version} 版 · ${row.occurredAt??'发生时间待核'}`}))}/>}
    {chosen?.bindingState==='confirmed'&&<Button type="button" variant="secondary" label="撤销已失效的原核对" isDisabled={lock||!note.trim()}
     onClick={()=>start('revoke',chosen)}/>}
-   {chosen&&chosen.bindingState!=='confirmed'&&<>
+   {chosen&&chosen.bindingState!=='confirmed'&&chosen.bindingState!=='other_scope'&&<>
     <Selector label="对照原批次" value={batchKey} onChange={setBatchKey} isDisabled={lock}
      options={item.activeBatches.filter(row=>Number(row.quantity.quantity)>0).map(row=>({value:refKey(row.ref),label:`第 ${row.ref.version} 批 · ${meter(row.quantity)}`}))}/>
     {counterpart&&<Link href={originalUrl(resource,counterpart.ref)} target="_blank" rel="noreferrer">查看所选对照批原件</Link>}

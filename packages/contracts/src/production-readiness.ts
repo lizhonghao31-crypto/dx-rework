@@ -102,7 +102,7 @@ type ReconciledWarehouseBatch={ref:WarehouseReceiptRef;quantityRowKey?:string;qu
 export type WarehouseReceiptReconciliationProjection={
  allowOperatorAttestation?:boolean;
  asOf:string;basisRevision:string;verified:WarehouseQuantity|null;received:WarehouseQuantity|null;
- pending:{ref:WarehouseReceiptRef;quantityRowKey:string;quantity:WarehouseQuantity;occurredAt:string|null;reason:string;evidenceIds:string[];generation:number;bindingState?:'confirmed'|'revoked'}[];
+ pending:{ref:WarehouseReceiptRef;quantityRowKey:string;quantity:WarehouseQuantity;occurredAt:string|null;reason:string;evidenceIds:string[];generation:number;bindingState?:'confirmed'|'revoked'|'other_scope'}[];
  confirmed:{ref:WarehouseReceiptRef;quantityRowKey:string;generation:number;batch:WarehouseReceiptRef;
   relation:'independent'|'same_batch';quantity:WarehouseQuantity;attachmentIds:string[]}[];
  nativeNeedsReview:boolean;activeBatches:ReconciledWarehouseBatch[];firstArrival:ReconciledWarehouseBatch|null;
