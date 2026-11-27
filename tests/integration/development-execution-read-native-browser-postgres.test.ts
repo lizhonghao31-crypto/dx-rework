@@ -45,6 +45,7 @@ import {DigitalQuotationService} from "../../apps/api/src/production-platform/qu
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
+import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {DevelopmentDocumentSchema,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
@@ -2063,11 +2064,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return page.locator('details.designer-order-area:has(> #designer-order-shipping)');
   };
   let sawWaiting=false;
+  configureTimelineAdoption(f.db,'fixed_v2');
   try{
    const [made]=await exerciseDevelopmentSlaNative(f.db,new RootAwareTodoProjectionService(new TodoService(f.db)),f.root,
     f.people['pattern-room-worker']!.actorId,undefined,[['无','免洗']],{fixedCraftSteps:[],quotationAuthor:designer,
      onRouteComplete:async(sourceId,kind)=>{
       if(kind!=='development_tail_check')return;
+      expect((await f.db.query('SELECT route_schema_version FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision DESC LIMIT 1',[sourceId])).rows[0].route_schema_version).toBe(2);
       const shipping=await open(sourceId);
       await shipping.locator('summary').getByText('待设计确认',{exact:true}).waitFor();
       const early=(await execution.read(f.root,sourceId)).tasks.find(task=>task.taskKind==='development_shipping')!;
@@ -2131,7 +2134,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await tableRow.getByText(tracking,{exact:false}).waitFor();
    await page.screenshot({path:join(evidence,'ui03-native-designer-workspace.png'),fullPage:true});
   }catch(error){await writeFile(join(evidence,'ui03-shipping-failure.txt'),await page.locator('body').innerText());throw error;}
-  finally{await context.close();}
+  finally{configureTimelineAdoption(f.db,'legacy');await context.close();}
+ });
+
+ it('keeps the original independent first-round shipping available for a legacy designer',async()=>{
+  const {id}=await prepareDevelopment(),designer=f.people['sample-designer']!,context=await browser.newContext({viewport:{width:1165,height:1000}});
+  await context.addCookies([{name:'dx_rework_session',value:await loginRole('sample-designer'),url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  try{
+   const original=await execution.read(designer,id),task=original.tasks.find(row=>row.taskKind==='development_shipping')!;
+   expect(task).toMatchObject({state:'ready',routeVersion:1,assigneeId:designer.actorId});
+   expect(original.tasks.some(row=>row.taskKind==='development_confirmation'&&row.state==='completed')).toBe(false);
+   expect(original.shippingDisplay).toEqual({state:'ready'});
+   await page.goto(base+`/ui/digital-production?workspace=designer&section=workspace&development=${id}`);
+   const area=page.locator('details.designer-order-area:has(> #designer-order-shipping)');
+   await area.locator('summary').getByText('待寄出',{exact:true}).waitFor();
+   await area.locator('summary').click();
+   const date=beijingCalendarDate(businessNow()),tracking='TEST-LEGACY-SHIP';
+   await area.getByLabel('实际寄出日期',{exact:false}).fill(date);
+   await area.getByRole('textbox',{name:'快递号',exact:false}).fill(tracking);
+   await area.getByRole('button',{name:'记录寄出',exact:true}).click();
+   await area.locator('summary').getByText('已寄出',{exact:true}).waitFor();
+   const history=(await execution.read(designer,id)).routeFacts.filter(fact=>fact.kind==='寄出');
+   expect(history).toMatchObject([{taskId:task.taskId,routeVersion:1,payload:{sentDate:date,trackingNo:tracking}}]);
+  }finally{await context.close();}
  });
 
  it.each(['lost-ack','server-error'] as const)('recovers the original signed shipping submission with one receipt after %s',async(fault)=>{

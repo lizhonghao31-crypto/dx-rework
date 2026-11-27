@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import type {DevelopmentShippingDisplay} from '@dx-rework/contracts/digital-development-workspace';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {readJourneySelectionAccess} from './journey-selection-access.js';
+import {legacyIndependentShippingSql} from './development-legacy-shipping.js';
 
 // The list only needs the exact current source/round's original route facts,
 // not the complete execution view or a new record for each list row.
@@ -12,7 +13,7 @@ export async function readWorkbenchShipping(db:PoolClient,actor:TrustedActorCont
  const access=await readJourneySelectionAccess(db,actor,scopes);
  const visible=items.filter(item=>item.sourceId&&access.resources.get(`source:${item.sourceId}`)?.taskParentTechnical);
  if(!visible.length)return result;
- type Row={id:string;round:number;published:boolean;state:string|null;assigned:boolean;lifecycle:'paused'|'cancelled'|null;tailDone:boolean;designDone:boolean;swatch:boolean;sentDate:string|null;trackingNo:string|null};
+ type Row={id:string;round:number;published:boolean;state:string|null;assigned:boolean;lifecycle:'paused'|'cancelled'|null;tailDone:boolean;designDone:boolean;legacyIndependent:boolean|null;swatch:boolean;sentDate:string|null;trackingNo:string|null};
  const {rows}=await db.query<Row>(`WITH input AS (
    SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(id text,"sourceId" uuid,"round" int)
   ), requested AS (
@@ -28,12 +29,12 @@ export async function readWorkbenchShipping(db:PoolClient,actor:TrustedActorCont
    EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
     WHERE a.source_id=x."sourceId" AND t.route_version=x.round AND t.state='completed' AND a.task_kind=ANY($2::text[])) AS "tailDone",
    EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-    WHERE a.source_id=x."sourceId" AND t.route_version=x.round AND t.state='completed' AND a.task_kind=ANY($3::text[])) AS "designDone",
+    WHERE a.source_id=x."sourceId" AND t.route_version=x.round AND t.state='completed' AND a.task_kind=ANY($3::text[])) AS "designDone",task.legacy_independent AS "legacyIndependent",
    f.payload->>'sentDate' AS "sentDate",f.payload->>'trackingNo' AS "trackingNo"
   FROM requested x LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind='source' AND l.resource_id=x."sourceId"
   LEFT JOIN digital_development_revision_sources revision ON revision.source_id=x."sourceId"
   LEFT JOIN digital_development_rounds r ON r.source_id=x."sourceId" AND r.round_number=x.round
-  LEFT JOIN LATERAL (SELECT t.task_id,t.state,a.assignee_id FROM digital_production_task_access a
+  LEFT JOIN LATERAL (SELECT t.task_id,t.state,a.assignee_id,${legacyIndependentShippingSql} AS legacy_independent FROM digital_production_task_access a
     JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=x."sourceId" AND t.route_version=x.round
     AND a.task_kind='development_shipping' ORDER BY (t.state<>'cancelled') DESC,t.created_at DESC,t.task_id DESC LIMIT 1) task ON true
   LEFT JOIN digital_development_route_facts f ON f.source_id=x."sourceId" AND f.route_version=x.round AND f.task_id=task.task_id
@@ -41,7 +42,7 @@ export async function readWorkbenchShipping(db:PoolClient,actor:TrustedActorCont
  for(const row of rows){
   if(row.sentDate&&row.trackingNo)result.set(row.id,{state:'sent',sentDate:row.sentDate,trackingNo:row.trackingNo,round:row.round});
   else result.set(row.id,{state:row.lifecycle??(row.state==='cancelled'?'cancelled':row.state==='completed'?'unknown':row.swatch&&!row.state?'not_applicable':
-   !row.published?'unknown':!row.designDone?(row.tailDone?'wait_design':'wait_tail'):
+   !row.published?'unknown':!row.designDone&&!row.legacyIndependent?(row.tailDone?'wait_design':'wait_tail'):
    row.state==='ready'?(row.assigned?'ready':'unassigned'):'unknown')});
  }
  return result;

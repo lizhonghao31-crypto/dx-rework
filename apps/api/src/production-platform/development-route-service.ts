@@ -25,6 +25,7 @@ import {fixedDevelopmentCutter} from './development-fixed-cutting.js';
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import {developmentNativeRoute} from './development-native-route.js';
 import {fixedTaskPosition} from './fixed-craft-steps.js';
+import {legacyIndependentShippingSql} from './development-legacy-shipping.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
 export type DevelopmentRouteAction={actualTime?:DevelopmentOccurrence|undefined;measurements?:DevelopmentActualMeasurements|undefined;making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
 export class DevelopmentRouteService {
@@ -158,8 +159,10 @@ export class DevelopmentRouteService {
      input={...input,nextAssigneeId:recipient};
    }
    if(task.task_kind==='development_shipping'){
+     const independent=await db.query(`SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
+       WHERE a.source_id=$1 AND t.task_id=$2 AND ${legacyIndependentShippingSql}`,[sourceId,task.task_id]);
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
-     const route:readonly string[]=task.route_version===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):
+     const route:readonly string[]=independent.rowCount?[]:task.route_version===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):
       (await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]?.route_nodes??[];
      const predecessors=route.filter(kind=>kind==='development_confirmation'||kind==='development_patch_confirmation');
      if(predecessors.length){
