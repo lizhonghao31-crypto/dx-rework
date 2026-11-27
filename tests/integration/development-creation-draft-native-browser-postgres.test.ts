@@ -448,6 +448,55 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
  });
 });
 
+(url?describe:describe.skip)('UI-01 upgrade of the exact legacy empty creation shell',()=>{
+ it('recovers only the original eligible shell across 0316 to 0317 from the designer draft box',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui01-draft-upgrade-')),{fullApp:true,throughVersion:'0316_sourcing_contract_generation_attempts'});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true);
+   const forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),style='TEST-UI01-SHELL-'+randomUUID();
+   // Match the original pre-0296 insertion, which omitted this field and
+   // therefore retains NULL after the migration sets a default for new sources.
+   // Never edit a source row or its evidence to force historical eligibility.
+   await h.db.query('ALTER TABLE digital_production_sources ALTER COLUMN draft_reserved DROP DEFAULT');
+   let legacy:Awaited<ReturnType<typeof identity.createSource>>;
+   try{legacy=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:null},randomUUID());}
+   finally{await h.db.query('ALTER TABLE digital_production_sources ALTER COLUMN draft_reserved SET DEFAULT false');}
+   const sourceId=legacy.sourceId;
+   const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:initialDevelopmentDocument()},randomUUID());
+   const original=async()=>(await h.db.query(`SELECT e.id,e.actor_id,l.is_draft,a.adoption_id,p.revision,p.route_nodes,p.plan_json->'anchors' AS anchors
+    FROM digital_production_sources s JOIN digital_development_source_lifecycle l USING(source_id)
+    JOIN audit_events e ON e.entity_id=s.source_id::text AND e.action='digital_source_created'
+    JOIN digital_preparation_rule_adoptions a ON a.resource_kind='source' AND a.resource_id=s.source_id
+    JOIN digital_development_sla_plans p ON p.source_id=s.source_id AND p.event_key=e.id::text
+    WHERE s.source_id=$1`,[sourceId])).rows;
+   const before=await original();
+   expect(before).toEqual([{id:expect.any(String),actor_id:designer.actorId,is_draft:true,adoption_id:expect.any(String),revision:1,route_nodes:[],anchors:{}}]);
+   const eligible=async()=>(await h.db.query('SELECT digital_development_draft_discardable($1,$2,$3) AS eligible',[sourceId,designer.actorId,draft.version])).rows[0]?.eligible;
+   expect(await eligible()).toBe(false);
+   const version='0317_development_draft_discard_ownership';
+   const sql=await readFile(new URL('../../apps/api/migrations/'+version+'.sql',import.meta.url),'utf8');
+   const client=await h.db.connect();
+   try{await client.query('BEGIN');await client.query(sql);await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[version,createHash('sha256').update(sql).digest('hex')]);await client.query('COMMIT');}
+   catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   expect(await eligible()).toBe(true);
+   const tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+   try{
+    const box=tab.page.getByRole('region',{name:'开发草稿箱',exact:true});
+    await box.getByRole('textbox',{name:'搜索草稿款号',exact:true}).fill(style);
+    await box.getByRole('button',{name:`删除草稿 ${style}`,exact:true}).click();
+    const response=tab.page.waitForResponse(r=>r.request().method()==='DELETE'&&r.url().endsWith(`/sources/${sourceId}/draft`));
+    await tab.page.getByRole('alertdialog',{name:'删除开发草稿',exact:true}).getByRole('button',{name:'删除',exact:true}).click();
+    const deleted=await response;expect(deleted.status(),await deleted.text()).toBe(200);
+    await tab.page.getByText('开发草稿已删除。',{exact:true}).waitFor();
+   }finally{await tab.close();}
+   expect(await original()).toEqual(before);
+   expect(await eligible()).toBe(false);
+   await writeFile(join(h.evidence,'ui01-legacy-draft-facts.json'),JSON.stringify({sourceId,draftVersion:draft.version,owner:designer.actorId,
+    lifecycle:'draft',historicalEvidence:['source_creation','initial_preparation_rule','sla_revision_1_no_route_no_anchors'],beforeEligible:false,afterMigrationEligible:true,deleteResult:200,originalRecordsUnchanged:true},null,2));
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+});
+
 (url?describe.sequential:describe.skip)('original designer workspace parent and pure child draft across actual browser reload',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
@@ -456,10 +505,43 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   const tab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page;
-   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
-   expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(1);
+   await page.getByRole('heading',{name:'开发草稿箱',exact:true}).waitFor();
+   expect(await page.getByRole('heading',{name:'开发草稿箱',exact:true}).count()).toBe(1);
    expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(1);
    expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/workspaces/designer')).toHaveLength(0);
+   const drafts=page.getByRole('region',{name:'开发草稿箱',exact:true}),entry=page.getByRole('region',{name:'新建开发订单入口',exact:true});
+   const bounds=async()=>{const [left,right]=await Promise.all([drafts.boundingBox(),entry.boundingBox()]);return {left:left!,right:right!};};
+   const wide=await bounds();
+   expect(wide.left.x+wide.left.width).toBeLessThan(wide.right.x);
+   expect(Math.abs(wide.left.y-wide.right.y)).toBeLessThan(2);
+   const search=page.getByRole('textbox',{name:'搜索草稿款号',exact:true});
+   await search.focus();
+   expect(await search.evaluate(input=>input===document.activeElement)).toBe(true);
+   const cdp=await tab.context.newCDPSession(page);
+   try{
+    await cdp.send('DOM.enable');await cdp.send('CSS.enable');
+    const doc=await cdp.send('DOM.getDocument');
+    const {nodeId}=await cdp.send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'.development-search-field input'});
+    const [matching,computed]=await Promise.all([cdp.send('CSS.getMatchedStylesForNode',{nodeId}),cdp.send('CSS.getComputedStyleForNode',{nodeId})]);
+    const matched=matching.matchedCSSRules?.map(rule=>rule.matchingSelectors.map(index=>rule.rule.selectorList.selectors[index]?.text))?.flat()??[];
+    expect(matched.some(selector=>selector?.includes('dx-production-refined')&&selector.includes('.development-create-wizard'))).toBe(false);
+    const read=(name:string)=>computed.computedStyle.find(item=>item.name===name)?.value;
+    const control=await search.evaluate(input=>{
+      const owner=input.closest('.dx-development-astryx-control')!;
+      const read=(element:Element)=>{const style=getComputedStyle(element);return {classes:element.className,border:style.borderTopWidth,boxShadow:style.boxShadow,outline:style.outlineStyle};};
+      return {owner:read(owner),input:read(input),label:owner.parentElement?.textContent};
+    });
+    expect(read('border-top-width')).toBe('0px');
+    expect(control.owner.boxShadow!=='none'||control.owner.outline!=='none'||control.owner.border!=='0px').toBe(true);
+    expect(JSON.stringify(control)).not.toMatch(/Required|Select a date|Choose file/);
+    await writeFile(join(h.evidence,'ui01-creation-home-style.json'),JSON.stringify({wide,matched,control},null,2));
+    await page.screenshot({path:join(h.evidence,'ui01-creation-home-wide.png')});
+   }finally{await cdp.detach();}
+   await page.setViewportSize({width:700,height:860});
+   const narrow=await bounds();
+   expect(narrow.left.y+narrow.left.height).toBeLessThan(narrow.right.y);
+   await page.screenshot({path:join(h.evidence,'ui01-creation-home-narrow.png')});
+   await page.setViewportSize({width:1165,height:900});
    const trigger=page.getByRole('button',{name:'新建开发订单',exact:true});
    await trigger.click();
    const types=page.getByRole('dialog',{name:'请选择创建类型'});
@@ -485,7 +567,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const list=page.locator('.development-list-panel');
    await list.waitFor();
    expect(await list.locator('thead th').allTextContents()).toContain('款图 / 款号');
-   expect(await page.getByRole('heading',{name:'开发草稿',exact:true}).count()).toBe(0);
+   expect(await page.getByRole('heading',{name:'开发草稿箱',exact:true}).count()).toBe(0);
    expect(await page.getByRole('button',{name:'新建开发订单',exact:true}).count()).toBe(0);
    expect(await page.getByRole('columnheader',{name:'操作',exact:true}).count()).toBe(0);
   }finally{await tab.context.close();}
@@ -537,7 +619,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.locator('.development-list-panel').waitFor();
    expect(await code.count()).toBe(0);
    await page.getByRole('link',{name:'创建开发单',exact:true}).click();
-   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'开发草稿箱',exact:true}).waitFor();
    expect(await code.count()).toBe(0);
    await openNewWizard(page,'纯开发');
    expect(await code.inputValue()).toBe('');
@@ -546,7 +628,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(secondView).not.toBe(firstView);
    await page.getByRole('button',{name:'返回列表',exact:true}).click();
    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
-   const draftList=page.locator('[aria-label="开发草稿"]'),draftSearch=page.getByRole('textbox',{name:'搜索草稿款号',exact:true});
+   const draftList=page.getByRole('region',{name:'开发草稿箱',exact:true}),draftSearch=page.getByRole('textbox',{name:'搜索草稿款号',exact:true});
    const firstDraft=draftList.getByRole('button',{name:`继续预下单草稿 · ${first}`,exact:true});
    const secondDraft=draftList.getByRole('button',{name:`继续纯开发草稿 · ${second}`,exact:true});
    await firstDraft.waitFor();await secondDraft.waitFor();
@@ -771,14 +853,32 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.screenshot({path:join(h.evidence,'pure-create-reload-'+mode+'.png'),fullPage:true});
   }catch(error){await writeFile(join(h.evidence,'pure-create-reload-'+mode+'-failure.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.context.close();}
  });
- it('discards only the design owner’s current ordinary draft without deleting its original data',async()=>{
+ it('discards ordinary drafts only for their owner or Root without deleting original evidence',async()=>{
   const actor=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true);
   const forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),style='TEST-DRAFT-DISCARD-'+randomUUID();
   const input={developmentType:'头版' as const,designStyleNo:style,temporaryStyleNo:null,customerCode:null};
   const key=randomUUID(),{sourceId}=await identity.createSource(actor,input,key,true);
   const attachmentId=await h.f.image(actor);
   const saved=await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),files:[{attachmentId,kind:'款图'}]}},randomUUID());
-  await expect(identity.discardDevelopmentDraft(h.f.root,sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:404});
+  const crossDraft=await identity.createSource(actor,{...input,designStyleNo:style+'-ROOT'},randomUUID(),true);
+  const foreign=await h.dedicated('sample_designer');
+  const stranger=await h.open(foreign.id,1165,{},'/ui/digital-production?workspace=designer&section=create');
+  try{
+   const denied=await stranger.context.request.delete(h.base+`/api/digital-production/sources/${crossDraft.sourceId}/draft`,
+    {headers:{'idempotency-key':randomUUID()},data:{expectedVersion:0}});
+   expect([403,404],await denied.text()).toContain(denied.status());
+  }finally{await stranger.context.close();}
+  const rootTab=await h.open(h.f.root.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+  try{
+   await rootTab.page.getByRole('button',{name:`删除草稿 ${style}-ROOT`,exact:true}).click();
+   const deleting=rootTab.page.waitForResponse(response=>response.request().method()==='DELETE'&&new URL(response.url()).pathname.endsWith(`/sources/${crossDraft.sourceId}/draft`));
+   await rootTab.page.getByRole('alertdialog',{name:'删除开发草稿',exact:true}).getByRole('button',{name:'删除',exact:true}).click();
+   const deleted=await deleting;expect(deleted.status(),await deleted.text()).toBe(200);
+   await rootTab.page.getByText('开发草稿已删除。',{exact:true}).waitFor();
+   const evidence=(await h.db.query(`SELECT x.actor_id,e.actor_id AS audit_actor,e.after_state->>'ownerId' AS owner
+     FROM digital_development_draft_discards x JOIN audit_events e ON e.id=x.audit_event_id WHERE x.source_id=$1`,[crossDraft.sourceId])).rows[0];
+   expect(evidence).toEqual({actor_id:h.f.root.actorId,audit_actor:h.f.root.actorId,owner:actor.actorId});
+  }finally{await rootTab.context.close();}
   await expect(identity.discardDevelopmentDraft(actor,sourceId,0,randomUUID())).rejects.toMatchObject({statusCode:409});
   const another=await identity.createSource(actor,{...input,designStyleNo:style+'-PUBLISHED'},randomUUID());
   await expect(identity.discardDevelopmentDraft(actor,another.sourceId,0,randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -869,7 +969,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect((await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows).toEqual([{source_id:sheet.sourceId}]);
    const boundPath=`/api/digital-production/sources/${sheet.sourceId}/development`,countPuts=()=>h.requests.filter(row=>row.session===tab.session&&row.path===boundPath&&row.method==='PUT').length;
    const reopen=async()=>{await page.getByRole('button',{name:'返回列表',exact:true}).click();
-    await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'开发草稿箱',exact:true}).waitFor();
     await page.getByRole('button',{name:style,exact:true}).click();
    };
    for(const [index,reload]of [false,true,false].entries()){
@@ -890,7 +990,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    const service=new DigitalDevelopmentService(h.db,true,h.patternOrders),latest=await service.read(h.f.root,sheet.sourceId);
    await service.save(h.f.root,sheet.sourceId,{expectedVersion:latest.version,document:{...latest.document!,instructions:'TEST newer authorized edit'}},randomUUID());
-   await page.getByRole('button',{name:'继续本页保存的草稿',exact:true}).click();
+   await page.getByRole('region',{name:'开发草稿箱',exact:true}).getByRole('button',{name:style,exact:true}).click();
    await page.getByRole('alert').filter({hasText:'原开发档案版本已变化'}).waitFor();expect(await save.count()).toBe(0);expect(countPuts()).toBe(4);
    expect(h.requests.filter(row=>row.session===tab.session&&row.path==='/api/digital-production/sources/drafts'&&row.method==='POST')).toHaveLength(1);
    expect((await h.db.query('SELECT version,document FROM digital_development_documents WHERE source_id=$1',[sheet.sourceId])).rows[0]).toMatchObject({version:5,document:{instructions:'TEST newer authorized edit'}});
@@ -1168,7 +1268,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   await initialTab.context.close();
   const {context,page,session}=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
-   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'开发草稿箱',exact:true}).waitFor();
    for(const index of [0,1,0]){
     await page.getByRole('button',{name:styles[index]!,exact:true}).click();
     expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(styles[index]);
@@ -1220,11 +1320,13 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const pending=await requests.submit(actor,{operation,fingerprint:check.fingerprint,reason:'TEST first publication requires this original decision'},randomUUID());
    expect(pending.state).toBe('pending');
    await expect(forms.publish(actor,sourceId,sheet.version,randomUUID(),operation.input.patternOrder)).rejects.toMatchObject({code:'ORDER_TIME_REQUEST_REQUIRED'});
-   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items[0]).toMatchObject({sourceId,approvalState:'pending'});
+   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items).toEqual([]);
+   expect((await identity.developmentDrafts(actor,1,designStyleNo,false,'followup')).items[0]).toMatchObject({sourceId,approvalState:'pending',canDiscard:false});
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
    const returned=await requests.close(actor,pending.requestId,{expectedVersion:pending.version,reason:'TEST return before original publication'},randomUUID(),'returned');
    expect(returned.state).toBe('returned');
-   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items[0]).toMatchObject({sourceId,approvalState:'returned'});
+   expect((await identity.developmentDrafts(actor,1,designStyleNo)).items).toEqual([]);
+   expect((await identity.developmentDrafts(actor,1,designStyleNo,false,'followup')).items[0]).toMatchObject({sourceId,approvalState:'returned',canDiscard:false});
    await expect(forms.publish(actor,sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version+1000})).rejects.toMatchObject({code:'PRICE_CHANGED'});
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
    expect(await new OrderTimePlanRepository(h.db).current({kind:'source',id:sourceId})).toBeNull();
@@ -1444,7 +1546,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     const response=await route.fetch(),body=await response.json();
     await route.fulfill({response,json:{...body,serverToday:later}});
    });
-   await page.getByRole('heading',{name:'开发草稿',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'开发草稿箱',exact:true}).waitFor();
    await page.getByRole('button',{name:designStyleNo,exact:true}).click();
    const saved=page.waitForResponse(response=>response.url().endsWith(`/sources/${sourceId}/development`)&&response.request().method()==='PUT');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();

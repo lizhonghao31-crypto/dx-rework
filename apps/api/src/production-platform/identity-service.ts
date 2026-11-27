@@ -277,28 +277,33 @@ export class DigitalProductionIdentityService {
       return result;
     },client=>this.assertOrderNumberAdministrator(client,actor,true));
   }
-  async developmentDrafts(actor:TrustedActorContext,page:number,search:string,countOnly=false){
+  async developmentDrafts(actor:TrustedActorContext,page:number,search:string,countOnly=false,bucket:'drafts'|'followup'='drafts'){
     this.assertSourceCreation(actor);
     return this.readSnapshot(async db=>{
-    if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const root=isRootActor(actor);
+    if(root?!(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed
+      :!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
+    const from=`FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
+      LEFT JOIN digital_development_documents d USING(source_id)`;
+    const discardable='digital_development_draft_discardable(s.source_id,s.created_by,coalesce(d.version,0))';
     const scope=`WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(db,"source","s.source_id")}
-      AND ($1 OR s.created_by=$2) AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)`;
-    const params=[isRootActor(actor),actor.actorId,search];
-    const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total FROM digital_production_sources s
-      JOIN digital_development_source_lifecycle lifecycle USING(source_id) ${scope}`,params)).rows[0]!.total;
+      AND ($1 OR s.created_by=$2) AND ($3='' OR strpos(lower(coalesce(s.design_style_no,'')),lower($3))>0
+        OR strpos(lower(coalesce(s.temporary_style_no,'')),lower($3))>0)
+      AND ${bucket==='drafts'?discardable:'NOT '+discardable}`;
+    const params=[root,actor.actorId,search];
+    const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total ${from} ${scope}`,params)).rows[0]!.total;
     if(countOnly)return {items:[],page,total,hasNext:page*15<total};
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
-      coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState",
-      CASE WHEN s.created_by=$2 THEN digital_development_draft_discardable(s.source_id,$2,coalesce(d.version,0)) ELSE false END AS "canDiscard",
+      coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState",approval.request_id AS "approvalRequestId",
+      ${bucket==='drafts'?'true':'false'} AS "canDiscard",
       CASE WHEN d.document->'customerOrderDraft'->>'withOrder'='false' THEN 'development'
        WHEN d.document->'customerOrderDraft'->>'withOrder'='true' THEN
         CASE WHEN d.document->'customerOrderDraft'->>'stage'='preorder' AND d.document->'customerOrderDraft'->>'wizardConfirmPreorder' IS DISTINCT FROM 'true'
          THEN 'preorder' ELSE 'certain_order' END END AS "kind"
-      FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
-      LEFT JOIN digital_development_documents d USING(source_id)
+      ${from}
       LEFT JOIN LATERAL (
-        SELECT state FROM digital_order_time_requests request WHERE request.source_id=s.source_id
+        SELECT state,request_id FROM digital_order_time_requests request WHERE request.source_id=s.source_id
           AND request.operation_json->>'kind'='development_publish'
         ORDER BY request.updated_at DESC,request.request_id DESC LIMIT 1
       ) approval ON true
@@ -310,10 +315,10 @@ export class DigitalProductionIdentityService {
     this.assertSourceCreation(actor);
     return this.command(actor,`discard-development-draft:${sourceId}`,key,{expectedVersion},async db=>{
       const source=await this.visibleSource(db,actor,sourceId,true);
-      if(source.created_by!==actor.actorId)fail('开发草稿不存在或无权删除',404);
-      if(!(await db.query('SELECT digital_development_draft_discardable($1,$2,$3) AS allowed',[sourceId,actor.actorId,expectedVersion])).rows[0]?.allowed)
-        fail('仅可删除本人未发布、未关联且没有执行记录的当前版本草稿，请刷新核对');
-      const eventId=await this.audit(db,actor,'digital_development_draft_discarded',sourceId,{version:expectedVersion},{discarded:true,historyRetained:true});
+      if(!isRootActor(actor)&&source.created_by!==actor.actorId)fail('开发草稿不存在或无权删除',404);
+      if(!(await db.query('SELECT digital_development_draft_discardable($1,$2,$3) AS allowed',[sourceId,source.created_by,expectedVersion])).rows[0]?.allowed)
+        fail('仅可删除未发布、未关联且没有执行记录的当前版本草稿，请刷新核对');
+      const eventId=await this.audit(db,actor,'digital_development_draft_discarded',sourceId,{version:expectedVersion},{discarded:true,historyRetained:true,ownerId:source.created_by});
       await db.query('INSERT INTO digital_development_draft_discards(source_id,actor_id,draft_version,audit_event_id) VALUES($1,$2,$3,$4)',
         [sourceId,actor.actorId,expectedVersion,eventId]);
       // The command name scopes the authorized idempotency receipt to the original

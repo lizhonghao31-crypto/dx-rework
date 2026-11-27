@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {clearCreationDraft,listCreationDrafts,readCreationDraft,selectCreationDraft,writeCreationDraft,type CreationDraftRecord,type CreationDraftSnapshot} from '../../apps/web/src/development-creation-draft.js';
-import {developmentDraftRows,type SavedDevelopmentDraft} from '../../apps/web/src/development-draft-list.js';
+import {developmentDraftRows,pendingDevelopmentCommands,type SavedDevelopmentDraft} from '../../apps/web/src/development-draft-list.js';
 
 const actorId='11111111-1111-4111-8111-111111111111',viewId='22222222-2222-4222-8222-222222222222',sourceId='33333333-3333-4333-8333-333333333333',identity={actorId,environment:'https://TEST.invalid/acceptance/'};
 function storage(){const rows=new Map<string,string>();return {getItem:(key:string)=>rows.get(key)??null,setItem:(key:string,value:string)=>{rows.set(key,value);},removeItem:(key:string)=>{rows.delete(key);},rows};}
@@ -11,23 +11,23 @@ function snapshot():CreationDraftSnapshot{
 }
 const draft=():CreationDraftRecord=>({schemaVersion:1,viewId,identity,open:true,phase:'draft',snapshot:snapshot()});
 
-describe('single development draft list',()=>{
- const saved:SavedDevelopmentDraft={sourceId,designStyleNo:'TEST-PERSISTED',version:2,updatedAt:'2026-11-25T14:00:00.000Z',approvalState:'pending'};
+describe('separate ordinary development drafts and original command recovery',()=>{
+ const saved:SavedDevelopmentDraft={sourceId,designStyleNo:'TEST-PERSISTED',version:2,updatedAt:'2026-11-25T14:00:00.000Z',approvalState:null,canDiscard:true};
  const bound:CreationDraftRecord={...draft(),phase:'bound',sourceId,version:1};
  const pending:CreationDraftRecord={...draft(),phase:'pending',sourceId,beforeVersion:1,
   original:{path:`sources/${sourceId}/development`,method:'PUT',key:'TEST-pending-save',body:'{}'}};
- it('merges recovery using immutable source ID and prioritizes the unresolved original without replacing server metadata',()=>{
+ it('keeps a bound snapshot only on its ordinary server row and separates an in-flight command on the same source',()=>{
   const separate={...draft(),viewId:actorId,snapshot:{...snapshot(),form:{...snapshot().form,designStyleNo:saved.designStyleNo!}}};
-  expect(developmentDraftRows([saved],[bound,separate,pending],'persisted',1)).toEqual([
-   {kind:'saved',saved,local:pending},{kind:'local',local:separate},
-  ]);
+  expect(developmentDraftRows([saved],[bound,separate,pending],'persisted',1)).toEqual([{kind:'local',local:separate}]);
+  expect(pendingDevelopmentCommands([bound,separate,pending])).toEqual([pending]);
   expect(developmentDraftRows([saved],[bound],'persisted',2)).toEqual([{kind:'saved',saved,local:bound}]);
+  expect(developmentDraftRows([], [bound], 'persisted',1)).toEqual([]);
  });
- it('filters local drafts with the same submitted search and keeps an unresolved result findable on a later page',()=>{
-  const local=draft(),unbound={...pending,sourceId:null,beforeVersion:null,original:{path:'sources/drafts',method:'POST' as const,key:'TEST-pending',body:'{}'}};
+ it('keeps an unrelated pending result findable without blocking all saved drafts',()=>{
+  const local=draft(),unbound={...pending,viewId:actorId,sourceId:null,beforeVersion:null,original:{path:'sources/drafts',method:'POST' as const,key:'TEST-pending',body:'{}'}};
   expect(developmentDraftRows([], [local], '  test 未提交 ', 1)).toEqual([{kind:'local',local}]);
-  expect(developmentDraftRows([], [local], '无关', 1)).toEqual([]);
-  expect(developmentDraftRows([], [local,{...unbound,viewId:actorId}], '无关', 3)).toEqual([{kind:'local',local:{...unbound,viewId:actorId}}]);
+  expect(developmentDraftRows([saved], [local,unbound], '无关', 3)).toEqual([{kind:'saved',saved}]);
+  expect(pendingDevelopmentCommands([local,unbound])).toEqual([unbound]);
  });
 });
 

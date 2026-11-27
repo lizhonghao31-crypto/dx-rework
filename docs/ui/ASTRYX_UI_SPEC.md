@@ -278,7 +278,7 @@ W1必须交付填完整的“官方默认→现有计算样式→推荐映射→
 | DXUI-ACT-002 操作层级 | 同一决策区一个主要提交；普通secondary，危险destructive | 全部primary；新增确认/菜单层数；onClick和clickAction重复写入 | 原业务确有多个独立决策区 | 原一击“办理”保留 / 先三点再办理 | 原操作路径+请求；[O-button] |
 | DXUI-ACT-003 图标 | 官方Icon与IconButton；动作有具体label | 只有图标无名称、emoji代替状态、引第二图标UI系统 | 业务专属图标统一theme注册 | label“下载凭证” / label“按钮” | 键盘/读屏；[O-icon]/[O-iconbutton] |
 | DXUI-ACT-004 无权/禁用/只读 | 后端能力决定入口；readonly保值；disabled说明原因 | 禁用冒充无记录；只在前端藏按钮当鉴权 | 保密资源沿原404/403契约，不额外泄露存在性 | 无权不返回资料 / 用透明CSS藏敏感字段 | 权限拒绝原测试；[D-access] |
-| DXUI-FORM-001 字段与提交 | 原生form+FormLayout；保name、required、序列化与原提交器 | 只换外观丢FormData；UI自行添加必填；默认按钮误提交 | 原即改即存设置保持原模式 | 单次提交到原命令 / 点击取消触发submit | [O-form]/[O-button]/[D-document-editor] |
+| DXUI-FORM-001 字段与提交 | 原生form+FormLayout；保name、required、序列化与原提交器。达兴开发表单必填标 `*`、选填标 `（选填）`，自动生成、只读和展示不标；由原校验和可访问语义决定，不重复显示组件英文提示 | 只换外观丢FormData；UI自行添加必填；默认按钮误提交 | 原即改即存设置保持原模式 | 单次提交到原命令 / 点击取消触发submit | [O-form]/[O-button]/[D-document-editor] |
 | DXUI-FORM-002 文本/只读 | TextInput/TextArea；标签持久可见；只读仍可选择复制 | placeholder替代label；disabled代替所有readonly | 密码/保密字段按原规则 | 只读数量可读全 / 一串灰字不可访问 | [O-textinput] |
 | DXUI-FORM-003 已有实体 | Selector或Typeahead；值是真实ID/实体，远程查询沿原权限 | 自由文本冒充客户/工厂ID；默认允许创建 | 原业务明确支持建议/创建，保独立入口和权限 | 选到supplierId / 填“某厂”当已选 | [O-selector]/[O-typeahead]/[D-search-select] |
 | DXUI-FORM-004 多选/全选 | MultiSelector/CheckboxList；说明当前页或全部匹配 | 全选偷偷包含不可见/不合格对象；筛选后保错对象 | 跨页选择有原业务协议与确认摘要 | 明确“本页15项” / 显示15项却操作全部 | [O-multiselector]+服务端资格 |
@@ -291,6 +291,12 @@ W1必须交付填完整的“官方默认→现有计算样式→推荐映射→
 
 表单中UI的“允许输入”不等于后端业务“允许提交”。两层都需保留，不能以官方组件拥有min/max就删除原服务校验。
 
+
+开发工作台迁移边界：旧原生规则不得匹配已接入的 Astryx 控件外框和内部
+input/select/textarea。共享开发控件标注所有权，直接使用的官方控件以其实际根节点
+为边界，作用域只限开发工作台。保留官方单层焦点可见指示与中文提示，不能在全站
+补 reset、强行去掉边框/焦点，或把英文元素藏起来。通过原浏览器核对实际样式来源；
+未迁旧控件保留，原分页总数、跳页及续读继续按 DXUI-PAGE-005 执行。
 
 ## 7. 表格、筛选与全系统分页
 
