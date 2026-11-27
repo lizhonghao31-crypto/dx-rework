@@ -250,8 +250,8 @@ async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    await chooseDevelopmentCreation(page,'纯开发');
    await page.getByLabel('设计款号',{exact:true}).fill(style);
-   for(const [field,option] of [['性别（必填）','男装'],['板类（必填）','头版']] as const){
-    await page.getByRole('combobox',{name:field,exact:true}).click();
+   for(const [field,option] of [[/^性别/,'男装'],[/^板类/,'头版']] as const){
+    await page.getByRole('combobox',{name:field}).click();
     await page.getByRole('option',{name:option,exact:true}).click();
    }
    const craftGroup=page.getByRole('group',{name:'工艺',exact:true});
@@ -259,25 +259,37 @@ async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,
    await page.getByRole('button',{name:'下一步',exact:true}).click();
    await craftGroup.waitFor();
    await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).check();
-   await page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).press('Enter');
+   await craftGroup.getByRole('combobox',{name:'特殊工艺',exact:true}).press('Enter');
    await page.getByRole('option',{name:craft.definition.name,exact:true}).click();
+   for(const [index,name] of [ '印花',craft.definition.name ].entries()){
+    await craftGroup.getByRole('combobox',{name:new RegExp('^第 '+(index+1)+' 站工艺')}).press('Enter');
+    await page.getByRole('option',{name,exact:true}).click();
+   }
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
    let id='';
    await expect.poll(async()=>{id=(await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows[0]?.source_id??'';return id?(await forms.read(designer,id)).version:0;}).toBe(1);
    const first=await forms.read(designer,id);
    expect(first.timelineSchemaVersion).toBe(2);expect(first.independentRevisions).toBe(false);
    expect(first.document!.craft).toBe('特殊工艺');
+   expect(first.document!.craftOrderConfirmed).toBe(true);
    expect(first.document!.craftSteps!.map(s=>s.craftKind)).toEqual(['printing','special']);
    expect((await h.db.query('SELECT 1 FROM digital_development_sla_plans WHERE source_id=$1',[id])).rowCount).toBe(0);
-   await expect.poll(()=>page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).count()).toBe(1);
+   await expect.poll(()=>page.getByRole('combobox',{name:/^(工艺)?特殊工艺$/}).count()).toBe(1);
    expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
-   await page.goto(h.base+'/ui/digital-production?development='+id);
-   await page.getByRole('combobox',{name:'工艺特殊工艺',exact:true}).waitFor();
-   await page.getByRole('heading',{name:'工艺要求',exact:true}).waitFor();
-   expect(await page.getByRole('navigation',{name:'单据章节',exact:true}).count()).toBe(0);
-   expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(style);
-   expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
-   await page.getByRole('button',{name:craft.definition.name+'前移',exact:true}).click();
+   // Reopen the same saved draft through the designer's actual draft box.
+   await page.getByRole('button',{name:'返回列表',exact:true}).click();
+   await page.getByRole('region',{name:'开发草稿箱',exact:true}).getByRole('button',{name:style,exact:true}).click();
+   const reopenedCraft=page.getByRole('group',{name:'工艺',exact:true});
+   await reopenedCraft.waitFor(); // The saved wizard step must resume after the async source read.
+   await page.locator('#development-prior-steps').getByText(style,{exact:true}).waitFor();
+   expect(await reopenedCraft.getByLabel('印花',{exact:true}).isChecked()).toBe(true);
+   const firstStation=reopenedCraft.getByRole('combobox',{name:/^第 1 站工艺/});
+   const secondStation=reopenedCraft.getByRole('combobox',{name:/^第 2 站工艺/});
+   await expect.poll(()=>firstStation.innerText()).toContain('印花');
+   await expect.poll(()=>secondStation.innerText()).toContain(craft.definition.name);
+   await firstStation.press('Enter');
+   await page.getByRole('option',{name:craft.definition.name,exact:true}).click();
+   await expect.poll(()=>secondStation.innerText()).toContain('印花');
    await saveDraftAndReadReceipt(page,id,1);
    const reopened=await forms.read(designer,id);
    expect(reopened.version).toBe(2);

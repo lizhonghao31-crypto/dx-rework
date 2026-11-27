@@ -99,7 +99,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2026-11-13',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:100}]}]}),randomUUID(),resource.id);
   const budget=await new DigitalBudgetService(f.db,true).read(f.root,order.productionOrderId);
   expect(budget.comparison).toMatchObject({quoteVersion:confirmedVersion,budgetComparableTotal:'47',confirmedQuoteTotal:'50'});
-  expect(budget.document!.outsourcingUnitPrice).toBe('');
+  expect(budget.document!.outsourcingUnitPrice).toBe('10'); // Original confirmed IE price only, not the special-craft fees.
   expect(budget.document!.rows.filter(row=>own.some(value=>value.rowId===row.rowId)).map(row=>row.unitPrice)).toEqual(['3','4']);
   const first=steps[0]!.specialCraft!;
   await library.save(f.root,{id:first.id,expectedVersion:first.version,definition:{...first.definition,name:'TEST renamed',enabled:false}},randomUUID());
@@ -147,7 +147,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const adoptedBudget=await budgets.read(f.root,order.productionOrderId);
   const revisedBudget=await budgets.save(f.root,order.productionOrderId,{expectedVersion:adoptedBudget.version,document:pricedBulk.document!},randomUUID());
   expect(revisedBudget.comparison).toMatchObject({quoteVersion:pricedBulk.version,budgetComparableTotal:'67',confirmedQuoteTotal:'70'});
-  expect(revisedBudget.document!.outsourcingUnitPrice).toBe('');
+  expect(revisedBudget.document!.outsourcingUnitPrice).toBe('10');
+  expect(revisedBudget.document!.rows.filter(row=>bulkRows.some(craft=>craft.rowId===row.rowId)).map(row=>row.unitPrice)).toEqual(['7','9','11']);
 
 
   const rows=(await f.db.query("SELECT t.state,a.assignee_id,p.step_id,p.phase FROM digital_timeline_task_positions p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_access a USING(task_id) WHERE p.adoption_id=$1 AND p.phase IN ('dispatch','work','confirmation') ORDER BY p.route_position",[saved.adoptionId])).rows;
