@@ -1,3 +1,4 @@
+import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
@@ -64,6 +65,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const material=withMaterial?{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:supplierName,
    ...(supplier?{supplierReference:supplier}:{}),name:'TEST 主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:!numbered,expectedDate:null}:null;
   const photo=await f.image(actor),document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST original business source',craft:'无',washing,materials:material?[material]:[],files:[{attachmentId:photo,kind:'款图'}]});
+  if(numbered)document.workbenchSheet=numberedDevelopmentSheetFixture('TEST 时效原编号开发',true);
   const sheet=await forms.save(actor,source.sourceId,{expectedVersion:0,document},randomUUID()),price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   const operation:OrderTimeOperation={kind:'development_publish',sourceId:source.sourceId,input:{expectedVersion:sheet.version,patternOrder:{categoryId:price.price_id,priceVersion:price.version}}};
   return {sourceId:source.sourceId,photo,operation,actor,material};
@@ -158,7 +160,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const draft=await make(null,true,'免洗',true),sheet=await forms.read(draft.actor,draft.sourceId);
    if(draft.operation.kind!=='development_publish'||!sheet.document)throw Error('TEST expects a real numbered draft');
    const fabric=sheet.document.materials[0]!;
-   const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 需用钮扣',
+   const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 需用钮扣',quantityUnit:'个',
     designerHasMaterial:false,expectedDate:null};
    const optional={...accessory,materialId:randomUUID(),name:'TEST 可选衬布',requiredThisRound:false};
    const save=async(version:number,expectedDate:string|null,returnDate:string|null)=>{
@@ -205,7 +207,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.runtime.run(scene,f.root,async()=>{
    const draft=await make(null,true,'免洗',true),sheet=await forms.read(draft.actor,draft.sourceId),fabric=sheet.document!.materials[0]!;
    if(draft.operation.kind!=='development_publish')throw Error('TEST original publication required');
-   const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 设计已持有的钮扣',
+   const accessory={...fabric,materialId:randomUUID(),category:'辅料' as const,label:'钮扣',name:'TEST 设计已持有的钮扣',quantityUnit:'个',
     designerHasMaterial:true,expectedDate:'2027-02-20',available:false};
    const saved=await forms.save(draft.actor,draft.sourceId,{expectedVersion:sheet.version,document:{...sheet.document!,materials:[fabric,accessory]}},randomUUID());
    expect(saved.document?.materials[1]).toMatchObject({designerHasMaterial:true,expectedDate:'2027-02-20',available:false});

@@ -2,7 +2,7 @@
   "version": 1,
   "base": "5625fc00a7e3a40d2c72d95a30faa2e3fc09d522",
   "risk": "full",
-  "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+  "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
   "rules": [
     {
       "rule": "创建步骤沿现行三种业务路径与原身份，只登记一份真实样板制作数量；面料米数及辅料单位仍为原备料依据。原一次操作未确认时保留原键。",
@@ -101,52 +101,83 @@
         "ui02-owner-upgrade",
         "ui02-protocol"
       ]
+    },
+    {
+      "rule": "老回归继续从合法的当前编号原入口构造新单，既有实购、验布、正式转正、技术和时效断言完整保留。",
+      "source": "#1129 b29261b7 PostgreSQL 定点原链复现与批准 UI-02 T07–T12。R5 原验布 467／468 米边界和 R4 生命周期未修改。",
+      "initialization": "原测试此前用空品名和品牌新发编号；只给真实测试新单填写用户入口已要求的基础资料和同一件样板行。不填正式订单里不存在的资料或改历史夹具。",
+      "dateAndPermission": "保持既有实际夹具身份、原日期、追溯批次及原供应商。已有原时效和正式发布条件均照旧。",
+      "writes": [
+        "tests/helpers/numbered-development-document-fixture.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-service.ts#publishPreorder",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "expectation": "继续以合法原收货验证应收 520m、实际 467m 拦验布、468m 可验布且 52m 欠收，失败仍阻正式发布，原批准单独解除质量门槛。X2 四种颜色和原投料确认组合、R2 有无实物的原前置、真实原投料页及技术外洗仍可办。",
+      "checks": [
+        "ui02-known-pg",
+        "ui02-original-investment",
+        "ui02-technical-washing"
+      ]
     }
   ],
   "checks": [
     {
       "id": "ui02-release-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-native-browser-postgres.test.ts -t 'resumes an unnumbered draft|numbers new pure and confirmed|uses actual craft stations|fills missing procurement quantity|confirms the original legacy sheet|corrects required original data through the published resume-confirmation page|uses the signed original development routes|saves the numbered C2 draft' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-release-native.json",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-release-native.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-native-browser-postgres.test.ts -t 'resumes an unnumbered draft|numbers new pure and confirmed|uses actual craft stations|fills missing procurement quantity|confirms the original legacy sheet|corrects required original data through the published resume-confirmation page|uses the signed original development routes|saves the numbered C2 draft'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
-      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
-      "context": "Exact 5625fc00 release plus all three Review fixes, signed original browser and one fresh schema at a time, retaining independent genuine author and warehouse operations and request-replay checks.",
-      "startedAt": "2026-11-27T03:21:49.409276+00:00",
-      "endedAt": "2026-11-27T03:23:46.443181+00:00",
-      "log": "/workspace/scratch/ui02-current/release/ui02-release-native.log",
-      "logSha256": "07bdb85febd7ad0f1ff30e942154a2e680f870e840f41d2c93907f98c5ffa0fe",
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "同一发布基座与第2轮 Review 修复之后，真实三类创建与原恢复确认",
+      "startedAt": "2026-11-27T03:40:06.246590+00:00",
+      "endedAt": "2026-11-27T03:42:30.179016+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-release-native.log",
+      "logSha256": "c793b15beab78780b7c6e551374ae3d6d2234d62ad6805040fe8483ddcff3faa",
       "passed": 9,
       "failed": 0,
       "skipped": 29,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e41f9ff7f2fe01323bd831903dd33d2623a1f0d1f6da97c62868e28d3b0ca494"
+          "sha256": "969333a7c05e2165f94d8f57e954b7df2f6ecc466ec4ed5a2b4bad45954c9c49"
         }
       ]
     },
     {
       "id": "ui02-units",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.config.ts tests/unit/workbench-creation-data.test.ts tests/unit/workbench-material-amount.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-units.json",
+      "command": "node_modules/.bin/vitest run --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-units.json tests/unit/workbench-creation-data.test.ts tests/unit/workbench-material-amount.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
-      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
-      "context": "Latest exact 5625fc00 release candidate: workbench amount, correction unit, and exact one data entry.",
-      "startedAt": "2026-11-27T03:20:53.333338+00:00",
-      "endedAt": "2026-11-27T03:20:54.722887+00:00",
-      "log": "/workspace/scratch/ui02-current/release/ui02-units.log",
-      "logSha256": "980d45bb275c65486f797e216d6aa62c028a10e46fb36010d574e9c415017441",
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "基础资料与备料单位共享校验、原单位和计算原逻辑",
+      "startedAt": "2026-11-27T03:40:06.247512+00:00",
+      "endedAt": "2026-11-27T03:40:08.248025+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-units.log",
+      "logSha256": "8270cdffaa3220d4bbabb410b4f39b8c2c9c920c6419b94eda3dde1adffb030c",
       "passed": 12,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e9e140cbb5645f86841e9a463cd39f9c5027552ef3761e21575c5efb909ee1a8"
+          "sha256": "473623d596016b5535e5f7b64ffdf954b66815e086c377ba50d0158ff22e51d8"
         }
       ]
     },
@@ -156,34 +187,103 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
-      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
-      "context": "Canonical migration manifest lint on the actual base.",
-      "startedAt": "2026-11-27T03:20:18.419666+00:00",
-      "endedAt": "2026-11-27T03:20:18.645749+00:00",
-      "log": "/workspace/scratch/ui02-current/release/ui02-migration.log",
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "精确 0318 及原迁移清单的缺项完整性",
+      "startedAt": "2026-11-27T03:40:08.620564+00:00",
+      "endedAt": "2026-11-27T03:40:08.859655+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-migration.log",
       "logSha256": "53c6871aef7b61ce788ccecb0d23b2c60c7f740babe68c3975d65e59dede9d6c"
     },
     {
       "id": "ui02-owner-upgrade",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.config.ts tests/integration/acceptance-maintenance-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-owner-upgrade.json",
+      "command": "node_modules/.bin/vitest run --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-owner-upgrade.json tests/integration/acceptance-maintenance-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
-      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
-      "context": "Exact actual release 5625fc00, genuine low-privilege PostgreSQL and exact wrong-owner existing view check under pending 0318.",
-      "startedAt": "2026-11-27T03:23:46.729129+00:00",
-      "endedAt": "2026-11-27T03:23:53.586155+00:00",
-      "log": "/workspace/scratch/ui02-current/release/ui02-owner-upgrade.log",
-      "logSha256": "32fafae2e9218a7fc9e945c5c142260fc875015d7af128c22753bdde605bb434",
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "独立低权限库从原版本增量迁移并保留所有权预检",
+      "startedAt": "2026-11-27T03:40:09.203258+00:00",
+      "endedAt": "2026-11-27T03:40:21.194062+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-owner-upgrade.log",
+      "logSha256": "686a03056621eb70185326fd151d3f47fe131af468ded663f0cf2e698660e3b2",
       "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d091561d5cb3017b14f0f83b06abf3c39476f95a3c8b420fc1bbbf39545aa9e0"
+          "sha256": "cd589f325e604b8d782791839635eb81149aabed0520a6424c52f9e7f933412b"
+        }
+      ]
+    },
+    {
+      "id": "ui02-known-pg",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-known-pg.json tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts -t 'X3 |Acceptance R5 saves|X2 original preorder|R4 native preorder|Acceptance R2 |keeps the original approved development|ordered original development'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "新编号真实输入修正，产前/R4/R5/技术/R2 原测试逻辑及原断言不放宽",
+      "startedAt": "2026-11-27T03:40:06.244562+00:00",
+      "endedAt": "2026-11-27T03:41:18.640057+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-known-pg.log",
+      "logSha256": "dc6516cfb128a2537ce82dfae8ae91d6db1ab14c3be41c035766438e23defe4d",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 135,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d8a4599db49104370cda9c6310aec9d256bc3b5bfd0c939d6b13dfeb15e0a899"
+        }
+      ]
+    },
+    {
+      "id": "ui02-original-investment",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-original-investment.json tests/integration/preorder-material-investment-native-browser-postgres.test.ts -t 'keeps the open original investment inputs after confirmation'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "实际普通角色在原投料页面保留打开内容和原证据",
+      "startedAt": "2026-11-27T03:40:06.251458+00:00",
+      "endedAt": "2026-11-27T03:40:36.938532+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-original-investment.log",
+      "logSha256": "f2f121740e0394f22361bb8115765683113da985b1432c66496cd7c62da4d62f",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 4,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a92b485b4660e2fa5e59baab8ac9ae04ce17af5c4fe6b0db8531e4b86ab041fc"
+        }
+      ]
+    },
+    {
+      "id": "ui02-technical-washing",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-technical-washing.json tests/integration/development-technical-postgres.test.ts -t 'keeps the original technical artifact and pre-wash route on a numbered preorder'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "真实原预下单技术成果及外洗路线；仍未采纳生产时效",
+      "startedAt": "2026-11-27T03:40:27.646426+00:00",
+      "endedAt": "2026-11-27T03:40:42.793195+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-technical-washing.log",
+      "logSha256": "de26f831204cb7f2ec34adb17fcc89359b1116a2e74645eac754b9512488c36b",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 44,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9977dcee407ad689c0a09df5d6d9d5d16110296db11587cc3dad464d68507c5b"
         }
       ]
     },
@@ -193,20 +293,20 @@
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
-      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
-      "context": "Original 21 migration compatibility, test contract and verification protocols on actual 5625fc00 release.",
-      "startedAt": "2026-11-27T03:20:17.721826+00:00",
-      "endedAt": "2026-11-27T03:20:18.175682+00:00",
-      "log": "/workspace/scratch/ui02-current/release/ui02-protocol.log",
-      "logSha256": "b1dab9b8dd418deb3635d7bcb4d1739a58e8f2cdcca51347ba26d04178ff6f6f",
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "原实际发布迁移兼容协议，保留初始 Light 断言",
+      "startedAt": "2026-11-27T03:40:21.678159+00:00",
+      "endedAt": "2026-11-27T03:40:22.118968+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-protocol.log",
+      "logSha256": "5ae143fb547c4bea4337c82e890a18404cdbd176f331bbe15eff1b2844ff3393",
       "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "b1dab9b8dd418deb3635d7bcb4d1739a58e8f2cdcca51347ba26d04178ff6f6f"
+          "sha256": "5ae143fb547c4bea4337c82e890a18404cdbd176f331bbe15eff1b2844ff3393"
         }
       ]
     }

@@ -1,3 +1,4 @@
+import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {developmentNativeFacts} from '../../apps/api/src/production-platform/development-sla-evidence.js';
 import {readDevelopmentOrderRush} from '../../apps/api/src/production-platform/development-order-rush.js';
 import {receivedDevelopmentAccessories} from '../../apps/api/src/production-platform/development-accessory-receipts.js';
@@ -120,6 +121,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    sewingRows:[{rowId:randomUUID(),color:"蓝",size:"",quantity:null}],
   };
   if(options.numberedPreorder&&'orderNumber'in created){
+   document.workbenchSheet=numberedDevelopmentSheetFixture('TEST 预下单沿用技术资料',true);
+   document.sizes=['M'];document.sizeQuantities=[1];document.sampleSize='M';
    const supplier='TEST 预下单技术资料供应商';
    const supplierReference=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({
     supplierCode:'TEST-TECH-PREORDER-FABRIC',supplierName:supplier,supplierType:'fabric',changeReason:'TEST 预下单采用有效供应商目录',

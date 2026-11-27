@@ -1,3 +1,4 @@
+import {numberedDevelopmentSheetFixture} from './numbered-development-document-fixture.js';
 import {randomUUID} from 'node:crypto';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
@@ -48,7 +49,7 @@ export async function warehouseOriginalIssueFixture(f:Awaited<ReturnType<typeof 
   const material={materialId:randomUUID(),category:'主布' as const,label:'主布',name:'TEST棉布',supplier:supplierName,supplierReference:supplier,
    specification:'TEST',quantity:'1',width:'150',weight:'200',composition:'棉',color:'黑',consumption:'1',requiredThisRound:false,available:false,expectedDate:null};
   const accessory={...material,materialId:randomUUID(),category:'辅料' as const,label:'腰部用绳',name:'TEST 腰绳',quantity:'520',quantityUnit:'米',expectedDate:'2026-11-20',requiredThisRound:true};
-  const draft=await design.save(designer,sourceId,{expectedVersion:0,document:{...doc,patternCategoryId:category.price_id,materials:[material,accessory],
+  const draft=await design.save(designer,sourceId,{expectedVersion:0,document:{...doc,workbenchSheet:numberedDevelopmentSheetFixture('TEST 真实批次版单',true),patternCategoryId:category.price_id,materials:[material,accessory],
    productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',
     designStyleNo:style,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,primaryMerchandiserId:primary.actorId,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
   await design.publishPreorder(designer,sourceId,draft.version,randomUUID());

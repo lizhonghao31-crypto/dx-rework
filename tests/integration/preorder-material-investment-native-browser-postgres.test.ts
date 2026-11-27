@@ -1,3 +1,4 @@
+import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -590,7 +591,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const supplier=await f.access.createSupplier(root,CreateSupplierSchema.parse({supplierCode:'TEST-R4-BROWSER-PROOF',supplierName,
      supplierType:'fabric',changeReason:'TEST exact original signed receipt proof'}));
     const base=initialDevelopmentDocument(),materialId=base.materials[0]!.materialId;
-    const document={...base,materials:[{...base.materials[0]!,name:'TEST 原布补规格',quantity:'520米',specification:'',supplier:supplierName,supplierReference:supplier}],
+    const document={...base,workbenchSheet:numberedDevelopmentSheetFixture('TEST 正式原投料办理'),materials:[{...base.materials[0]!,name:'TEST 原布补规格',quantity:'520米',specification:'',supplier:supplierName,supplierReference:supplier}],
      files:[{attachmentId:await f.image(designer),kind:'款图' as const}],productionPlanning:{craftSteps:[],preshrink:false},
      customerOrderDraft:{withOrder:true as const,stage:'preorder' as const,order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',
        designStyleNo:orderNumber!,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,primaryMerchandiserId:merch.actorId,
