@@ -8,12 +8,13 @@ import {workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {assignedWarehousePreparationResources} from './warehouse-assigned-resources.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
-import {businessNow} from '../acceptance-clock/business-time.js';
+import {readWarehouseReceiptReconciliations,reconciliationResourceKey} from './warehouse-receipt-reconciliation-repository.js';
+import {acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
 
 /** Exact resource read for the original assigned warehouse identity. This
  * read performs no business writes, does not open a new task, and does not
  * convert an unactionable draft, report or quality gate to a physical receipt. */
-export async function readWarehouseReceiptWork(db:Pool,actor:TrustedActorContext,resource:PreparationResource,read:(connection:PoolClient)=>Promise<ProductionReadinessState>){
+export async function readWarehouseReceiptWork(db:Pool,actor:TrustedActorContext,resource:PreparationResource,read:(connection:PoolClient)=>Promise<ProductionReadinessState>,includeReconciliation=false){
  const connection=await db.connect();
  try{
   await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -24,7 +25,14 @@ export async function readWarehouseReceiptWork(db:Pool,actor:TrustedActorContext
    (resource.kind==='order'||(await developmentDocumentRow(connection,resource.id))?.status==='published'||
     Boolean(await workbenchPreorderPublication(connection,resource.id)));
   const adopted=eligible&&resource.kind==='order'?(await readWarehouseInstructionDemands(connection,[resource.id])).get(resource.id):undefined;
-  const items=eligible?deriveWarehouseReceiptWork(state,businessNow().toISOString(),adopted):[];
+  const resources=[resource,...(resource.kind==='order'&&state.sourceId?[{kind:'source' as const,id:state.sourceId}]:[])];
+  const rows=eligible&&includeReconciliation?await readWarehouseReceiptReconciliations(connection,resources):null;
+  const bindings=rows?resources.flatMap(scope=>rows.get(reconciliationResourceKey(scope))??[]):undefined;
+  const items=eligible?deriveWarehouseReceiptWork(state,businessNow().toISOString(),adopted,bindings):[];
+  const context=acceptanceBusinessContext();
+  if(context?.scenarioId&&await context.acceptsActor(actor.actorId))for(const item of items){
+   if(item.reconciliation)item.reconciliation.allowOperatorAttestation=true;
+  }
   await connection.query('COMMIT');return items;
  }catch(error){await connection.query('ROLLBACK');throw error;}finally{connection.release();}
 }

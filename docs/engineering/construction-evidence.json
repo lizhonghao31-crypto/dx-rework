@@ -1,89 +1,187 @@
 {
   "version": 1,
-  "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-  "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
+  "base": "079790331e199fad685d1c1e5f8c93434ab42451",
+  "sourceFingerprint": "088bf83b2bf6cb55c889e07f9b95fe152b6af1160aab0da82e8abe2381e05160",
   "risk": "full",
   "rules": [
     {
-      "rule": "真实审查身份和实修差异派生定向回归，不预登记未来评论",
-      "source": "Eric 2026-11-27 明确批准独立修正 Full 托管 Review 对最后一轮新发现的误拦。保留真实 GitHub、可信执行、影响范围、同次绑定、早失败，不改权限、分支保护或工作流。",
+      "rule": "原收料岗位核对只追加有原始版本和凭证的绑定",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
       "writes": [
-        "scripts/ci/hosted-review-preflight.mjs",
-        "scripts/ci/hosted-review-preflight.test.mjs",
-        "docs/governance/final-closeout-v1.md"
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-command.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.ts",
+        "apps/api/migrations/0319_warehouse_receipt_reconciliation.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        ".github/workflows/ci.yml#Verify Review and select required cases before preparation",
-        "scripts/ci/affected-entry-map.json",
-        "scripts/ci/pr-gate-protocol.mjs#trustedReview"
+        "apps/api/src/production-platform/preparation-material-repository.ts#preparationMaterialHistory",
+        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts#refreshPreparationWindows"
       ],
       "oldTests": [
-        "scripts/ci/hosted-review-preflight.test.mjs"
+        "tests/integration/production-readiness-postgres.test.ts#Acceptance H1 projects an exact PO receipt"
       ],
-      "initialization": "已有发布基线照原逻辑；新基线沿 existing trusted Base policy 加载，无独立授权或历史迁移。",
-      "dateAndPermission": "同一完整 GitHub PR、实际发布 Base、Head、真实审查提交及已解决线程。无权限变化，仍与时效无关。",
-      "expectation": "最后一轮未知 finding 有实际源码修复和同批新增或改正文的相关标准用例可以验证；仅关闭、没改、缺审、假声明、错误线程应拒绝，增加零无关用例。 已验证注释/模板/类型/动态导入不是运行依赖，受审提交与候选差异仍能验证恢复到 Base 的有效修复。",
+      "initialization": "原材料证据不迁移或回填。0319仅新建关联表，兼容旧历史和迁移已初始化但尚未有关系时的读取。",
+      "dateAndPermission": "原业务生命周期锁、在职岗位与指派、原附件及审计规则。不同角色和撤权原会话不可确认或重放。沿实际时间保留原始版本。",
+      "expectation": "元数据变化不可替换原记录。同键重试同回执，错PO、重复或不一致的凭据拒绝，采购 PO 原入口订正后仍可按原数量行及代次撤销；撤销仅追加，原台账与窗口零变更。",
       "checks": [
-        "review-protocol",
-        "review-live"
+        "wh01-pg",
+        "wh01-static"
       ]
     },
     {
-      "rule": "托管实际命名测试与本地请求、最终核验使用同一派生清单",
-      "source": "Eric 2026-11-27 明确批准独立修正 Full 托管 Review 对最后一轮新发现的误拦。保留真实 GitHub、可信执行、影响范围、同次绑定、早失败，不改权限、分支保护或工作流。",
+      "rule": "按同一原采购范围输出仓库核对试算，正式余额和下游读法保持原样",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
       "writes": [
-        "scripts/ci/affected-entry-preflight.mjs",
-        "scripts/ci/pr-gate-controller.mjs"
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-work.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/unit/warehouse-material-balance.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "scripts/ci/final-closeout.mjs#requireAffectedCases",
-        ".github/workflows/ci.yml#Run and verify exact affected cases"
+        "apps/api/src/production-platform/warehouse-material-balance.ts#scopedWarehouseReceiptQuantity",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts"
       ],
       "oldTests": [
-        "scripts/ci/affected-entry-preflight.test.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/final-closeout.test.mjs"
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts#Acceptance H1 projects an exact PO receipt"
       ],
-      "initialization": "仍用一个受信托管运行、原数据库/浏览器准备、无新增全量前置及工作流设置。此前无动态用例的回执结构兼容。",
-      "dateAndPermission": "report 哈希、真实 job/step、PR/Head/Base/run/attempt、已解析的实际用例身份共同验证；读取权限不进入候选测试。",
-      "expectation": "固定 Base 的原入口和派生的精准回归只定向执行；失败、跳过、缺证明、重复、陈旧回执不能放行。同真实案例验证原入口及修复回归。",
+      "initialization": "沿原查询的数据快照，以仓库授权范围批量读取1、15、50 项，影子投影不驱动现有流程。",
+      "dateAndPermission": "精确物料、PO或共享、物理单位、原采购和证据版本一致才可累计；使用业务asOf，不预读后来批次，不跨范围补量。",
+      "expectation": "20已核加300待核分别体现；证实有两个有效批才得到320、余200，低于468。104米时序只认当时的90和后来93.6，同 PO 的配布仅在主布归属可证实时解开待核，撤销后恢复待核；既有验布入口此PR不切换。",
       "checks": [
-        "review-protocol",
-        "review-live"
+        "wh01-unit",
+        "wh01-pg",
+        "wh01-static",
+        "wh01-time-inventory"
+      ]
+    },
+    {
+      "rule": "原仓库按PO进入现有收料面板，在旁核对两个原件而不复制收料",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
+      "writes": [
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "apps/web/src/warehouse-receipt-reconciliation-panel.tsx",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "reads": [
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/preparation-material-original.tsx",
+        "apps/web/src/submission-attempt.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft, recovers preorder publication and formally confirms the same numbered source"
+      ],
+      "initialization": "使用原角色会话、现行仓库中心、原 PO 收料面板和原件/文件权限；原编号开发与转正继续可办。",
+      "dateAndPermission": "按范围显示原证据及其版本。恢复原核对操作标识，不能以第二次提交掩盖回执丢失。",
+      "expectation": "真实 Chromium 从仓库入口显示20、300分开，选择有证的独立批后刷新仍读320/200；不增实收、不启用统一下游，现场H1未确认。",
+      "checks": [
+        "wh01-pg",
+        "wh01-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "review-protocol",
+      "id": "wh01-unit",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
-      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
-      "startedAt": "2026-11-27T08:26:45Z",
-      "endedAt": "2026-11-27T08:26:49Z",
-      "log": "/workspace/scratch/hosted-review-current-proof/protocol-r2.tap",
-      "logSha256": "eb1c1b1869d746a75ba4a88981748376403b4c6b7252cb88edddad4f4c213f10",
-      "command": "node --test scripts/ci/*.test.mjs",
-      "passed": 307,
+      "testedHead": "2d8b9cae30ea408a1322b6e47463ceb596aa5408",
+      "sourceFingerprint": "4685d9b354bbfeb299f446ca59daed147a75b4fefb5ffa24076776798f1e8f13",
+      "startedAt": "2026-11-27T07:59:48Z",
+      "endedAt": "2026-11-27T07:59:52Z",
+      "log": "/workspace/scratch/wh01-evidence/unit.log",
+      "logSha256": "ba45be568302693c1dfa0b9ed2cf8223c92b62b08ccb7a0fd5e129ec5850e9d5",
+      "passed": 38,
       "failed": 0,
       "skipped": 0,
-      "context": "Node 22.22.2, current CI source fingerprint. Existing full cheap CI protocol tests plus positive/negative hosted Review cases."
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ca32e967ebb0b16df7b77029a29bc6417685ead9ebf937fc869ccaeb7dea2cd4"
+        }
+      ],
+      "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
+      "command": "npx vitest run --config vitest.config.ts tests/unit/warehouse-material-balance.test.ts tests/unit/warehouse-receipt-status.test.ts tests/unit/production-readiness-contract.test.ts --reporter=default --reporter=json",
+      "context": "原候选 38 条单元报告原样复用。实际对齐只增 CI 门禁代码，Git 核本组相关业务、契约、测试、锁文件及配置输入逐字未变。",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests",
+        "vitest.config.ts",
+        "tsconfig.base.json",
+        "package.json",
+        "package-lock.json",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "inputFingerprint": "6c74d39d35fea60dc702f5879e9480d47b28a23f4c38628983d5c7c84148acb1"
     },
     {
-      "id": "review-live",
+      "id": "wh01-pg",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "2d8b9cae30ea408a1322b6e47463ceb596aa5408",
+      "sourceFingerprint": "088bf83b2bf6cb55c889e07f9b95fe152b6af1160aab0da82e8abe2381e05160",
+      "startedAt": "2026-11-27T08:34:26Z",
+      "endedAt": "2026-11-27T08:35:06Z",
+      "log": "/workspace/scratch/wh01-evidence/pg.log",
+      "logSha256": "36e5e4a57496d28ffef3cbd8edcae823945951bc0790bdef633901a97eb48608",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 97,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "85b4c32fba8addc25b3f550b7b30f263635946429d13be1fce588df09bd45e96"
+        }
+      ],
+      "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --testNamePattern \"WH-01|resumes an unnumbered draft\" --reporter=default --reporter=json",
+      "context": "Node 22.22.2, Vitest 4.1.10, installed Chromium, signed native App and isolated TEST PostgreSQL schemas created and disposed by existing fixtures; three selected cases only, not real Acceptance."
+    },
+    {
+      "id": "wh01-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
-      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
-      "startedAt": "2026-11-27T08:26:45Z",
-      "endedAt": "2026-11-27T08:26:53Z",
-      "log": "/workspace/scratch/hosted-review-current-proof/live-r2.log",
-      "logSha256": "76905eae6fffd5495d6685cca2db903ae7ea1a61251e8b15af53c0fd018ac3d3",
-      "command": "Read-only GitHub Review and exact Git blob proof using the final parser, validate selected cases against the previously executed named Vitest report with exact matching business source",
-      "context": "Recomputed production-review fix evidence using current parser and original immutable warehouse candidate/real report. Existing two PG/Chromium cases are reused as unchanged business proof, not claimed as newly executed."
+      "testedHead": "2d8b9cae30ea408a1322b6e47463ceb596aa5408",
+      "sourceFingerprint": "088bf83b2bf6cb55c889e07f9b95fe152b6af1160aab0da82e8abe2381e05160",
+      "startedAt": "2026-11-27T08:34:26Z",
+      "endedAt": "2026-11-27T08:34:26Z",
+      "log": "/workspace/scratch/wh01-evidence/static.log",
+      "logSha256": "a7e649775dfc5e55dc03a09aacc7487d74807ec44c33832972c9d8072e197088",
+      "command": "node scripts/check-migrations.mjs; node --check scripts/ci/{affected-entry-preflight,hosted-review-preflight,pr-gate-controller}.mjs; git diff --quiet 2d8b9cae -- apps packages tests",
+      "context": "对齐后的原迁移、三份新门禁文件语法、对比旧候选确认业务和测试代码零差异；旧类型与 lint 结果仅作为原候选证据。"
+    },
+    {
+      "id": "wh01-time-inventory",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "2d8b9cae30ea408a1322b6e47463ceb596aa5408",
+      "sourceFingerprint": "088bf83b2bf6cb55c889e07f9b95fe152b6af1160aab0da82e8abe2381e05160",
+      "startedAt": "2026-11-27T08:34:26Z",
+      "endedAt": "2026-11-27T08:34:28Z",
+      "log": "/workspace/scratch/wh01-evidence/timing.log",
+      "logSha256": "1242bcf8bc98c260226c7dcf73a84e0f2cc5fe16e9ef5cd257769a2a0d87aaac",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "command": "node scripts/acceptance/time-site-inventory.mjs && node --test --test-name-pattern='shared time-source inventory|reviewed responsibility sources' scripts/ci/pr-gate-controller.test.mjs",
+      "context": "Exact candidate, explicit timing-site source identity, two original protocol assertions initially blocked in first Light."
     }
   ]
 }

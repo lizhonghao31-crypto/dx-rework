@@ -1,3 +1,4 @@
+import {readWarehouseReceiptReconciliations} from '../../apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.js';
 import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
 import {developmentLifecycleAvailable} from '../../apps/api/src/production-platform/development-source-lifecycle.js';
@@ -2199,6 +2200,143 @@ async function originalWarehouseReadiness(db:Pool){
   expect(movedInvestment.investmentMaterialOccurrences?.[fabricB]).toEqual(
    added.facts.find(row=>row.kind==='material_investment')!.investmentMaterialOccurrences?.[fabricB]);
   expect(movedResult.history.find(row=>row.recordId===initial.recordId&&row.version===4)).toMatchObject({quantities:[rowA,rowB]});
+ });
+ it('WH-01 records only an authorized original H1 reconciliation through the warehouse routes',async()=>{
+  const {h,merch,root,scene,started,orderId}=await directMaterialOrder(2);
+  const resource={kind:'order' as const,id:orderId},readiness=new ProductionReadinessService(h.db),warehouse=h.f.people.warehouse!;
+  const materialId=randomUUID(),liningId=randomUUID();
+  const instruction=new ProductionInstructionService(h.db,true),app=Fastify();
+  const authority=new RootAuthority(h.db,'anchor-test','uat-root'),secret=h.f.runtime.secret;
+  const auth=new AuthService(new AcceptanceDingTalkProvider(h.db,'anchor-test',secret),
+   new PostgresAuthStore(h.db,'anchor-test','uat-root'),'anchor-test',3600000,secret);
+  const login=async(role:string)=>{
+   const control=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));
+   const session=await auth.switchAcceptanceIdentity(control,role);
+   return `dx_acceptance_control=${control}; dx_rework_session=${session.token}`;
+  };
+  const principals={warehouse:await login('warehouse'),merch:await login('merchandiser'),root:await login('root')};
+  registerProductionReadinessRoutes(app,{service:new DigitalProductionIdentityService(h.db,true),creationEnabled:true,
+   root:authority,authenticate:token=>auth.authenticate(token),workbenchNumberedCreation:true},readiness,h.f.attachments);
+  app.setErrorHandler((error,_,reply)=>{const fault=error as ApplicationError;return reply.code(fault.statusCode??500).send({message:fault.message});});
+  const base=`/digital-production/orders/${orderId}/production-readiness`;
+  const headers=(actor:keyof typeof principals,key=randomUUID())=>({cookie:principals[actor],'idempotency-key':key});
+  const get=async(material=materialId)=>{
+   const result=await app.inject({method:'GET',url:`${base}/warehouse-receipt-work`,headers:headers('warehouse')});
+   expect(result.statusCode,result.body).toBe(200);
+   return (result.json() as Awaited<ReturnType<typeof readiness.warehouseReceiptWork>>).find(row=>row.materialId===material)!;
+  };
+  try{await h.f.runtime.run(scene,root,async()=>{
+   const current=await instruction.read(merch,orderId);
+   const saved=await instruction.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+    document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+     fabrics:[{id:materialId,name:'TEST WH01 原 PO 主布',part:'本身',colors:{},remarks:''},
+      {id:liningId,name:'TEST WH01 同 PO 配布',part:'里料',colors:{},remarks:''}]}},randomUUID());
+   const defaults={scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:started,sourceDocumentVersion:null,recipientId:null,evidenceIds:[]};
+   const handover=await readiness.record(root,resource,{...defaults,kind:'design_handover',orderInstructionVersion:saved.version,
+    recipientId:merch.actorId,quantities:[],note:'TEST original handover'},randomUUID());
+   const [po,other]=handover.lines;
+   const purchase={materialId,lineId:po!.lineId,name:'TEST WH01 原 PO 主布',quantity:520,unit:'米'};
+   await readiness.record(merch,resource,{...defaults,kind:'material_investment',quantities:[purchase,{...purchase,materialId:liningId,name:'TEST WH01 同 PO 配布',quantity:60}],note:'TEST original purchase'},randomUUID());
+   await readiness.assign(root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,
+    colorConfirmationRole:null,reason:'TEST original warehouse assignment'},randomUUID());
+   const receiptProof=await h.f.image(warehouse),batchProof=await h.f.image(warehouse);
+   const originalState=await readiness.record(warehouse,resource,{...defaults,kind:'fabric_receipt',state:'partial',
+    quantities:[{...purchase,materialId:null,lineId:null,quantity:300}],note:'TEST original unbound receipt row',evidenceIds:[receiptProof]},randomUUID());
+   const original=originalState.facts.find(row=>row.kind==='fabric_receipt')!;
+   const first=await get(),{basis}=first;
+   const receipt=await app.inject({method:'POST',url:`${base}/warehouse-receipts`,headers:headers('warehouse'),
+    payload:{kind:'fabric_receipt',scopeRef:basis.scopeRef,materialId,lineId:basis.lineId,supplierId:basis.supplierId,unit:basis.unit,
+     investment:first.purchase.original,materialFingerprint:basis.adoptedRef,occurredAt:started,
+     expectedReceiptVersion:0,quantity:'20',note:'TEST original new receipt',evidenceIds:[batchProof]}});
+   expect(receipt.statusCode,receipt.body).toBe(200);
+   const lining=await get(liningId);
+   const liningReceipt=await app.inject({method:'POST',url:`${base}/warehouse-receipts`,headers:headers('warehouse'),
+    payload:{kind:'fabric_receipt',scopeRef:lining.scopeRef,materialId:liningId,lineId:lining.lineId,supplierId:lining.basis.supplierId,unit:lining.basis.unit,
+     investment:lining.purchase.original,materialFingerprint:lining.basis.adoptedRef,occurredAt:started,
+     expectedReceiptVersion:0,quantity:'10',note:'TEST clean lining physical receipt',evidenceIds:[]}});
+   expect(liningReceipt.statusCode,liningReceipt.body).toBe(200);
+   expect((await get(liningId)).reconciliation).toMatchObject({verified:{quantity:'10'},received:null,pending:[{quantity:{quantity:'300'},generation:0}]});
+   const pending=await get();
+   expect(pending).toMatchObject({received:null,reconciliation:{verified:{quantity:'20'},received:null,
+    pending:[{ref:{recordId:original.recordId,version:original.version},quantity:{quantity:'300'}}]}});
+   const row=pending.reconciliation!.pending[0]!,batch=pending.activeBatches[0]!;
+   const url=`${base}/warehouse-receipt-reconciliation`;
+   const scope={scopeRef:basis.scopeRef,materialId,lineId:basis.lineId,supplierId:basis.supplierId,unit:basis.unit,
+    investment:pending.purchase.original,materialFingerprint:basis.adoptedRef,legacy:{ref:row.ref,quantityRowKey:row.quantityRowKey}};
+   const payload={...scope,action:'confirm',batch:batch.ref,relation:'independent',expectedGeneration:0,
+    proof:{mode:'document',legacy:{attachmentId:receiptProof,documentNumber:'TEST-DN-1',line:'1'},
+     batch:{attachmentId:batchProof,documentNumber:'TEST-DN-2',line:'1'}},note:'TEST original distinct delivery lines checked'};
+   const readNative=async()=> (await h.db.query("SELECT * FROM digital_preparation_material_versions WHERE resource_id=$1 ORDER BY record_id,version",[orderId])).rows;
+   const readWindows=async()=> (await h.db.query("SELECT * FROM digital_preparation_windows WHERE production_order_id=$1 ORDER BY kind,epoch",[orderId])).rows;
+   const [nativeBefore,windowBefore]=await Promise.all([readNative(),readWindows()]);
+   const post=(actor:keyof typeof principals,value:object,key?:string)=>app.inject({method:'POST',url,headers:headers(actor,key),payload:value});
+   expect((await post('merch',payload)).statusCode).toBe(403);
+   expect((await post('root',payload)).statusCode).toBe(403);
+   expect((await post('warehouse',{...payload,lineId:other!.lineId})).statusCode).toBe(409);
+   expect((await post('warehouse',{...payload,proof:{...payload.proof,batch:{...payload.proof.batch,documentNumber:'TEST-DN-1'}}})).statusCode).toBe(409);
+   const request=randomUUID(),firstResult=await post('warehouse',payload,request);
+   expect(firstResult.statusCode,firstResult.body).toBe(200);
+   expect((await post('warehouse',payload,request)).json()).toEqual(firstResult.json());
+   expect((await post('warehouse',payload)).statusCode).toBe(409);
+   expect((await post('warehouse',{...payload,note:'不同输入'},request)).statusCode).toBe(409);
+   const confirmed=await get();
+   expect(confirmed).toMatchObject({received:null,reconciliation:{received:{quantity:'320'},procurementRemaining:'200',
+    verified:{quantity:'320'},pending:[],firstArrival:{occurredAt:original.occurredAt},eligibleForInspection:false}});
+   const list=await app.inject({method:'GET',url:'/digital-production/warehouse/receipts?search=TEST%20WH01',headers:headers('warehouse')});
+   expect(list.statusCode,list.body).toBe(200);
+   const summaries=list.json().items;
+   expect(summaries.find((item:{materialId:string})=>item.materialId===materialId).reconciliation).toMatchObject({
+    basisRevision:confirmed.reconciliation!.basisRevision,received:{quantity:'320'},procurementRemaining:'200',pendingCount:0});
+   const unaffectedLining=await get(liningId);
+   expect(unaffectedLining.reconciliation).toMatchObject({pending:[],received:{quantity:'10'},procurementRemaining:'50'});
+   expect(summaries.find((item:{materialId:string})=>item.materialId===liningId).reconciliation).toMatchObject({
+    basisRevision:unaffectedLining.reconciliation!.basisRevision,received:{quantity:'10'},procurementRemaining:'50',pendingCount:0});
+   const client=await h.db.connect();
+   const query=vi.spyOn(client,'query');
+   try{
+    for(const size of [1,15,50]){
+     const targets=[resource,...Array.from({length:size-1},()=>({kind:'order' as const,id:randomUUID()}))];
+     query.mockClear();
+     const result=await readWarehouseReceiptReconciliations(client,targets);
+     expect(query.mock.calls).toHaveLength(2);
+     expect([...result.keys()]).toEqual(['order:'+orderId]);
+    }
+   }finally{query.mockRestore();client.release();}
+   expect(await readNative()).toEqual(nativeBefore);
+   expect(await readWindows()).toEqual(windowBefore);
+   const revoked=await post('warehouse',{legacy:scope.legacy,action:'revoke',expectedGeneration:1,note:'TEST append-only revoke original link'});
+   expect(revoked.statusCode,revoked.body).toBe(200);
+   expect((await get()).reconciliation).toMatchObject({received:null,verified:{quantity:'20'},pending:[{bindingState:'revoked'}]});
+   expect((await get(liningId)).reconciliation).toMatchObject({received:null,verified:{quantity:'10'},pending:[{generation:2,bindingState:'revoked'}]});
+   expect((await h.db.query("SELECT generation,state FROM digital_warehouse_receipt_reconciliations WHERE resource_id=$1 ORDER BY generation",[orderId])).rows)
+    .toEqual([{generation:1,state:'confirmed'},{generation:2,state:'revoked'}]);
+   const reconfirmed=await post('warehouse',{...payload,expectedGeneration:2});
+   expect(reconfirmed.statusCode,reconfirmed.body).toBe(200);
+   await readiness.record(merch,resource,{...defaults,kind:'material_investment',expectedVersion:1,
+    quantities:[{...purchase,lineId:other!.lineId}],note:'TEST original purchase correction moves the PO',
+    investmentQuantityCorrection:{index:0,previous:purchase}},randomUUID());
+   const moved=await get();
+   expect(moved).toMatchObject({lineId:other!.lineId,reconciliation:{received:null,pending:[{bindingState:'other_scope',generation:3}]}});
+   const revokeMoved={legacy:scope.legacy,action:'revoke',expectedGeneration:3,note:'TEST revoke original immutable binding after PO correction'};
+   const nativeAfterPurchase=await readNative(),windowsAfterPurchase=await readWindows();
+   expect((await post('merch',revokeMoved)).statusCode).toBe(403);
+   expect((await post('warehouse',{...revokeMoved,expectedGeneration:2})).statusCode).toBe(409);
+   const retired=await post('warehouse',revokeMoved);
+   expect(retired.statusCode,retired.body).toBe(200);
+   expect((await get()).reconciliation).toMatchObject({received:null,pending:[{bindingState:'revoked',generation:4}]});
+   expect(await readNative()).toEqual(nativeAfterPurchase);
+   expect(await readWindows()).toEqual(windowsAfterPurchase);
+   const existingRoles=(await h.db.query(`SELECT assignment_id,role_code FROM user_role_assignments
+    WHERE user_id=$1 AND role_code IN ('warehouse_receiver','warehouse_supervisor') AND revoked_at IS NULL`,[warehouse.actorId])).rows;
+   const retained=await h.f.access.assignRole(root,{userId:warehouse.actorId,roleCode:'finance_read',reason:'TEST retain auth session after warehouse role withdrawal'});
+   expect(existingRoles).not.toHaveLength(0);
+   for(const grant of existingRoles)await h.f.access.revokeRole(root,grant.assignment_id,'TEST native warehouse revocation');
+   try{expect((await post('warehouse',payload,request)).statusCode).toBe(403);}
+   finally{
+    for(const grant of existingRoles)await h.f.access.assignRole(root,{userId:warehouse.actorId,roleCode:grant.role_code,reason:'TEST restore warehouse fixture role'});
+    await h.f.access.revokeRole(root,retained.assignmentId,'TEST remove temporary unaffected role');
+   }
+  });}finally{await app.close();}
  });
  it('Acceptance H1 projects an exact PO receipt and the shared positive control without mixing original snapshots',async()=>{
   const {h,merch,root,scene,started,orderId}=await directMaterialOrder(2);

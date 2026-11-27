@@ -3,6 +3,7 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import {demandForWarehouseReceipt} from './warehouse-instruction-demand.js';
 import {currentWarehouseReceiptQuantity,scopedWarehouseReceiptQuantity,warehouseMaterialBalance,warehouseReceiptTaskBasis,
  type WarehouseReceiptBasis,type WarehouseReceiptMovement} from './warehouse-material-balance.js';
+import {projectWarehouseReceiptReconciliation,warehouseLegacyQuantityIdentity,type ReconciliationBinding} from './warehouse-receipt-reconciliation-projection.js';
 export const warehouseReceiptScopePrefix='warehouse-receipt/';
 export const warehouseReceiptScope=(materialId:string,lineId:string|null)=>warehouseReceiptScopePrefix+materialId+'/'+(lineId??'shared');
 const receiptKey=(ref:WarehouseReceiptMovement['original'])=>JSON.stringify([ref.recordId,ref.version]);
@@ -37,8 +38,9 @@ function mayOverlapOriginalReceipt(fact:PreparationMaterialFact|undefined,basis:
   (!row.lineId||!basis.lineId||row.lineId===basis.lineId));
 }
 
-export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0]):WarehouseReceiptWorkItem[]{
- return original.facts.flatMap(investment=>{
+export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0],bindings?:readonly ReconciliationBinding[]):WarehouseReceiptWorkItem[]{
+ const projections=new Map<WarehouseReceiptWorkItem,Parameters<typeof projectWarehouseReceiptReconciliation>[0]>();
+ const items=original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
   const matches=(fact:PreparationMaterialFact)=>fact.kind==='design_handover'&&fact.scopeRef===investment.scopeRef&&
@@ -66,7 +68,9 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const typedBalance=raw.length?scopedWarehouseReceiptQuantity(basis,raw,asOf):null;
    const replaced=new Set(raw.flatMap(row=>row.replaces?[receiptKey(row.replaces)]:[]));
    const activeBatches=typedBalance?raw.flatMap(row=>row.occurredAt&&!replaced.has(receiptKey(row.original))?
-    [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt}]:[]):[];
+    [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt,
+     ...(bindings?{evidenceIds:original.history.find(fact=>fact.recordId===row.original.recordId&&fact.version===row.original.version)?.evidenceIds??[]}:{}),
+    }]:[]):[];
    // An unrelated PO or a quantityless status cannot suppress this exact
    // batch. Keep genuinely overlapping old physical quantities unresolved.
    const received=raw.length?(mayOverlapOriginalReceipt(receipt,basis,asOf)?null:typedBalance):
@@ -74,8 +78,27 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const productionRequired=demandForWarehouseReceipt(demand,basis,original.lines);
    const balance=warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired,
     usableAfterOccupancy:null,dispatchRequired:null,dispatched:null});
-   return [{kind,materialId:basis.materialId,name:material.name,scopeRef:basis.scopeRef,lineId:basis.lineId,
-    supplier:material.supplier||null,basis,purchase,received,productionRequired,balance,receiptVersion,activeBatches}];
+   const item:WarehouseReceiptWorkItem={kind,materialId:basis.materialId,name:material.name,scopeRef:basis.scopeRef,lineId:basis.lineId,
+    supplier:material.supplier||null,basis,purchase,received,productionRequired,balance,receiptVersion,activeBatches};
+   if(bindings&&kind==='fabric_receipt'){
+    const input={basis,purchase,history:original.history,movements:raw,bindings,asOf};
+    projections.set(item,input);
+    item.reconciliation=projectWarehouseReceiptReconciliation(input);
+   }
+   return [item];
   });
  });
+ // Every candidate uses the same authorized order snapshot. Only a currently
+ // proven attribution for another exact item may remove an ambiguous legacy row.
+ const verifiedOwner=new Map<string,WarehouseReceiptWorkItem>();
+ for(const item of items)for(const row of item.reconciliation?.confirmed??[])
+  verifiedOwner.set(warehouseLegacyQuantityIdentity(row.ref,row.quantityRowKey),item);
+ for(const [item,input] of projections){
+  const attributedElsewhere=new Set(item.reconciliation?.pending.flatMap(row=>{
+   const identity=warehouseLegacyQuantityIdentity(row.ref,row.quantityRowKey),owner=verifiedOwner.get(identity);
+   return owner&&owner!==item?[identity]:[];
+  }));
+  if(attributedElsewhere.size)item.reconciliation=projectWarehouseReceiptReconciliation({...input,attributedElsewhere});
+ }
+ return items;
 }

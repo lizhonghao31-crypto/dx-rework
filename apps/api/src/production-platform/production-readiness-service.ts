@@ -1,4 +1,7 @@
-import {WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
+import {WarehouseReceiptAttestationSchema,WarehouseReceiptReconciliationSchema,WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
+import {appendWarehouseReceiptReconciliation,readWarehouseReceiptReconciliations,reconciliationResourceKey,warehouseReceiptReconciliationAvailable} from './warehouse-receipt-reconciliation-repository.js';
+import {createWarehouseOperatorAttestation,findWarehouseReceiptReconciliationItem,originalWarehouseReconciliationPair,
+ sameReceiptRef,verifyWarehouseReconciliationProof} from './warehouse-receipt-reconciliation-command.js';
 import {warehouseReceiptPage} from './warehouse-receipt-page.js';
 import {readWarehouseReceiptWork} from './warehouse-receipt-work.js';
 import {sourcedInstructionMaterialId} from './warehouse-instruction-demand.js';
@@ -329,11 +332,93 @@ export class ProductionReadinessService{
    await db.query("UPDATE attachments SET entity_type='digital_preparation',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[id,resource.id]);
   }
  }
- warehouseReceipts(actor:TrustedActorContext,input:WarehouseReceiptPageQuery){
-  return warehouseReceiptPage(this.database,actor,input);
+ warehouseReceipts(actor:TrustedActorContext,input:WarehouseReceiptPageQuery,reconciliation=false){
+  return warehouseReceiptPage(this.database,actor,input,reconciliation);
  }
- warehouseReceiptWork(actor:TrustedActorContext,resource:PreparationResource){
-  return readWarehouseReceiptWork(this.database,actor,resource,db=>this.read(actor,resource,db));
+ warehouseReceiptWork(actor:TrustedActorContext,resource:PreparationResource,reconciliation=false){
+  return readWarehouseReceiptWork(this.database,actor,resource,db=>this.read(actor,resource,db),reconciliation);
+ }
+ /** Shares the original lifecycle lock, role and idempotency boundary, but
+  * a WH-01 link cannot bridge facts, refresh SLA, or register a receipt. */
+ private async warehouseReconciliationCommand<T>(actor:TrustedActorContext,resource:PreparationResource,
+  name:string,input:unknown,key:string,work:(db:PoolClient,view:ProductionReadinessState,asOf:string)=>Promise<T>){
+  if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
+  const db=this.transactionClient??await this.database.connect();
+  try{
+   if(!this.transactionClient)await db.query('BEGIN');
+   await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+   const access=await this.access(db,actor,resource),{orderId,sourceId}=access.context;
+   if(isRootActor(actor)||name==='reconcile'&&!access.warehouse)digitalForbidden();
+   const roles=actor.actorRoles.filter(role=>role==='warehouse_receiver'||role==='warehouse_supervisor');
+   let effective=false;
+   for(const role of roles)if(await access.policy.lockActiveRole(actor.actorId,role)){effective=true;break;}
+   if(!effective)digitalForbidden();
+   if(!await warehouseReceiptReconciliationAvailable(db))conflict('历史收料核对版本尚未安装');
+   if(orderId)await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[orderId]);
+   if(sourceId)await db.query('SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[sourceId]);
+   await this.assertPreparationActive(db,access.context);
+   if(orderId&&resource.kind!=='order')conflict('请从当前正式单核对，原预下单凭证保留');
+   if(!orderId&&sourceId&&(await developmentDocumentRow(db,sourceId))?.status!=='published'&&
+    !await workbenchPreorderPublication(db,sourceId))conflict('未发布来源不能核对实际收料');
+   if(name==='attest'){
+    const context=acceptanceBusinessContext();
+    if(!context?.scenarioId||!await context.acceptsActor(actor.actorId))digitalForbidden();
+   }
+   const view=await this.read(actor,resource,db);
+   if(name==='reconcile'&&!view.canRecord.includes('fabric_receipt'))digitalForbidden();
+   const command=`preparation:${resource.kind}:${resource.id}:warehouse_receipt_${name}`,hash=preparationHash(input);
+   const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',
+    [actor.actorId,command,key])).rows[0];
+   if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
+   const response:T=prior?prior.response:await work(db,view,businessNow().toISOString());
+   if(!prior)await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',
+    [actor.actorId,command,key,hash,JSON.stringify(response)]);
+   if(!this.transactionClient)await db.query('COMMIT');
+   return response;
+  }catch(error){if(!this.transactionClient)await db.query('ROLLBACK');throw error;}finally{if(!this.transactionClient)db.release();}
+ }
+ async attestWarehouseReceipt(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){
+  const input=WarehouseReceiptAttestationSchema.parse(raw);
+  return this.warehouseReconciliationCommand(actor,resource,'attest',input,key,async(db,view,asOf)=>{
+   const item=findWarehouseReceiptReconciliationItem(deriveWarehouseReceiptWork(view,asOf),input);
+   const pair=originalWarehouseReconciliationPair(view.history,item,input);
+   if(Date.parse(pair.old.occurredAt!)>Date.parse(asOf))conflict('原实收时间不在当前核对范围内');
+   return createWarehouseOperatorAttestation(db,actor,resource,input,input.side==='legacy'?pair.old:pair.batch);
+  });
+ }
+ async reconcileWarehouseReceipt(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){
+  const input=WarehouseReceiptReconciliationSchema.parse(raw);
+  return this.warehouseReconciliationCommand(actor,resource,'reconcile',input,key,async(db,view,asOf)=>{
+   const scopes=[resource,...(resource.kind==='order'&&view.sourceId?[{kind:'source' as const,id:view.sourceId}]:[])];
+   const bindings=await readWarehouseReceiptReconciliations(db,scopes);
+   const current=scopes.flatMap(scope=>bindings.get(reconciliationResourceKey(scope))??[]);
+   // Find the previous version by the immutable quantity row, even if the
+   // procurement or evidence changed since the last confirmation.
+   const prior=current.find(row=>sameReceiptRef(row.legacy.ref,input.legacy.ref)&&row.legacy.quantityRowKey===input.legacy.quantityRowKey);
+   if((prior?.generation??0)!==input.expectedGeneration)conflict('历史收料核对已更新，请重新读取');
+   const generation=input.expectedGeneration+1;
+   let binding:Extract<typeof input,{action:'confirm'}>,proofAttachmentIds:string[]=[];
+   if(input.action==='revoke'){
+    // The current warehouse assignment owns writes on this original subject.
+    // Revoke the immutable link itself, not a former procurement row that may
+    // have disappeared after a legitimate PO or supplier correction.
+    if(prior?.state!=='confirmed')return conflict('本单没有匹配该原数量行的可撤销核对');
+    const {scopeRef,materialId,lineId,supplierId,unit,investment,materialFingerprint,legacy,batch,relation,proof}=prior;
+    binding={scopeRef,materialId,lineId,supplierId,unit,investment,materialFingerprint,legacy,batch,relation,proof,
+     action:'confirm',note:input.note,expectedGeneration:input.expectedGeneration};
+   }else{
+    if(prior?.state==='confirmed')conflict('该原数量行已有核对记录，请先撤销原核对');
+    const item=findWarehouseReceiptReconciliationItem(deriveWarehouseReceiptWork(view,asOf),input);
+    const pair=originalWarehouseReconciliationPair(view.history,item,input);
+    if(Date.parse(pair.old.occurredAt!)>Date.parse(asOf))conflict('原实收时间不在当前核对范围内');
+    proofAttachmentIds=await verifyWarehouseReconciliationProof(db,resource,input,pair,current);
+    await this.bindFiles(db,actor,resource,proofAttachmentIds);
+    binding=input;
+   }
+   const state=input.action==='revoke'?'revoked':'confirmed';
+   await appendWarehouseReceiptReconciliation(db,resource,actor.actorId,binding,generation,state,proofAttachmentIds);
+   return {generation,state};
+  });
  }
  /** One real batch uses the original evidence table, original role and
   * transaction. It does not certify inspection/quality or imply readiness. */
@@ -509,6 +594,12 @@ export class ProductionReadinessService{
   const a=await this.access(this.database,actor,resource);
   if(a.preorderRecipient)return a.preorderRecipient.evidence.has(attachmentId);
   if(a.history.some(f=>f.evidenceIds.includes(attachmentId)||f.preorderApplicabilityConfirmation?.evidenceIds.includes(attachmentId)))return true;
+  if((a.warehouse||a.leader)&&await warehouseReceiptReconciliationAvailable(this.database)){
+   const resourceKey={kind:a.context.orderId?'order':'source',id:a.context.orderId??resource.id};
+   if((await this.database.query(`SELECT 1 FROM digital_warehouse_receipt_reconciliations
+    WHERE resource_kind=$1 AND resource_id=$2 AND $3::uuid=ANY(proof_attachment_ids) LIMIT 1`,
+    [resourceKey.kind,resourceKey.id,attachmentId])).rowCount)return true;
+  }
   if(!a.context.orderId)return false;
   return Boolean((await this.database.query(`SELECT 1 FROM digital_instruction_deliveries WHERE production_order_id=$1 AND $2=ANY(evidence_ids)
    UNION ALL SELECT 1 FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 AND $2=ANY(r.evidence_ids)`,[a.context.orderId,attachmentId])).rowCount);

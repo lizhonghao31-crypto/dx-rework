@@ -54,6 +54,35 @@ export const WarehouseReceiptBatchSchema=z.object({
  occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),
  evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
 }).strict().refine(value=>Number(value.quantity)>0||Boolean(value.replaces),'只有订正已登记的原收料才能记录零');
+const LegacyReceiptQuantityRefSchema=z.object({
+ ref:WarehouseReceiptRefSchema,quantityRowKey:z.string().min(1).max(750),
+}).strict();
+const WarehouseReconciliationDocumentLineSchema=z.object({
+ attachmentId:z.uuid(),documentNumber:z.string().trim().min(1).max(120),line:z.string().trim().min(1).max(120),
+}).strict();
+export const WarehouseReceiptReconciliationScopeSchema=z.object({
+ scopeRef:z.string().trim().min(1).max(150),materialId:z.uuid(),lineId:z.uuid().nullable(),
+ supplierId:z.uuid().nullable(),unit:z.string().trim().min(1).max(20),
+ investment:WarehouseReceiptRefSchema,materialFingerprint:z.string().regex(/^[a-f0-9]{64}$/),
+ legacy:LegacyReceiptQuantityRefSchema,
+}).strict();
+const WarehouseReconciliationProofSchema=z.discriminatedUnion('mode',[
+ z.object({mode:z.literal('document'),legacy:WarehouseReconciliationDocumentLineSchema,batch:WarehouseReconciliationDocumentLineSchema}).strict(),
+ z.object({mode:z.literal('acceptance_attestation'),legacy:z.uuid(),batch:z.uuid()}).strict(),
+]);
+export const WarehouseReceiptReconciliationSchema=z.discriminatedUnion('action',[
+ WarehouseReceiptReconciliationScopeSchema.extend({action:z.literal('confirm'),batch:WarehouseReceiptRefSchema,
+  relation:z.enum(['independent','same_batch']),expectedGeneration:z.number().int().nonnegative(),
+  proof:WarehouseReconciliationProofSchema,note:z.string().trim().min(1).max(1000)}),
+ z.object({action:z.literal('revoke'),legacy:LegacyReceiptQuantityRefSchema,expectedGeneration:z.number().int().positive(),
+  note:z.string().trim().min(1).max(1000)}).strict(),
+]);
+export const WarehouseReceiptAttestationSchema=WarehouseReceiptReconciliationScopeSchema.extend({
+ batch:WarehouseReceiptRefSchema,side:z.enum(['legacy','batch']),relation:z.enum(['independent','same_batch']),
+ note:z.string().trim().min(1).max(1000),
+}).strict();
+export type WarehouseReceiptReconciliation=z.infer<typeof WarehouseReceiptReconciliationSchema>;
+export type WarehouseReceiptAttestation=z.infer<typeof WarehouseReceiptAttestationSchema>;
 export const WarehouseNativeTaskQuerySchema=z.object({
  kind:z.enum(['preshrink','dispatch','craft']),status:z.enum(['open','completed']).default('open'),
  page:z.coerce.number().int().min(1).max(100000).default(1),search:z.string().trim().max(100).default(''),
@@ -69,6 +98,16 @@ export type WarehouseReceiptBatchEvidence=Pick<WarehouseReceiptBatch,'kind'|'sco
  'materialFingerprint'|'replaces'|'quantity'>;
 type WarehouseQuantity={quantity:string;unit:string};
 type WarehouseReceiptRef=z.infer<typeof WarehouseReceiptRefSchema>;
+type ReconciledWarehouseBatch={ref:WarehouseReceiptRef;quantityRowKey?:string;quantity:WarehouseQuantity;occurredAt:string};
+export type WarehouseReceiptReconciliationProjection={
+ allowOperatorAttestation?:boolean;
+ asOf:string;basisRevision:string;verified:WarehouseQuantity|null;received:WarehouseQuantity|null;
+ pending:{ref:WarehouseReceiptRef;quantityRowKey:string;quantity:WarehouseQuantity;occurredAt:string|null;reason:string;evidenceIds:string[];generation:number;bindingState?:'confirmed'|'revoked'|'other_scope'}[];
+ confirmed:{ref:WarehouseReceiptRef;quantityRowKey:string;generation:number;batch:WarehouseReceiptRef;
+  relation:'independent'|'same_batch';quantity:WarehouseQuantity;attachmentIds:string[]}[];
+ nativeNeedsReview:boolean;activeBatches:ReconciledWarehouseBatch[];firstArrival:ReconciledWarehouseBatch|null;
+ procurementRemaining:string|null;eligibleForInspection:boolean;
+};
 export type WarehouseReceiptWorkItem={
  kind:WarehouseReceiptBatch['kind'];materialId:string;name:string;scopeRef:string;lineId:string|null;supplier:string|null;
  basis:{resource:PreparationResource;kind:WarehouseReceiptBatch['kind'];scopeRef:string;materialId:string;lineId:string|null;adoptedRef:string;supplierId:string|null;unit:string};
@@ -76,10 +115,12 @@ export type WarehouseReceiptWorkItem={
  received:WarehouseQuantity|null;
  productionRequired:WarehouseQuantity|null;
  balance:{unit:string|null;procurementRemaining:string|null;excessReceived:string|null;productionShortage:string|null;dispatchRemaining:string|null};
+ reconciliation?:WarehouseReceiptReconciliationProjection;
  receiptVersion:number;
- activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string}[];
+ activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string;evidenceIds?:string[]}[];
 };
 export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
+ reconciliation?:Pick<WarehouseReceiptReconciliationProjection,'basisRevision'|'verified'|'received'|'procurementRemaining'|'nativeNeedsReview'> & {pendingCount:number};
  id:string;resource:PreparationResource;orderNumber:string|null;issuedOrderNumber?:string|null;customerCode:string|null;orderRush?:true;
  poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
 };
