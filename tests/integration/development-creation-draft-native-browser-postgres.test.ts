@@ -26,6 +26,13 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+function nativeWarehouseReceiptTime(now:number){
+ const instant=Math.floor(now/1000)*1000;
+ // datetime-local strips :00 seconds. Playwright requires the canonical
+ // value, while the receipt must keep the original actual instant.
+ const local=new Date(instant+8*3600000).toISOString().slice(0,19).replace(/:00$/,'');
+ return {local,occurredAt:new Date(instant).toISOString()};
+}
 async function inspectCreationControl(page:Page,selector:string){
  const session=await page.context().newCDPSession(page);
  try{
@@ -291,11 +298,16 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await open.click();
      const work=receiving.page.getByRole('region',{name:'仓库实际收料',exact:true});
      await work.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('12');
-     await work.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     const exactMinute=Date.parse('2026-11-27T05:07:00.000Z');
+     expect(nativeWarehouseReceiptTime(exactMinute)).toEqual({local:'2026-11-27T13:07',occurredAt:'2026-11-27T05:07:00.000Z'});
+     expect(nativeWarehouseReceiptTime(exactMinute+1000)).toEqual({local:'2026-11-27T13:07:01',occurredAt:'2026-11-27T05:07:01.000Z'});
+     const receiptTime=nativeWarehouseReceiptTime(Date.now());
+     await work.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(receiptTime.local);
      await work.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST signed browser registers the first warehouse batch');
-     const target=`/sources/${sourceId}/production-readiness/warehouse-receipts`,receiptKeys:string[]=[];
+     const target=`/sources/${sourceId}/production-readiness/warehouse-receipts`,receiptKeys:string[]=[],receiptTimes:number[]=[];
      await receiving.page.route(url=>url.pathname.endsWith(target),async route=>{
       receiptKeys.push(route.request().headers()['idempotency-key']??'');
+      receiptTimes.push(Date.parse(route.request().postDataJSON().occurredAt));
       if(receiptKeys.length===1){
        const result=await route.fetch();expect(result.status()).toBe(200);
        await route.abort('failed');
@@ -308,6 +320,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await retry.click();
      await work.getByText(/已实收：12 米/).waitFor();
      expect(receiptKeys).toHaveLength(2);expect(receiptKeys[0]).toBeTruthy();expect(receiptKeys[1]).toBe(receiptKeys[0]);
+     expect(receiptTimes).toEqual([Date.parse(receiptTime.occurredAt),Date.parse(receiptTime.occurredAt)]);
      expect(await work.getByText(/采购待收：8/).isVisible()).toBe(true);
      await receiving.page.setViewportSize({width:390,height:747});
      expect(await receiving.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -353,7 +366,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await formalReceipt.getByText(/已实收：12 米/).waitFor();
      expect((await h.db.query("SELECT resource_id,version FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt'",[[sourceId,productionOrderId]])).rows).toEqual([{resource_id:sourceId,version:1}]);
      await formalReceipt.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('8');
-     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     const receiptTime=nativeWarehouseReceiptTime(Date.now());
+     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(receiptTime.local);
      await formalReceipt.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST formal order receives the remaining quantity');
      await formalReceipt.getByRole('button',{name:'保存实际收料',exact:true}).click();
      await formalReceipt.getByText(/已实收：20 米/).waitFor();
@@ -367,6 +381,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      expect((await h.db.query("SELECT resource_id,version,state FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt' ORDER BY version",[[sourceId,productionOrderId]])).rows).toEqual([
       {resource_id:sourceId,version:1,state:'partial'},{resource_id:sourceId,version:2,state:'partial'},
      ]);
+     const lastReceipt=(await h.db.query<{occurred_at:Date}>("SELECT occurred_at FROM digital_preparation_material_versions WHERE resource_id=$1 AND kind='fabric_receipt' AND version=2",[sourceId])).rows[0];
+     expect(lastReceipt?.occurred_at.toISOString()).toBe(receiptTime.occurredAt);
     }finally{await inherited.close();}
    }catch(error){
     const body=tab.page.locator('body');
