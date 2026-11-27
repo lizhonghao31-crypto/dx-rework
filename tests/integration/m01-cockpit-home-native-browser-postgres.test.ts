@@ -13,6 +13,7 @@ import {FactoryFlowService} from '../../apps/api/src/production-platform/factory
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {pendingReceivingForAuthorizedOrders} from '../../apps/api/src/receiving/pending-receiving-original-allocation.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionDashboardService} from '../../apps/api/src/sourcing/production-dashboard-service.js';
@@ -342,7 +343,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
    for(const [index,cut] of cuts.entries())await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:index?6:4,attachmentIds:[await f.image(cutter)]},randomUUID());
    const flow=new FactoryFlowService(f.db),start=await flow.read(f.root,ready.id);
-   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:start.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST receiving scope dispatch'},randomUUID());
+   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:start.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,
+    note:'TEST actual PO1 dispatch to the original factory',lines:[{lineId:start.lines[0]!.lineId,quantity:4}]},randomUUID());
    const production=(await f.db.query<{id:string}>('SELECT production_order_id AS id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.id;
    const reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(businessNow());
    await reporting.report(f.root,production,{position:1,businessDate,quantity:4},randomUUID());
@@ -351,6 +353,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await f.sourcing.requestFactoryChange(f.people['production-management']!,ready.caseId,{supplierId:factory.supplierId,unitPrice:'6',changeReason:'TEST transfer only the second PO'},randomUUID());
    const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},ready.caseId)).item!;
    const decision=(await f.sourcing.decideFactoryChange(f.people.owner!,ready.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST separate receiving scopes'},randomUUID())).value.decision!.sourcingDecisionId;
+   const transferred=await flow.read(f.root,ready.id);
+   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:transferred.revision,occurredAt:businessNow().toISOString(),supplierId:factory.supplierId,
+    note:'TEST actual PO2 dispatch under the approved transfer',lines:[{lineId:transferred.lines[1]!.lineId,quantity:6}]},randomUUID());
    await reporting.report(f.root,production,{factoryDecisionId:decision,position:2,businessDate,quantity:6},randomUUID());
    for(const factoryDecisionId of [null,decision]){
     const execution={...(factoryDecisionId?{factoryDecisionId}:{}),businessDate,confirmed:true};
@@ -359,6 +364,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }
    const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
    const service=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db));
+   const pending=await pendingReceivingForAuthorizedOrders(f.db,[ready.id]);
+   expect(pending).toHaveLength(2);
+   for(const [i,cut] of cuts.entries())expect(pending.find(row=>row.identity.cuttingOrderId===cut.cutting_order_id)).toMatchObject({
+    factoryDecisionId:i?decision:null,factoryShipmentRecorded:true,balance:{actualDispatched:i?6:4,remaining:i?6:4}
+   });
    const files=[await f.image(warehouse),await f.image(warehouse)];
    const receipts=[];
    for(const [i,cut] of cuts.entries())receipts.push((await service.create(warehouse,{cuttingOrderId:cut.cutting_order_id,productionOrderId:production,
