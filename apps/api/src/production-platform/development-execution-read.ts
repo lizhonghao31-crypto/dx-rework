@@ -1,5 +1,7 @@
 import type {PoolClient} from "pg";
 import type {TrustedActorContext} from "../tools/repositories.js";
+import type {DevelopmentShippingDisplay} from '@dx-rework/contracts/digital-development-workspace';
+import {readWorkbenchShipping} from './development-workbench-shipping.js';
 import type {DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import type {DigitalTask} from "@dx-rework/contracts/digital-production-tasks";
 import type {DevelopmentTechnicalState} from "@dx-rework/contracts/digital-development-technical";
@@ -18,7 +20,7 @@ import {deferredDevelopmentRoute} from './development-native-route.js';
 export type DevelopmentExecutionFact={
   factId:string;taskId:string|null;kind:string;payload:Record<string,unknown>;actorId:string;recordedAt:Date;
 };
-type DevelopmentExecutionRouteFact=Omit<DevelopmentExecutionFact,"actorId">&{routeVersion:number};
+type DevelopmentExecutionRouteFact=Omit<DevelopmentExecutionFact,"actorId">&{routeVersion:number;shippingActor?:string|null};
 type DevelopmentDispatchSnapshot={version:number;patternWorkerId:string|null;cuttingWorkerId:string|null;sewingWorkerId:string|null};
 type DevelopmentPatternPreparation={
   status:string;categorySaved:boolean;priceSaved:boolean;version:number;
@@ -47,6 +49,7 @@ export interface DevelopmentExecutionSnapshot{
   dispatch:DevelopmentDispatchSnapshot|null;
   tasks:DigitalTask[];
   routeFacts:DevelopmentExecutionRouteFact[];
+  shippingDisplay?:DevelopmentShippingDisplay;
   patternOrder:{orderId:string}|null;
   patternPreparation:DevelopmentPatternPreparation|null;
   facts:DevelopmentExecutionFact[];
@@ -71,7 +74,10 @@ export async function readDevelopmentExecutionSnapshot(
     const dispatch=(await db.query<DevelopmentDispatchSnapshot>('SELECT version,pattern_worker_id AS "patternWorkerId",cutting_worker_id AS "cuttingWorkerId",sewing_worker_id AS "sewingWorkerId" FROM digital_development_dispatch WHERE source_id=$1',[sourceId])).rows[0]??null;
     const ids=(await db.query<{task_id:string}>("SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY created_at,task_id",[sourceId])).rows;
     const tasks=await readers.readTasks(actor,ids.map(row=>row.task_id),db);
-    const routeFacts=(await db.query<DevelopmentExecutionRouteFact>('SELECT fact_id AS "factId",task_id AS "taskId",route_version AS "routeVersion",kind,payload,recorded_at AS "recordedAt" FROM digital_development_route_facts WHERE source_id=$1 ORDER BY sequence',[sourceId])).rows;
+    const routeFacts=(await db.query<DevelopmentExecutionRouteFact>(`SELECT f.fact_id AS "factId",f.task_id AS "taskId",f.route_version AS "routeVersion",f.kind,f.payload,f.recorded_at AS "recordedAt",
+       p.display_name AS "shippingActor" FROM digital_development_route_facts f
+       LEFT JOIN app_users p ON f.kind='寄出' AND p.id=f.actor_id
+       WHERE f.source_id=$1 ORDER BY f.sequence`,[sourceId])).rows;
     const patternOrder=(await db.query<{orderId:string}>('SELECT order_id AS "orderId" FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??null;
     const patternPreparation=patternOrder&&(await db.query("SELECT to_regclass('pattern_room_rounds') AS relation")).rows[0]?.relation?(await db.query<DevelopmentPatternPreparation>(`SELECT o.status,r.category_id IS NOT NULL AS "categorySaved",r.agreed_amount IS NOT NULL AS "priceSaved",
       o.version,r.round_id AS "roundId",r.round_type AS "roundType",s.worker_user_id AS "workerId",s.worker_name AS "workerName" FROM pattern_room_orders o JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
@@ -81,8 +87,14 @@ export async function readDevelopmentExecutionSnapshot(
     const plannedSewing=await plannedRecipient(db,sourceId,currentRound,'development_sewing');
     const sewingRecipientId=tasks.find(t=>t.taskKind==='development_sewing'&&t.routeVersion===currentRound)?.assigneeId??(plannedSewing.planned?plannedSewing.id:dispatch?.sewingWorkerId);
     const sewingRecipientName=sewingRecipientId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sewingRecipientId])).rows[0]?.display_name??null:null;
-    const route:string[]=currentRound===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]?.route_nodes??[];
+    const laterRound=currentRound>1?(await db.query<{route_nodes:string[]}>('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]:undefined;
+    const route:string[]=currentRound===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):laterRound?.route_nodes??[];
     const nextSteps=developmentNextSteps(route,tasks,currentRound);
+    // Keep the original route readable in first-generation development schemas.
+    // The designer-workbench projection only attaches once its enrollment exists.
+    const workbenchProjected=(await db.query("SELECT to_regclass('digital_development_preorder_publications') AS registered")).rows[0]?.registered;
+    const shippingDisplay=workbenchProjected
+     ?(await readWorkbenchShipping(db,actor,[{id:sourceId,sourceId,round:currentRound}])).get(sourceId):undefined;
     const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
     const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
 
@@ -107,6 +119,7 @@ export async function readDevelopmentExecutionSnapshot(
     const externalPatterns=slaEnrolled||deferredTechnicalWorkflow?await externalPatternRecords(db,sourceId):[];
     const canRequestExternalPattern=isRootActor(actor)||actor.actorRoles.includes('pattern_room_supervisor')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor');
     return {
+      ...(shippingDisplay?{shippingDisplay}:{}),
       technical:await readers.readTechnical(actor,sourceId,currentRound,'整款',db),
       externalPatterns,
       canRequestExternalPattern,

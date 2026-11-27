@@ -383,7 +383,7 @@ export class DevelopmentTechnicalService {
   });
  }
  async history(actor:TrustedActorContext,sourceId:string,input:{roundNumber:number;scopeRef:string;kind:'artifacts'|'comments';beforeVersion?:number|undefined;version?:number|undefined;view?:'directory'|undefined;adoptedArtifactId?:string|undefined}){
-  const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.forms().read(actor,sourceId,db,input.roundNumber);await this.scope(db,sourceId,input.scopeRef);
+  const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const sheet=await this.forms().read(actor,sourceId,db,input.roundNumber);await this.scope(db,sourceId,input.scopeRef);
    if(!await technicalEnrollment(db,sourceId)){
     // Only authorized directory discovery identifies the old native source;
     // exact version/original reads stay strict and do not invent new records.
@@ -401,13 +401,26 @@ export class DevelopmentTechnicalService {
    const values=[sourceId,input.roundNumber,input.scopeRef,input.beforeVersion??null,input.version??null];
    const directory=input.view==='directory';
    const timeSql=input.kind==='comments'?await commentTimeColumns(db,'v'):null;
-   const selection=input.kind==='artifacts'?(directory?'v.artifact_set_id,v.version,v.source_id,v.round_number,v.scope_ref,v.task_id,v.document_version,v.status,v.created_by,v.created_at,u.display_name AS author_name':'v.*'):(directory?`v.comment_id,v.version,v.is_final,v.decision,${timeSql!.columns},v.recorded_at,q.task_id AS review_task_id,q.review_id,r.version AS review_result_version,r.decision AS review_decision,r.artifact_version AS review_artifact_version,r.note AS review_note`:`v.*,${timeSql!.columns}`);
+   const reviewFields='q.task_id AS review_task_id,q.review_id,r.version AS review_result_version,r.decision AS review_decision,r.artifact_version AS review_artifact_version,r.note AS review_note';
+   const selection=input.kind==='artifacts'?(directory?'v.artifact_set_id,v.version,v.source_id,v.round_number,v.scope_ref,v.task_id,v.document_version,v.status,v.created_by,v.created_at,u.display_name AS author_name':'v.*'):
+    `${directory?'v.comment_id,v.version,v.is_final,v.decision,v.recorded_at':'v.*'},${timeSql!.columns},${reviewFields}`;
    const table=input.kind==='artifacts'?'digital_development_artifact_versions':'digital_development_final_comments';
    // Only fixed internal table/selection strings are interpolated; all resource/cursor inputs remain bound.
    const joins=input.kind==='artifacts'?' LEFT JOIN app_users u ON u.id=v.created_by':' LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=v.comment_id LEFT JOIN digital_development_size_review_results r ON r.review_id=q.review_id';
    const found=(await db.query(`SELECT ${selection} FROM ${table} v ${timeSql?.join??''} ${joins} WHERE v.source_id=$1 AND v.round_number=$2 AND v.scope_ref=$3 AND ($4::integer IS NULL OR v.version<$4) AND ($5::integer IS NULL OR v.version=$5) ORDER BY v.version DESC LIMIT 21`,values)).rows;
    if(input.version!==undefined&&!found.length)digitalNotFound();
-   const page=found.slice(0,20),items=input.kind==='artifacts'?page.map(a=>directory?{artifactSetId:a.artifact_set_id,version:a.version,sourceId:a.source_id,roundNumber:a.round_number,scopeRef:a.scope_ref,taskId:a.task_id,documentVersion:a.document_version,status:a.status,createdByName:a.author_name??null,createdAt:iso(a.created_at)}:technicalArtifactDto(a)):page.map(c=>({commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,...(directory?{reviewTaskId:c.review_task_id??null,review:c.review_task_id?{taskId:c.review_task_id,reviewId:c.review_id,completed:Boolean(c.review_result_version),decision:c.review_decision??null,artifactVersion:c.review_artifact_version??null,note:c.review_note??''}:null}:{text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note}),...commentTimeDto(c),recordedAt:iso(c.recorded_at)}));
+   const page=found.slice(0,20);
+   const revisionLinks=input.kind==='comments'&&!directory&&sheet.canEdit&&await this.technicalRole(db,actor,['sample_designer'])
+    ?await developmentCommentRevisionLinks(db,sourceId,input.roundNumber,input.scopeRef):[];
+   const items=input.kind==='artifacts'?page.map(a=>directory?{artifactSetId:a.artifact_set_id,version:a.version,sourceId:a.source_id,roundNumber:a.round_number,scopeRef:a.scope_ref,taskId:a.task_id,documentVersion:a.document_version,status:a.status,createdByName:a.author_name??null,createdAt:iso(a.created_at)}:technicalArtifactDto(a)):
+    page.map(c=>{
+     const review=c.review_task_id?{taskId:c.review_task_id,completed:Boolean(c.review_result_version),decision:c.review_decision??null}:null;
+     const revision=revisionLinks.find(link=>link.commentId===c.comment_id);
+     return {commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,
+      ...(directory?{reviewTaskId:c.review_task_id??null,review:review?{...review,reviewId:c.review_id,artifactVersion:c.review_artifact_version??null,note:c.review_note??''}:null}:
+       {roundNumber:c.round_number,scopeRef:c.scope_ref,text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note,
+        ...(revision?{revision}:{}),...(review?{review}:{})}),...commentTimeDto(c),recordedAt:iso(c.recorded_at)};
+    });
    const effective=directory?await effectiveTechnicalEvidence(db,sourceId,input.roundNumber,input.scopeRef):undefined;
    const contextAvailable=directory?Boolean((await db.query('SELECT 1 FROM digital_development_preparation_basis WHERE source_id=$1 AND round_number=$2 UNION ALL SELECT 1 FROM digital_development_technical_material_decisions WHERE source_id=$1 AND round_number=$2 LIMIT 1',[sourceId,input.roundNumber])).rowCount):undefined;
    const adoptedRow=directory&&effective?.artifactRef?(await db.query('SELECT a.artifact_set_id,a.version,a.source_id,a.round_number,a.scope_ref,a.task_id,a.document_version,a.status,a.created_at,u.display_name AS author_name,i.created_at AS inherited_at FROM digital_development_artifact_versions a LEFT JOIN app_users u ON u.id=a.created_by LEFT JOIN digital_development_artifact_inheritances i ON i.artifact_set_id=a.artifact_set_id AND i.artifact_version=a.version AND i.source_id=$3 AND i.round_number=$4 AND i.scope_ref=$5 WHERE a.artifact_set_id=$1 AND a.version=$2',[effective.artifactRef.id,effective.artifactRef.version,sourceId,input.roundNumber,input.scopeRef])).rows[0]:null;

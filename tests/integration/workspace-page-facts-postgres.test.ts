@@ -12,6 +12,7 @@ import {DigitalProductionIdentityService} from '../../apps/api/src/production-pl
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DevelopmentWorkspaceQuery} from '../../apps/api/src/production-platform/development-workspace-query.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {DevelopmentWorkspaceFilterSchema,PatternWorkspaceFilterSchema} from '@dx-rework/contracts/digital-development-workspace';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -61,6 +62,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const available=await indexed.designer(f.root,DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PERF07-'}));expect(available.total).toBeNull();expect(available.items).toHaveLength(15);expect(available.items.some(item=>item.journey.id===ids[0])).toBe(false);
   const board=await indexed.pattern(f.root,PatternWorkspaceFilterSchema.parse({scope:'all',state:'all',group:'pattern'}));expect(board).toMatchObject({total:null,counts:null,freshness:{pending:1}});expect(board.items).toHaveLength(2);
   await repo.buildOne({kind:'source',id:ids[0]!});expect((await indexed.designer(f.root,filter)).total).toBe(1);
+ }));
+ it('keeps an authorized published root in designer business counts while its journey index is pending',()=>run(async()=>{
+  const target=ids[4]!,resource={kind:'source' as const,id:target};
+  const workbench=new DevelopmentWorkspaceQuery(new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),undefined,new ProductionReadinessService(f.db));
+  const filter=DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PERF07-04',layout:'workbench',businessView:'pure'});
+  const read=()=>workbench.designer(f.people['sample-designer']!,filter);
+  const counts={pure:1,preorder:0,ordered:0,handover:0};
+  expect(await read()).toMatchObject({businessCounts:counts,items:[{journey:{sourceId:target},business:{kind:'pure'}}]});
+  await f.db.query("INSERT INTO digital_journey_fact_changes(resource_kind,resource_id,reason) VALUES('source',$1,'backfill') ON CONFLICT DO NOTHING",[target]);
+  try{expect(await read()).toMatchObject({businessCounts:counts,freshness:{pending:1,failed:0},items:[]});}
+  finally{await repo.buildOne(resource);}
+  expect(await read()).toMatchObject({businessCounts:counts,items:[{journey:{sourceId:target},business:{kind:'pure'}}]});
  }));
  it('rolls back a single selected SQL failure and keeps other selected mothers available',()=>run(async()=>{
   const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),native=Reflect.get(query,'project') as (...args:unknown[])=>Promise<OrderJourney|null>;

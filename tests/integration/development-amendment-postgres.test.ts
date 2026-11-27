@@ -432,8 +432,12 @@ const url=process.env.TEST_DATABASE_URL;
  });
  it('still refuses a correction after actual shipping and preserves its draft and published basis',async()=>{
   const f=await prepare(),{saved}=await save(f);
-  const shipping=(await execution.read(actor('designer'),f.sourceId)).tasks.find(t=>t.taskKind==='development_shipping')!;
-  await execution.route(actor('designer'),f.sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST实际寄出',craftExecution:null,nextAssigneeId:null,sentDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),trackingNo:'TEST-SHIPPED'},randomUUID());
+  const original=await execution.read(actor('designer'),f.sourceId);
+  const shipping=original.tasks.find(t=>t.taskKind==='development_shipping')!;
+  expect(original.shippingDisplay).toEqual({state:'ready'});
+  const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  await execution.route(actor('designer'),f.sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST实际寄出',craftExecution:null,nextAssigneeId:null,sentDate:date,trackingNo:'TEST-SHIPPED'},randomUUID());
+  expect((await execution.read(actor('designer'),f.sourceId)).shippingDisplay).toEqual({state:'sent',sentDate:date,trackingNo:'TEST-SHIPPED',round:1});
   const before=await forms.read(actor('designer'),f.sourceId);
   await expect(amendments.submit(actor('designer'),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion},randomUUID())).rejects.toThrow('实际修改 / 复版');
   expect(await forms.read(actor('designer'),f.sourceId)).toEqual(before);

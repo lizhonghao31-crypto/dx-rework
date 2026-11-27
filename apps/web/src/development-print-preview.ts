@@ -34,7 +34,7 @@ export async function prepareDevelopmentPrint(source:HTMLElement,attachmentMime:
   const clone=target.importNode(source,true);
   target.body.append(clone);
   const prepare=async()=>{
-   const craft=Array.from(clone.querySelectorAll<HTMLElement>('[data-print-craft-image]'));
+   const craft=Array.from(clone.querySelectorAll<HTMLElement>('[data-print-craft-image]')).filter(field=>!field.closest('[data-print-single-page]'));
    const mimes=new Map<string,Promise<string>>();
    // Resolve in the original document scope, without fetching unselected versions.
    for(const field of craft){

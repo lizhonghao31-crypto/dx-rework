@@ -29,6 +29,12 @@ body[data-development-pdf] .development-print { display: block; width: 281mm; }
 .development-paper-title .development-paper-rush { color: #9b2525; font-weight: 700; }
 .development-paper-fields { display: grid; grid-template-columns: 1.2fr 1.15fr 1fr 1fr .85fr .85fr; border-left: .2mm solid #888; }
 .development-paper-dates { grid-template-columns: repeat(auto-fit, minmax(35mm,1fr)); }
+.development-paper-basics { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.development-paper-craft-summary { margin-top: .6mm; font-size: 8pt; }
+.development-paper-online, .development-paper-sewing { padding: .65mm 1.2mm; font-size: 8pt; }
+.development-board-document .development-paper-pictures, .development-print-page[data-print-document="版单"] .development-paper-pictures { height: 55mm; }
+.development-board-document .development-paper-pictures img, .development-print-page[data-print-document="版单"] .development-paper-pictures img { height: 45mm; }
+
 .development-paper-fields > div { border: .2mm solid #888; border-left: 0; padding: .7mm 1.25mm; }
 .development-paper-fields dt { font-size: 8pt; color: #393939; }
 .development-paper-fields dd { font-weight: 550; }

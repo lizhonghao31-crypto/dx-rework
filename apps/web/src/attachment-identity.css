@@ -10,3 +10,4 @@
 @media(pointer:coarse){.attachment-name>summary{min-height:var(--dx-form-control-height,44px);line-height:36px}.attachment-name>summary>span{min-width:0;line-height:normal}}
 
 .pattern-material-dialog .rework-image-modal__heading>strong{min-width:0;overflow-wrap:anywhere;white-space:normal}
+.attachment-identity__visible-name{display:block;white-space:normal;overflow-wrap:anywhere;user-select:text}

@@ -1,3 +1,7 @@
+import {readDesignerBusinessRoots,type DesignerBusinessProjection} from './development-workbench-business-roots.js';
+import {readWorkbenchShipping} from './development-workbench-shipping.js';
+import type {DevelopmentShippingDisplay} from '@dx-rework/contracts/digital-development-workspace';
+import type {ProductionReadinessService} from './production-readiness-service.js';
 import type {WorkspaceNodeFact} from './journey-workspace-facts.js';
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { JourneyFilterSchema, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
@@ -48,7 +52,8 @@ export function patternTasks(items: OrderJourney[],rush:ReadonlySet<string>=new 
 }
 
 export class DevelopmentWorkspaceQuery {
-  constructor(private readonly journeys: DigitalJourneyQuery,private readonly notifications?:Pick<DigitalProductionNotificationService,'workbenchNativeActions'>) {}
+  constructor(private readonly journeys: DigitalJourneyQuery,private readonly notifications?:Pick<DigitalProductionNotificationService,'workbenchNativeActions'>,
+    private readonly readiness?:Pick<ProductionReadinessService,'currentFormalHandoversInSnapshot'>) {}
 
   private async handling(db:PoolClient,actor:TrustedActorContext,rows:readonly {id:string;nodes:readonly Pick<WorkspaceNodeFact,'instanceId'|'current'|'planningOnly'|'owner'>[]}[]){
     const activeNodes=(row:typeof rows[number])=>row.nodes.filter(node=>node.current&&!node.planningOnly&&/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(node.instanceId));
@@ -68,22 +73,43 @@ export class DevelopmentWorkspaceQuery {
 
   async designer(actor: TrustedActorContext, filter: DevelopmentWorkspaceFilter): Promise<DevelopmentWorkspaceResult> {
     if (!isRootActor(actor) && !(actor.actorRoles.includes("sample_designer") && actor.authorizationCapabilities?.includes("pattern_room:orders:create"))) digitalForbidden();
-    const viewMatches=(item:{view:DevelopmentView;handling?:DevelopmentWorkspaceHandling|undefined})=>{
-      if(filter.layout==='workbench'&&item.view==='draft')return false;
+    const viewMatches=(item:{view:DevelopmentView;handling?:DevelopmentWorkspaceHandling|undefined},business:DesignerBusinessProjection|null)=>{
+      if(!business&&filter.layout==='workbench'&&item.view==='draft')return false;
       if(filter.view!=='all'&&item.view!==filter.view)return false;
       return !filter.handling||filter.handling==='all'||item.handling?.items.some(action=>action.kind===filter.handling||filter.handling==='mine'&&action.kind==='returned');
     };
-    const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,async(facts,asOf,freshness,db)=>{
+    const selectsBusiness=(value:DesignerBusinessProjection|null,item:{journey:{id:string}})=>{
+      if(!value)return true;
+      const row=value.byId.get(item.journey.id),chosen=filter.businessView;
+      return value.representatives.has(item.journey.id)&&(!chosen||Boolean(row&&(chosen==='handover'&&row.handoverComplete||chosen===row.kind)));
+    };
+    const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,async(facts,asOf,freshness,db,authorized)=>{
       const scoped=facts.filter(item=>!filter.designer||item.designer===filter.designer);
       const handling=filter.layout==='workbench'?await this.handling(db,actor,scoped):undefined;
       const rush=filter.layout==='workbench'?await readDevelopmentOrderRush(db,scoped):new Set<string>();
       const all=scoped.map(journey=>({journey,...rushMarker(rush,journey),view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
       const counts=Object.fromEntries(DEVELOPMENT_VIEWS.map(view=>[view.key,view.key==='all'?all.length:all.filter(item=>item.view===view.key).length])) as DevelopmentWorkspaceResult['counts'];
-      const filtered=prioritizeDesignRush(all.filter(viewMatches),item=>item.journey.nodes),page=filtered.slice(((freshness?1:filter.page)-1)*15,(freshness?1:filter.page)*15);
-      return {ids:page.map(item=>item.journey.id),finish:(details,finalFreshness=freshness,detailFailures=[])=>({asOf,page:finalFreshness?1:filter.page,pageSize:15 as const,total:finalFreshness?null:filtered.length,counts:finalFreshness?null:counts,...(finalFreshness?{freshness:finalFreshness}:{}),...(detailFailures.length?{detailFailures:detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}))}:{}),designers:[...new Set(facts.flatMap(item=>item.designer?[item.designer]:[]))].sort(),customers:[...new Set(facts.flatMap(item=>item.customer?[item.customer]:[]))].sort(),items:page.filter(item=>details.has(item.journey.id)).map(item=>({...item,journey:details.get(item.journey.id)!}))})};
+      const business=filter.layout==='workbench'&&this.readiness?await readDesignerBusinessRoots(db,actor,
+        authorized.filter(item=>!filter.designer||item.designer===filter.designer),this.readiness):null;
+      const filtered=prioritizeDesignRush(all.filter(item=>selectsBusiness(business,item)&&viewMatches(item,business)),item=>item.journey.nodes);
+      const chosenPage=business?filter.page:freshness?1:filter.page;
+      const page=filtered.slice((chosenPage-1)*15,chosenPage*15);
+      const shipping=business?await readWorkbenchShipping(db,actor,page.map(item=>item.journey)):null;
+      return {ids:page.map(item=>item.journey.id),finish:(details,finalFreshness=freshness,detailFailures=[])=>{
+        const failures=detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}));
+        return {asOf,page:business?filter.page:finalFreshness?1:filter.page,pageSize:15 as const,total:finalFreshness?null:filtered.length,
+          counts:finalFreshness?null:counts,...(business?{businessCounts:business.counts}:{}),...(finalFreshness?{freshness:finalFreshness}:{}),
+          ...(failures.length?{detailFailures:failures}:{}),designers:[...new Set(authorized.flatMap(item=>item.designer?[item.designer]:[]))].sort(),
+          customers:[...new Set(authorized.flatMap(item=>item.customer?[item.customer]:[]))].sort(),
+          items:page.filter(item=>details.has(item.journey.id)).map(item=>({...item,
+            ...(business?.byId.get(item.journey.id)?{business:{...business.byId.get(item.journey.id)!,
+              ...(shipping?.get(item.journey.id)?{shipping:shipping.get(item.journey.id)!}:{})}}:{}),
+            journey:{...details.get(item.journey.id)!,...(filter.layout==='workbench'?{styleName:item.journey.styleName}:{})}}))};
+      }};
     });
     if(indexed)return indexed;
-    let selectionFacts:OrderJourney[]|undefined,handling:Map<string,DevelopmentWorkspaceHandling>|undefined,rush=new Set<string>();
+    let selectionFacts:OrderJourney[]|undefined,business:DesignerBusinessProjection|null=null,handling:Map<string,DevelopmentWorkspaceHandling>|undefined,rush=new Set<string>();
+    let shipping=new Map<string,DevelopmentShippingDisplay>();
     const legacyItem=(journey:OrderJourney)=>({
       journey,view:developmentView(journey),...rushMarker(rush,journey),handling:handling?.get(journey.id),
     });
@@ -94,14 +120,18 @@ export class DevelopmentWorkspaceQuery {
       if(filter.layout==='workbench'){
         handling=await this.handling(db,actor,scoped.map(item=>({id:item.id,nodes:item.stages.flatMap(stage=>stage.nodes)})));
         rush=await readDevelopmentOrderRush(db,scoped);
+        if(this.readiness)business=await readDesignerBusinessRoots(db,actor,scoped,this.readiness);
       }
-      return prioritizeDesignRush(scoped.map(legacyItem).filter(viewMatches),legacyNodes).slice((filter.page-1)*15,filter.page*15).map(item=>item.journey);
-    });
+      const selected=prioritizeDesignRush(scoped.map(legacyItem).filter(item=>viewMatches(item,business)&&selectsBusiness(business,item)),legacyNodes).slice((filter.page-1)*15,filter.page*15).map(item=>item.journey);
+      if(business)shipping=await readWorkbenchShipping(db,actor,selected);
+      return selected;
+    },filter.layout==='workbench'?{designerNames:true}:{});
     const facts=selectionFacts??result.items,details=new Map(result.items.map(item=>[item.id,item]));
     const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey,...rushMarker(rush,journey),view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
     const counts = Object.fromEntries(DEVELOPMENT_VIEWS.map(view => [view.key, view.key === "all" ? all.length : all.filter(item => item.view === view.key).length])) as DevelopmentWorkspaceResult["counts"];
-    const filtered = prioritizeDesignRush(all.filter(viewMatches),legacyNodes);
-    return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,journey:details.get(item.journey.id)!}))};
+    const filtered = prioritizeDesignRush(all.filter(item=>viewMatches(item,business)&&selectsBusiness(business,item)),legacyNodes);
+    const chosenBusiness=business as DesignerBusinessProjection|null;
+    return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts,...(chosenBusiness?{businessCounts:chosenBusiness.counts}:{}), designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,...(chosenBusiness?.byId.has(item.journey.id)?{business:{...chosenBusiness.byId.get(item.journey.id)!,...(shipping.get(item.journey.id)?{shipping:shipping.get(item.journey.id)!}:{})}}:{}),journey:details.get(item.journey.id)!}))};
   }
   async pattern(actor: TrustedActorContext, filter: PatternWorkspaceFilter): Promise<PatternWorkspaceResult> {
     const manager=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor);

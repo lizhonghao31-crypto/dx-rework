@@ -30,21 +30,22 @@ type Props = {
  writing:{current:boolean};quantityInput:string;setQuantityInput:(value:string)=>void;
  measurementIds:{current:string[]};successfulUploads:{current:Map<string,string>};
  imageUrl:(id:string)=>string;upload:(files:File[],kind?:FileKind,stepKey?:string)=>Promise<void>;fileKind:FileKind;setFileKind:(value:FileKind)=>void;
- fileIdentity?:((id:string)=>AttachmentIdentityData|undefined)|undefined;metadataPath?:((id:string)=>string|undefined)|undefined;
+ fileIdentity?:((id:string)=>AttachmentIdentityData|undefined)|undefined;metadataPath?:((id:string)=>string|undefined)|undefined;downloadFile?:((id:string)=>string)|undefined;
  issue:(id:string)=>string|undefined;patternSection?:ReactNode;uploadHelp?:string;templateResetKey?:string|number;attachmentPageSize?:number;
 };
 const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
 const fileKinds=["款图","局部图","菲林","工艺开发板"] as const;
-const fileLabels:Record<FileKind,string>={款图:"主款图",局部图:"局部图",菲林:"菲林图",工艺开发板:"工艺开发板"};
+const originalFileLabels:Record<FileKind,string>={款图:"主款图",局部图:"局部图",菲林:"菲林图",工艺开发板:"工艺开发板"};
 const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingMethod:"洗水方法",ironing:"整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
-export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonly=false,document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind:storedFileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize,fileIdentity,metadataPath,sizeQuantityInputs,setSizeQuantityInputs,sectionStart=1,basicDetailsExternal=false,creationView,materialSupplierCatalog=false,designerInput=false,craftControls,locatingField}:Props){
+export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonly=false,document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind:storedFileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize,fileIdentity,metadataPath,downloadFile,sizeQuantityInputs,setSizeQuantityInputs,sectionStart=1,basicDetailsExternal=false,creationView,materialSupplierCatalog=false,designerInput=false,craftControls,locatingField}:Props){
   const [materialDialog,setMaterialDialog]=useState(false),[showAllPictures,setShowAllPictures]=useState(false);
   const [requestedFocus,setRequestedFocus]=useState<{id:string}|null>(null);
   const workbench=creationView!=="preorder"&&Boolean(document.workbenchSheet);
   const compact=workbench&&creationView==="sheet";
   const currentInput=Boolean(creationView)||designerInput;
-  const fileKind=currentInput&&storedFileKind==="菲林"?"款图":storedFileKind;
-  const visibleFileKinds=currentInput?fileKinds.filter(kind=>kind!=="菲林"):fileKinds;
+  const fileLabels=downloadFile?{...originalFileLabels,菲林:'二次工艺图',工艺开发板:'二次工艺定位图'}:originalFileLabels;
+  const fileKind=currentInput&&!downloadFile&&storedFileKind==="菲林"?"款图":storedFileKind;
+  const visibleFileKinds=currentInput&&!downloadFile?fileKinds.filter(kind=>kind!=="菲林"):fileKinds;
   const changeCraft=(craft:DevelopmentDocument["craft"],craftSteps?:DevelopmentDocument["craftSteps"])=>{
     const keys=new Set(developmentCraftOptions({craft,craftSteps}).map(step=>step.key));
     edit({craft,craftSteps,...(document.craftRequirements?{craftRequirements:document.craftRequirements.filter(row=>keys.has(row.stepKey))}:{})});
@@ -361,20 +362,20 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
             {!readonly&&(currentInput?<div className="development-picture-upload">
               <FileInput id="development-upload" label="添加开发附件" placeholder="选择图片或文件" value={null} isMultiple
                 aria-controls="development-upload" isDisabled={busy||document.files.length>=30}
-                accept={fileKind==="工艺开发板"?DEVELOPMENT_CRAFT_FILE_TYPES:"image/jpeg,image/png,image/webp"}
+                accept={fileKind==="工艺开发板"||downloadFile&&fileKind==="菲林"?DEVELOPMENT_CRAFT_FILE_TYPES:"image/jpeg,image/png,image/webp"}
                 onChange={files=>{if(files)void upload(Array.isArray(files)?files:[files],fileKind);}}/>
-              <span className="development-upload-help">{uploadHelp??"选择后立即上传；成功文件显示在下方。"}工艺开发板支持 PDF。</span>
+              <span className="development-upload-help">{uploadHelp??"选择后立即上传；成功文件显示在下方。"}{downloadFile?'二次工艺图及定位图支持 PDF。':'工艺开发板支持 PDF。'}</span>
             </div>:<><input id="development-upload" className="development-native-upload" disabled={busy||document.files.length>=30} type="file" multiple accept={fileKind==="款图"||fileKind==="局部图"?"image/jpeg,image/png,image/webp":DEVELOPMENT_CRAFT_FILE_TYPES} onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/><span className="development-upload-help">{uploadHelp??"选择后立即上传；成功文件显示在下方。"}菲林图及工艺开发板支持 PDF。</span></>)}
             {compact&&pictures.length>6&&<Button type="button" aria-expanded={showAllPictures} onClick={()=>setShowAllPictures(!showAllPictures)}>{showAllPictures?"收起额外图片":"查看全部图片"}</Button>}
             {!compact&&attachmentPageSize&&pictures.length>pageSize&&<nav aria-label="附件分页"><Button type="button" disabled={currentPage===1} onClick={()=>setPicturePage(currentPage-1)}>上一组附件</Button><span>第 {currentPage} / {Math.ceil(pictures.length/pageSize)} 组</span><Button type="button" disabled={currentPage*pageSize>=pictures.length} onClick={()=>setPicturePage(currentPage+1)}>下一组附件</Button></nav>}
-            <div className="development-file-list">{visiblePictures.map((file,index)=><div key={file.attachmentId}><AttachmentIdentity label={`${fileLabels[fileKind]} ${(currentPage-1)*pageSize+index+1}`} local={fileIdentity?.(file.attachmentId)} metadataPath={metadataPath?.(file.attachmentId)}/><div className="development-file-actions"><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">查看原附件</a>{!readonly&&<Button type="button" disabled={busy} onClick={async()=>{
+            <div className="development-file-list">{visiblePictures.map((file,index)=><div key={file.attachmentId}><AttachmentIdentity label={`${fileLabels[fileKind]} ${(currentPage-1)*pageSize+index+1}`} local={fileIdentity?.(file.attachmentId)} metadataPath={metadataPath?.(file.attachmentId)} directName={Boolean(downloadFile)}/><div className="development-file-actions"><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">查看原附件</a>{downloadFile&&<a href={downloadFile(file.attachmentId)}>下载原附件</a>}{!readonly&&<Button type="button" disabled={busy} onClick={async()=>{
               const {linked,withoutFile}=developmentAttachmentReferences(document,file.attachmentId);
               if(linked&&!await confirmInApp("移除此附件也会解除材料或工艺对它的引用，确定移除？"))return;
               if(writing.current)return;
               for(const [key,id]of successfulUploads.current)if(id===file.attachmentId)successfulUploads.current.delete(key);
               edit(withoutFile);
             }}>移除</Button>}</div></div>)}</div>
-            {currentInput&&document.files.some(file=>file.kind==="菲林")&&<details>
+            {currentInput&&!downloadFile&&document.files.some(file=>file.kind==="菲林")&&<details>
               <summary>原附件</summary>
               {document.files.filter(file=>file.kind==="菲林").map((file,index)=><div key={file.attachmentId}>
                 <AttachmentIdentity label={`原菲林图 ${index+1}`} local={fileIdentity?.(file.attachmentId)} metadataPath={metadataPath?.(file.attachmentId)}/>
@@ -443,7 +444,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
   {inlineMaterials?inlineMaterialFields(true):materialTable(document.materials.length,true)}
 </DocumentSection>}
 {!light&&(requirements||!creationView&&(designerInput&&!readonly||readonly&&Boolean(document.craftRequirements?.length)))&&
-  <DevelopmentCraftRequirements document={document} edit={edit} controls={craftControls} readonly={readonly} disabled={busy}
+  <DevelopmentCraftRequirements document={document} edit={edit} controls={craftControls} readonly={readonly} disabled={busy} downloadFile={downloadFile}
     draftsOnly={requirements&&!readonly} upload={upload} viewFile={imageUrl} fileIdentity={fileIdentity} metadataPath={metadataPath}/>}
 {requirements&&dimensions}
 {(!creationView||requirements)&&compactSection("制作要求",`已填 ${Object.keys(labels).filter(key=>Boolean(document[key as keyof typeof labels])).length} 项`,<DocumentSection id="development-craft" title={currentInput?"制作要求":`${sectionStart+2} · 工艺要求`}><div className="development-craft-groups">

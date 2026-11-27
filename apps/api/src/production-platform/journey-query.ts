@@ -24,6 +24,7 @@ import {assertBusinessClocksUnchanged,ContextBusinessClock,businessScopeKey} fro
 import {factoryProductionFacts,factoryProductionCompletion,nativeFactoryTimeline} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
+import {readDesignerStyleNames} from './development-workbench-business-roots.js';
 import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
 import {businessRoleLabel} from "@dx-rework/contracts/business-display";
 import {PATTERN_GROUPS} from "@dx-rework/contracts/digital-development-workspace";
@@ -131,7 +132,7 @@ export class DigitalJourneyQuery {
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id,patternKinds])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[],db:PoolClient)=>OrderJourney[]|Promise<OrderJourney[]>,options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all";withOrderRush?:true}={}) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[],db:PoolClient)=>OrderJourney[]|Promise<OrderJourney[]>,options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all";withOrderRush?:true;designerNames?:true}={}) {
     assertIdentityActor(actor);
     if(this.options.listReadMode==='indexed'&&filter.scope&&!exportAll&&!selectPage&&options.details!==false&&!options.patternBusiness)
       return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction,options.withOrderRush));
@@ -144,12 +145,14 @@ export class DigitalJourneyQuery {
       rememberWholeOrderSnapshot(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
       if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[])));
       const search=filter.search.toLocaleLowerCase();
+      const designerNames=options.designerNames?await readDesignerStyleNames(db,actor,rows.flatMap(row=>row.source?[row.source.source_id]:[])):null;
       const prepared=search&&!patternKinds?await this.prepareSearch(db,actor,rows,asOf):null;
-      const matched=prepared?[...prepared].flatMap(([row,{metadata}])=>journeyMatchesSearch({...metadata.identity,...metadata.commercial},search)?[row]:[]):rows;
+      const matched=prepared?[...prepared].flatMap(([row,{metadata}])=>journeyMatchesSearch({...metadata.identity,...metadata.commercial,
+        ...(designerNames?{styleName:designerNames.get(row.source?.source_id??'')??null}:{})},search)?[row]:[]):rows;
       // The original management policy grants the full read range for these exact candidates.
       // Assigned/technical partial readers retain their original per-object path.
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,matched.flatMap(row=>row.order?[row.order.production_order_id]:[]));
-      for(const row of matched) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope),undefined,prepared?.get(row)));if(item){items.push(item);candidates.set(item.id,row);} }
+      for(const row of matched) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope),undefined,prepared?.get(row)));if(item){if(designerNames)item.styleName=designerNames.get(row.source?.source_id??'')??null;items.push(item);candidates.set(item.id,row);} }
       const endFilter=journeySpan('filter_page');
       const facetItems=prepared?[...prepared.values()].map(({metadata})=>({customer:metadata.identity.customer,category:metadata.category,merchandisers:metadata.commercial.merchandisers})):items;
       const facets = {
@@ -176,7 +179,7 @@ export class DigitalJourneyQuery {
         for(const summary of selected){
           const row=candidates.get(summary.id)!;
           const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,row,asOf,undefined,false,null,false,false,undefined,prepared?.get(row),taskPage));
-          if(detail)details.push({...detail,hitReasons:summary.hitReasons});
+          if(detail)details.push({...detail,hitReasons:summary.hitReasons,...(designerNames?{styleName:summary.styleName}:{})});
         }
         result.items=details;
       }else if(options.details===false&&selectPage&&!filter.scope){
@@ -208,14 +211,14 @@ export class DigitalJourneyQuery {
   /** Read minimal authorized facts once, then hydrate only the objects the
    * workspace actually displays. No GET-side rebuild or stale-result fallback. */
   async workspace<T>(actor:TrustedActorContext,filter:JourneyFilter,patternBusiness:"development"|"bulk"|"all"|undefined,
-    select:(items:WorkspaceJourneyFact[],asOf:string,freshness:NonNullable<JourneyResult['freshness']>|undefined,db:PoolClient)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
+    select:(items:WorkspaceJourneyFact[],asOf:string,freshness:NonNullable<JourneyResult['freshness']>|undefined,db:PoolClient,authorized:WorkspaceJourneyFact[])=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
     if(this.options.listReadMode!=='indexed')return null;
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf,transaction)=>{
       const patternKinds=patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>patternBusiness==="all"||(patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const candidates=await this.candidates(db,actor,null,patternKinds);
       const read=await readJourneySelections(this.database,db,actor,candidates,filter,asOf,{workspaceNodes:patternBusiness?'pattern':'designer',...(patternKinds?{workspaceKinds:patternKinds}:{})});
-      const byResource=new Map(read.items.map(row=>[businessScopeKey(row.resource),row])),facts:WorkspaceJourneyFact[]=[],byId=new Map<string,Candidate>();let pending=0,failed=0;const retryIds:string[]=[];
+      const byResource=new Map(read.items.map(row=>[businessScopeKey(row.resource),row])),facts:WorkspaceJourneyFact[]=[],authorized:WorkspaceJourneyFact[]=[],byId=new Map<string,Candidate>();let pending=0,failed=0;const retryIds:string[]=[];
       for(const candidate of candidates){
         const scope:BusinessTimeScope=candidate.order?{kind:'order',id:candidate.order.production_order_id}:{kind:'source',id:candidate.source!.source_id};
         const row=byResource.get(businessScopeKey(scope));if(!row)continue;
@@ -223,11 +226,12 @@ export class DigitalJourneyQuery {
         if(time.scenarioId)this.observations.get(db)?.set(businessScopeKey(row.resource),{scope:row.resource,time});
         const metadata={...row.selection};if(patternBusiness)delete metadata.selectionSignals;
         if(!journeyMatchesMetadata(metadata,patternBusiness?{...filter,search:''}:filter))continue;
+        authorized.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});
         if(row.status!=='ready'){if(row.status==='failed'){failed++;retryIds.push(row.selection.id);}else pending++;continue;}
         facts.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});byId.set(row.selection.id,candidate);
       }
       const freshness=()=>pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined;
-      const plan=await select(facts,asOf,freshness(),db),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
+      const plan=await select(facts,asOf,freshness(),db,authorized),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,plan.ids.flatMap(id=>byId.get(id)?.order?[byId.get(id)!.order!.production_order_id]:[]));
       const pagePlan=patternBusiness?undefined:await this.prepareWorkspaceTaskPage(db,transaction,actor,plan.ids,byId,detailFailures);
       for(const id of new Set(plan.ids)){
