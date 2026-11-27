@@ -33,7 +33,8 @@ export const QuotationConfirmationSchema=z.object({
 }).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
 export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
 export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number;materialId?:string}};
-export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {secondaryCraftEntry?:boolean;craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;technicalUsage?:'required'|'not_applicable'|'unknown';priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
+export type QuotationRowPriceBasis={version:number;origin:'development_document'|'ie_price'|'approved_craft'|'responsible_price';decisionId?:string};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {secondaryCraftEntry?:boolean;priceBasis?:QuotationRowPriceBasis;craftBasis?:{stage:'development'|'bulk';libraryId:string;libraryVersion:number;stepId:string|null};unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;technicalUsage?:'required'|'not_applicable'|'unknown';priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;canEditPricingUnit?:boolean;pricingUnitSource?:{sourceUnit:string;version:number;recordedAt:string};consumptionSource:QuotationConsumptionSource|null;technicalConsumptionIssue?:'unit_mismatch'};
 export const IeProcessingStateSchema=z.enum(['needs_assignment','waiting','awaiting_price','priced']);
 export const IeProcessingQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100_000).default(1),
  search:z.string().trim().max(100).default(''),state:z.union([z.literal('all'),IeProcessingStateSchema]).default('all')}).strict();
@@ -74,6 +75,34 @@ export const QuotationReadinessSchema=z.object({
   canMeasure:z.boolean(),canConfirm:z.boolean(),reasons:z.array(z.string()),
 }).strict();
 export type QuotationReadiness=z.infer<typeof QuotationReadinessSchema>;
+export const DesignerQuotationStatusCodeSchema=z.enum(['not_started','needs_information','awaiting_price','returned','awaiting_review',
+  'awaiting_craft_approval','awaiting_customer_confirmation','confirmed','unverified','unavailable','forbidden']);
+export type DesignerQuotationStatusCode=z.infer<typeof DesignerQuotationStatusCodeSchema>;
+export const DESIGNER_QUOTATION_STATUS_DISPLAY={
+  not_started:{label:'未开始',tone:'neutral'},needs_information:{label:'缺资料',tone:'danger'},awaiting_price:{label:'待报价',tone:'danger'},
+  returned:{label:'待修改',tone:'danger'},awaiting_review:{label:'待复核',tone:'warning'},awaiting_craft_approval:{label:'待工艺审批',tone:'warning'},
+  awaiting_customer_confirmation:{label:'待客户确认',tone:'warning'},confirmed:{label:'客户已确认',tone:'success'},
+  unverified:{label:'待核对',tone:'neutral'},unavailable:{label:'读取失败',tone:'neutral'},forbidden:{label:'无权查看',tone:'neutral'},
+} as const satisfies Record<DesignerQuotationStatusCode,{label:string;tone:'neutral'|'danger'|'warning'|'success'}>;
+export const DesignerQuotationRowStateSchema=z.enum(['needs_information','awaiting_price','returned','awaiting_review','awaiting_craft_approval','complete']);
+export const DesignerQuotationStatusSchema=z.object({
+  resource:QuotationResourceSchema,quoteId:z.string().uuid().nullable(),version:z.number().int().nonnegative(),
+  sourceVersion:z.number().int().positive().nullable(),roundNumber:z.number().int().positive().nullable(),confirmedVersion:z.number().int().positive().nullable(),
+  state:DesignerQuotationStatusCodeSchema,reasons:z.array(z.string()),
+  completed:z.number().int().nonnegative(),applicable:z.number().int().nonnegative(),
+  rows:z.array(z.object({rowId:z.string().uuid(),state:DesignerQuotationRowStateSchema}).strict()),
+}).strict();
+export type DesignerQuotationStatus=z.infer<typeof DesignerQuotationStatusSchema>;
+const quotationSnapshotDecimal=z.string().regex(/^\d+(?:\.\d{1,12})?$/);
+const quotationSnapshotBasis=z.object({quoteVersion:z.number().int().positive(),cost:quotationSnapshotDecimal,
+  input:QuotationPricingInputSchema,customerUnitPrice:quotationSnapshotDecimal}).strict();
+export const QuotationConfirmedPricingSnapshotSchema=z.discriminatedUnion('status',[
+  quotationSnapshotBasis.extend({status:z.literal('calculated'),multiplierPercent:quotationSnapshotDecimal.nullable(),
+    exactMultiplierPercent:z.object({numerator:z.string().regex(/^\d+$/),denominator:z.string().regex(/^[1-9]\d*$/)}).strict().nullable()}),
+  quotationSnapshotBasis.extend({status:z.literal('zero_cost'),cost:z.string().regex(/^0+(?:\.0{1,12})?$/),
+    input:QuotationPricingInputSchema.extend({field:z.literal('customerUnitPrice')}),multiplierPercent:z.null(),exactMultiplierPercent:z.null()}),
+]);
+export type QuotationConfirmedPricingSnapshot=z.infer<typeof QuotationConfirmedPricingSnapshotSchema>;
 export type QuotationSheet={
   priorCraftRows?:Array<{row:BudgetRow;stage:'development'|'bulk'}>;
   automatic?:boolean;
@@ -81,6 +110,8 @@ export type QuotationSheet={
   craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
   workbenchReadiness?:QuotationReadiness;
+  designerStatus?:DesignerQuotationStatus;
+  confirmedPricing?:QuotationConfirmedPricingSnapshot|null;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;
   commandReceipt?:{action:string;appliedVersion:number};
   quoteId:string|null;resource:QuotationResource;productionOrderId:string|null;sourceId:string|null;
@@ -214,6 +245,7 @@ export const QuotationWorkbenchPreviewSchema = z.object({
   }).strict()).max(600),
   confirmation: z.enum(['awaiting_joint_release','joint_release_ready']),
   readiness: QuotationReadinessSchema.optional(),
+  designerStatus: DesignerQuotationStatusSchema.optional(),
 }).strict();
 
 export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){

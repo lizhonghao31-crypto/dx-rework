@@ -112,9 +112,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
   const [conversionVersion,setConversionVersion]=useState(existingDraft?.version??0);
   const [correctionPending,setCorrectionPending]=useState(false);
-  const correctionScope=Boolean(source&&existingDraft?.document&&(numberedCreation||document.templateConfirmed&&document.workbenchSheet)&&workbenchNumberedCreation);
+  const resumedConfirmation=existingDraft?.status==='published'&&existingDraft.document?.customerOrderDraft?.withOrder===true
+   &&withOrder&&!preorder&&!existingDraft.productionOrderId;
+  const correctionSourceId=workbenchNumberedCreation&&existingDraft?.canEdit&&existingDraft.document
+   &&(source?source.sourceId===existingDraft.sourceId:resumedConfirmation)
+   &&(numberedCreation||document.templateConfirmed&&document.workbenchSheet)?existingDraft.sourceId:undefined;
   const conversionNotes=existingDraft?.version===conversionVersion?existingDraft.workbenchBasics:undefined;
-  const conversionNeedsChanges=correctionScope&&Boolean(developmentCreationBasicsIssues(document,conversionNotes).length||developmentPreparationQuantityIssues(document,true).length);
+  const conversionNeedsChanges=Boolean(correctionSourceId)&&Boolean(developmentCreationBasicsIssues(document,conversionNotes).length||developmentPreparationQuantityIssues(document,true).length);
 
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>(creation?.snapshot?.fileKind??"款图");
   const measurementIds=useRef(creation?.snapshot?.measurementIds??document.measurements.map(()=>createClientRequestId()));
@@ -721,6 +725,10 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {createdSource&&error&&<p role="status">{failedPhase==='confirm_check'?"本单时效检查未完成，本次客户订单确认尚未发送；资料仍保留，请重新检查。":failedPhase==='publish_check'?"本单时效检查未完成，本次开发发布尚未发送；草稿仍保留，请重新检查。":submissionUnknown||failedPhase==='confirm'||failedPhase==='publish'?developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。":developmentPublished?"开发资料已发布；本次办理尚未完成，请按上方原因处理。":"本次办理尚未完成；已保存内容在原档案，当前输入仍保留。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
     {submissionUnknown&&<section aria-label="原提交结果待核对"><p role="status">{pendingSubmission.current?.operation==='publish_preorder'?'预下单发布结果尚未确定，不能据此继续交接或确认下单。':pendingSubmission.current?.operation==='publish'?'开发发布结果尚未确定，不能据此继续确认下单。':'正式确认结果尚未确定，尚不能显示已下单。'}原资料和操作标识已保留；先只读核对回执，查不到仍保持待核。</p><FormAction disabled={busy} onClick={()=>void recoverSubmission()}>只读核对原提交结果</FormAction><FormAction disabled={busy} onClick={()=>void recoverSubmission(true)}>沿原命令继续核对</FormAction></section>}
+    {correctionSourceId&&conversionVersion>0&&<DevelopmentDesignerCorrection key={`${correctionSourceId}:${conversionVersion}`}
+      sourceId={correctionSourceId} round={existingDraft?.roundNumber??1} version={conversionVersion} document={document} notes={conversionNotes} disabled={busy||!calendarReady||submissionUnknown}
+      onRead={sheet=>{setDocument(sheet.document!);setConversionVersion(sheet.version);loadedVersion.current=sheet.version;}}
+      onPending={setCorrectionPending}/>}
     <fieldset disabled={busy||!calendarReady||submissionUnknown}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card" hidden={guided&&wizardStep===2}><h3>{guided?(wizardStep===3?"客户资料":"基本资料"):"1 · 基本资料"}</h3><BasicLayout><div className="development-create-grid" hidden={guided&&wizardStep!==1}>
       {guided&&<><div><Selector id="development-create-garment" label="衣类" placeholder="请选择衣类" size="sm" isRequired
@@ -775,10 +783,6 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           max={calendarToday} value={form.orderDate} onChange={value=>setForm({...form,orderDate:value??''})}/></div>
          :<label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>)}
 </>}{!guided&&<>{developmentDate}{craftControl}</>}</div></BasicLayout></section>
-    {correctionScope&&source?.sourceId&&conversionVersion>0&&<DevelopmentDesignerCorrection key={`${source.sourceId}:${conversionVersion}`}
-      sourceId={source.sourceId} round={existingDraft?.roundNumber??1} version={conversionVersion} document={document} notes={conversionNotes} disabled={busy}
-      onRead={sheet=>{setDocument(sheet.document!);setConversionVersion(sheet.version);loadedVersion.current=sheet.version;}}
-      onPending={setCorrectionPending}/>}
     {withOrder&&(!guided||!preorder&&wizardStep===3) && <section className="development-create-card development-create-details"><h3>{guided?"客户订单明细":"2 · 客户订单明细"} <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
       {guided&&sharedPoColumns&&form.lines.length>1&&!boundOrder&&<FormAction type="button" onClick={()=>setSharedPoColumns(false)}>分别编辑各 PO 尺码</FormAction>}
       {!sharedPoColumns&&<p className="development-legacy-po-note">各 PO 尺码按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}

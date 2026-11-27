@@ -700,6 +700,20 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    finally{await tab.close();}
   }finally{await h.writeEvidence();await h.dispose();}
  });
+ async function seedPriorUi02Publication(h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,designer:Awaited<ReturnType<typeof supplychainSettingsBrowser>>['f']['root'],sourceId:string,version:number){
+   // Isolated historical input: pre-UI-02 allowed an empty brand in this exact
+   // shape. Seed the one prior publication from a draft without changing a
+   // published row or asking today's new-publication guard to allow it.
+   const client=await h.db.connect();
+   try{
+    await client.query('BEGIN');
+    const {taskId}=await new DigitalProductionTaskService(h.db).createWithClient(client,designer,{resource:{kind:'source',id:sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:h.f.people['development-clerk']!.actorId});
+    expect((await client.query(`UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$3,
+     document=jsonb_set(document,'{workbenchSheet,brand}',to_jsonb(''::text)),version=version+1
+     WHERE source_id=$1 AND version=$2 AND status='draft'`,[sourceId,version,taskId])).rowCount).toBe(1);
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ }
  it.each([true,false])('confirms the original legacy sheet with numbered creation=%s and the matching effective basics policy',async(enabled)=>{
   const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-review-confirmation-')),{fullApp:true,workbenchNumberedCreation:enabled});
   try{
@@ -713,18 +727,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉',
     ...(enabled?{quantity:'500',quantityUnit:'米'}:{})}];
    const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
-   // Isolated historical input: pre-UI-02 allowed an empty brand in this exact
-   // shape. Seed the one prior publication from a draft without changing a
-   // published row or asking today's new-publication guard to allow it.
-   const client=await h.db.connect();
-   try{
-    await client.query('BEGIN');
-    const {taskId}=await new DigitalProductionTaskService(h.db).createWithClient(client,designer,{resource:{kind:'source',id:sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:h.f.people['development-clerk']!.actorId});
-    expect((await client.query(`UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$3,
-     document=jsonb_set(document,'{workbenchSheet,brand}',to_jsonb(''::text)),version=version+1
-     WHERE source_id=$1 AND version=$2 AND status='draft'`,[sourceId,saved.version,taskId])).rowCount).toBe(1);
-    await client.query('COMMIT');
-   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   await seedPriorUi02Publication(h,designer,sourceId,saved.version);
    const published=await forms.read(designer,sourceId);expect(published.document?.workbenchSheet?.brand).toBe('');
    const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
    try{
@@ -758,6 +761,46 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
     expect((await h.db.query('SELECT 1 FROM digital_development_amendments WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
    }catch(error){await writeFile(join(h.evidence,'original-review-confirmation-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ it('corrects required original data through the published resume-confirmation page before creating the same order',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-review-resume-')),{fullApp:true,workbenchNumberedCreation:true});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+   const style='TEST-UI02-RESUME-'+randomUUID(),{sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const doc=initialDevelopmentDocument(),materialId=randomUUID();
+   Object.assign(doc,{templateConfirmed:true,sizeTableInitialized:true,quantity:2,documentFormatVersion:2,sizes:['M'],sizeQuantities:[2],measurements:[],
+    workbenchSheet:{version:1,styleName:'TEST 原续办品名',brand:'',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',
+     sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:2}]},files:[{attachmentId:await h.f.image(designer),kind:'款图'}],
+    customerOrderDraft:{withOrder:true,stage:'formal',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,
+     orderDate:'2026-11-25',temporaryStyleNo:null,contractDeliveryDate:null,lines:[{formalPoNo:style+'-PO',color:'黑',deliveryDate:null,
+      customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:'2'}]}]})}});
+   doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原续办主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉'}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
+   await seedPriorUi02Publication(h,designer,sourceId,saved.version);
+   const original=await forms.read(designer,sourceId);
+   expect(original).toMatchObject({version:saved.version+1,status:'published',document:{customerOrderDraft:{withOrder:true},workbenchSheet:{brand:''}}});
+   const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?development=${sourceId}`);
+   try{
+    const {page}=tab;page.setDefaultTimeout(12000);
+    await page.getByRole('button',{name:'查看已发布资料、版本与办理',exact:true}).waitFor();
+    const submit=page.getByRole('button',{name:'确认客户订单',exact:true}),editor=page.getByRole('group',{name:'转正前补齐原开发资料',exact:true});
+    await editor.waitFor();expect(await submit.isDisabled()).toBe(true);
+    await editor.getByRole('textbox',{name:/^品牌/}).fill('TEST 旧单原入口补齐品牌');
+    await editor.getByRole('textbox',{name:/TEST 原续办主料 备料数量/}).fill('500');
+    await editor.getByRole('textbox',{name:/本次订正理由/}).fill('TEST 由原续办入口补齐旧资料');
+    const changed=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/development/designer-correction`));
+    await editor.getByRole('button',{name:'保存本轮资料订正',exact:true}).click();
+    const corrected=await changed;expect(corrected.status(),await corrected.text()).toBe(200);
+    expect(corrected.request().postDataJSON()).toMatchObject({roundNumber:1,expectedDocumentVersion:original.version,brand:'TEST 旧单原入口补齐品牌',materialQuantities:[{materialId,quantity:'500',quantityUnit:'米'}]});
+    await editor.waitFor({state:'hidden'});
+    const color=page.getByLabel('辅料是否需要对色',{exact:true});if(await color.count()&&!await color.isDisabled())await color.selectOption('no');
+    const confirmed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/confirm`));
+    await submit.click();const response=await confirmed;expect(response.status(),await response.text()).toBe(200);
+    expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
+    expect((await forms.publishedVersion(designer,sourceId,1,original.version)).document).toEqual(original.document);
+   }catch(error){await writeFile(join(h.evidence,'original-resume-confirmation-failure.txt'),await tab.page.locator('body').innerText());throw error;}
    finally{await tab.close();}
   }finally{await h.writeEvidence();await h.dispose();}
  });

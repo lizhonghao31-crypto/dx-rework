@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "aa0b48a0489fdf49c838ec427d3e504a34d12847",
+  "base": "5625fc00a7e3a40d2c72d95a30faa2e3fc09d522",
   "risk": "full",
-  "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
+  "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
   "rules": [
     {
       "rule": "创建步骤沿现行三种业务路径与原身份，只登记一份真实样板制作数量；面料米数及辅料单位仍为原备料依据。原一次操作未确认时保留原键。",
@@ -35,7 +35,7 @@
       ],
       "expectation": "原页面三类创建保存、发布及确认保留同一来源及编号；P 预下单原收货 20／12／8 留在原材料和原批次范围；双独立站、唯一数量输入和 2×2 四格按实际资料存取。",
       "checks": [
-        "ui02-native",
+        "ui02-release-native",
         "ui02-units"
       ]
     },
@@ -60,7 +60,7 @@
       ],
       "expectation": "全页目录使用原入口，从合法原编号及原版本回写同一行；另一实际供应商选择真实有效。本单数量 12 件乘 0.8 对应的原行 9.6 以及原快照可在刷新后读回。",
       "checks": [
-        "ui02-native",
+        "ui02-release-native",
         "ui02-units"
       ]
     },
@@ -94,9 +94,9 @@
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "expectation": "等价现有正式前资料漏备料数量时，原确认页填写同一行 500 米后生成该轮修订，不覆盖旧快照或原收料、不生成文员任务或第二母单；精确原签名路径复测旧页、其他设计师、重复键。开关打开时采用同一轮发布已保存的有效品牌而不须伪造修改，关闭时已有旧单仍可走原正式入口。实际低权限预检拒绝错误视图归属，归属恢复后 0318 升级成功。",
+      "expectation": "等价现有正式前资料漏备料数量时，原确认页填写同一行 500 米后生成该轮修订，不覆盖旧快照或原收料、不生成文员任务或第二母单；精确原签名路径复测旧页、其他设计师、重复键。开关打开时采用同一轮发布已保存的有效品牌而不须伪造修改，关闭时已有旧单仍可走原正式入口。同一已发布原单从旧恢复确认入口以当前轮版补齐品牌和原材料数量，不解锁冻结订购草稿，也不改历史。实际低权限预检拒绝错误视图归属，归属恢复后 0318 升级成功。",
       "checks": [
-        "ui02-review-native",
+        "ui02-release-native",
         "ui02-migration",
         "ui02-owner-upgrade",
         "ui02-protocol"
@@ -105,71 +105,48 @@
   ],
   "checks": [
     {
-      "id": "ui02-native",
+      "id": "ui02-release-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-native-browser-postgres.test.ts -t 'resumes an unnumbered draft|numbers new pure and confirmed|uses actual craft stations|saves the numbered C2 draft' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/final/ui02-native.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-native-browser-postgres.test.ts -t 'resumes an unnumbered draft|numbers new pure and confirmed|uses actual craft stations|fills missing procurement quantity|confirms the original legacy sheet|corrects required original data through the published resume-confirmation page|uses the signed original development routes|saves the numbered C2 draft' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-release-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Unchanged original creation flow, native three types, receipt and supplier path remain functional on latest UI02 reviewed-fix candidate.",
-      "startedAt": "2026-11-27T03:03:32.975759+00:00",
-      "endedAt": "2026-11-27T03:04:44.373489+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-native.log",
-      "logSha256": "ba7dece2ddcf9709d5a5f9373e2819dba124c2d395146b0a61f23ef0f3f4c79a",
-      "passed": 4,
+      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
+      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+      "context": "Exact 5625fc00 release plus all three Review fixes, signed original browser and one fresh schema at a time, retaining independent genuine author and warehouse operations and request-replay checks.",
+      "startedAt": "2026-11-27T03:21:49.409276+00:00",
+      "endedAt": "2026-11-27T03:23:46.443181+00:00",
+      "log": "/workspace/scratch/ui02-current/release/ui02-release-native.log",
+      "logSha256": "07bdb85febd7ad0f1ff30e942154a2e680f870e840f41d2c93907f98c5ffa0fe",
+      "passed": 9,
       "failed": 0,
-      "skipped": 33,
+      "skipped": 29,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "424e572f213318ac1d135773bb24fb66d3a11dfcc7bf89ef42c7f1ed8c599dfb"
-        }
-      ]
-    },
-    {
-      "id": "ui02-review-native",
-      "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'confirms the original legacy sheet|fills missing procurement quantity|uses the signed original development routes' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/final/ui02-review-native.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Actual logged-in designer original formal confirmation on seeded pre-UI02 published shape, both configured switch states and original exact supplemental basics, with real PG.",
-      "startedAt": "2026-11-27T03:02:22.675140+00:00",
-      "endedAt": "2026-11-27T03:02:56.855427+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-review-native.log",
-      "logSha256": "8f2f122089df330c8e6e0fda9aa4bb04b7158ad98efdc2e9cf689e2e8ef849c0",
-      "passed": 4,
-      "failed": 0,
-      "skipped": 27,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "1074feefa4d10b5a52ae86e9aa919f0d24937d3a0a672fdc70e07fe9f2f3348f"
+          "sha256": "e41f9ff7f2fe01323bd831903dd33d2623a1f0d1f6da97c62868e28d3b0ca494"
         }
       ]
     },
     {
       "id": "ui02-units",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.config.ts tests/unit/workbench-creation-data.test.ts tests/unit/workbench-material-amount.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/final/ui02-units.json",
+      "command": "npx vitest run --config vitest.config.ts tests/unit/workbench-creation-data.test.ts tests/unit/workbench-material-amount.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Existing quantity and new syntax check on latest source and matched basics.",
-      "startedAt": "2026-11-27T03:03:32.981262+00:00",
-      "endedAt": "2026-11-27T03:03:35.206403+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-units.log",
-      "logSha256": "ff40d8c83843135362e0e52a69cd832d8df3c0cf8df41575347acc545906e8c6",
+      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
+      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+      "context": "Latest exact 5625fc00 release candidate: workbench amount, correction unit, and exact one data entry.",
+      "startedAt": "2026-11-27T03:20:53.333338+00:00",
+      "endedAt": "2026-11-27T03:20:54.722887+00:00",
+      "log": "/workspace/scratch/ui02-current/release/ui02-units.log",
+      "logSha256": "980d45bb275c65486f797e216d6aa62c028a10e46fb36010d574e9c415017441",
       "passed": 12,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "91a1d136404edf983c689c2b7e131e618196df95d57d702a71f6eb71c5ac8213"
+          "sha256": "e9e140cbb5645f86841e9a463cd39f9c5027552ef3761e21575c5efb909ee1a8"
         }
       ]
     },
@@ -179,34 +156,34 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Canonical migrations exact source and existing file hashes including 0317 and 0318.",
-      "startedAt": "2026-11-27T03:03:33.755135+00:00",
-      "endedAt": "2026-11-27T03:03:34.255846+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-migration.log",
+      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
+      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+      "context": "Canonical migration manifest lint on the actual base.",
+      "startedAt": "2026-11-27T03:20:18.419666+00:00",
+      "endedAt": "2026-11-27T03:20:18.645749+00:00",
+      "log": "/workspace/scratch/ui02-current/release/ui02-migration.log",
       "logSha256": "53c6871aef7b61ce788ccecb0d23b2c60c7f740babe68c3975d65e59dede9d6c"
     },
     {
       "id": "ui02-owner-upgrade",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.config.ts tests/integration/acceptance-maintenance-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/final/ui02-owner-upgrade.json",
+      "command": "npx vitest run --config vitest.config.ts tests/integration/acceptance-maintenance-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release/ui02-owner-upgrade.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Existing table and original view permissions read by the actual low-privilege PG migration helper, exact migration inventory, plus wrong-owner case.",
-      "startedAt": "2026-11-27T03:03:33.022165+00:00",
-      "endedAt": "2026-11-27T03:03:42.945133+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-owner-upgrade.log",
-      "logSha256": "d17af2f693fbd9290a8b8de0c59413f062f583a245f2aad2357a044b954767a9",
+      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
+      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+      "context": "Exact actual release 5625fc00, genuine low-privilege PostgreSQL and exact wrong-owner existing view check under pending 0318.",
+      "startedAt": "2026-11-27T03:23:46.729129+00:00",
+      "endedAt": "2026-11-27T03:23:53.586155+00:00",
+      "log": "/workspace/scratch/ui02-current/release/ui02-owner-upgrade.log",
+      "logSha256": "32fafae2e9218a7fc9e945c5c142260fc875015d7af128c22753bdde605bb434",
       "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0717995eb1d6fb424d0b8ca7728eee1a85d109493915535525728b1f8e08d6fd"
+          "sha256": "d091561d5cb3017b14f0f83b06abf3c39476f95a3c8b420fc1bbbf39545aa9e0"
         }
       ]
     },
@@ -216,20 +193,20 @@
       "command": "node --test scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "64712f8dfa9a98cf714fd819bfbc99f3bcef31f3",
-      "sourceFingerprint": "2f4e5249a496c90b957ff6259a54e0be2e8a680d44073a7e3447db7bf017ad58",
-      "context": "Real repository CI protocol/compatibility assertions without rerunning Light.",
-      "startedAt": "2026-11-27T03:03:32.939202+00:00",
-      "endedAt": "2026-11-27T03:03:33.455610+00:00",
-      "log": "/workspace/scratch/ui02-current/final/ui02-protocol.log",
-      "logSha256": "d7d815f75af3a1ab30ecb3dd52b7890101071e97731b283f061d175410be1b81",
+      "testedHead": "ba6c08c594a509de79498fc5794296da782ad9a0",
+      "sourceFingerprint": "53e3cb40424eabdaa305a1be27fc8d5b7403f679910f5e0b148f9429cf57b7c3",
+      "context": "Original 21 migration compatibility, test contract and verification protocols on actual 5625fc00 release.",
+      "startedAt": "2026-11-27T03:20:17.721826+00:00",
+      "endedAt": "2026-11-27T03:20:18.175682+00:00",
+      "log": "/workspace/scratch/ui02-current/release/ui02-protocol.log",
+      "logSha256": "b1dab9b8dd418deb3635d7bcb4d1739a58e8f2cdcca51347ba26d04178ff6f6f",
       "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "d7d815f75af3a1ab30ecb3dd52b7890101071e97731b283f061d175410be1b81"
+          "sha256": "b1dab9b8dd418deb3635d7bcb4d1739a58e8f2cdcca51347ba26d04178ff6f6f"
         }
       ]
     }
