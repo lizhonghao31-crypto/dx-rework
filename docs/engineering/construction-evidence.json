@@ -42,7 +42,8 @@
         "apps/api/src/production-platform/warehouse-receipt-page.ts",
         "apps/api/src/production-platform/warehouse-receipt-work.ts",
         "packages/contracts/src/production-readiness.ts",
-        "tests/unit/warehouse-material-balance.test.ts"
+        "tests/unit/warehouse-material-balance.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
         "apps/api/src/production-platform/warehouse-material-balance.ts#scopedWarehouseReceiptQuantity",
@@ -60,7 +61,8 @@
       "checks": [
         "wh01-unit",
         "wh01-pg",
-        "wh01-static"
+        "wh01-static",
+        "wh01-time-inventory"
       ]
     },
     {
@@ -151,6 +153,23 @@
       "logSha256": "710fca14d6efb74ad961f78ef036aa27c40cac3e50a478b6b6585466e6133164",
       "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node --test scripts/ci/test-execution-contract.test.mjs; npx eslint --max-warnings=0 <changed TS/TSX>; git diff --check",
       "context": "Node 22.22.2, local exact workspace candidate, original static migration and execution compatibility validation."
+    },
+    {
+      "id": "wh01-time-inventory",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "command": "node scripts/acceptance/time-site-inventory.mjs && node --test --test-name-pattern='shared time-source inventory|reviewed responsibility sources' scripts/ci/pr-gate-controller.test.mjs",
+      "context": "Exact local source unchanged from first review; updated only five time-site inventory entries. Both protocol assertions that failed in first Light passed after manifest update.",
+      "testedHead": "bd551a149ad96b742d3640efe9f701702fb8cc50",
+      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
+      "log": "/workspace/scratch/wh01-evidence/timing.log",
+      "logSha256": "5d9f59dba39589183c7d62fa39193fb5b089e1ef88f43c42acb1cb66f9a9b86b",
+      "startedAt": "2026-11-27T07:51:44Z",
+      "endedAt": "2026-11-27T07:51:45Z"
     }
   ]
 }
