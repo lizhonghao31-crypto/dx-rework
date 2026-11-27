@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {calculateQuotationPricing,calculateQuotationUnitCost,quotationDraftReviewSummary,QuotationPricingInputSchema,
-  type QuotationAssignment,type QuotationLineReviewCommand,type QuotationReadiness,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
+  type DesignerQuotationStatus,type QuotationAssignment,type QuotationLineReviewCommand,type QuotationReadiness,type QuotationPricingInput,type QuotationResource,type QuotationReviewField} from '@dx-rework/contracts/digital-quotation';
 import type {BudgetRow} from '@dx-rework/contracts/digital-budget';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -125,7 +125,18 @@ export async function readWorkbenchQuotation(db:ReadDatabase,quote:AssembledQuot
   const readiness:QuotationReadiness={canMeasure,
     canConfirm:canMeasure&&quotationComplete(quote)&&result.status==='awaiting_customer_confirmation'&&!reasons.length,
     reasons:reasons.length||canMeasure?reasons:['待补齐用量、价格或负责人员']};
-  return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,readiness,
+  const rows:DesignerQuotationStatus['rows']=audited.map(({row,kind,hasIdentity,hasUsage,hasPrice},i)=>{
+    const state=states[i]!;
+    return {rowId:row.rowId,state:state.reviews.includes('returned')?'returned':!hasIdentity||!hasUsage||kind==='material'&&technical.length>0?'needs_information':
+      !hasPrice?'awaiting_price':state.reviews.includes('resubmitted')?'awaiting_review':state.craftApproval==='pending'?'awaiting_craft_approval':'complete'};
+  });
+  const designerStatus:DesignerQuotationStatus={resource,quoteId:quote.quote_id,version:quote.version,sourceVersion:quote.assembly?.sourceVersion??null,roundNumber:round,
+    confirmedVersion:quote.confirmed_version??null,applicable:rows.length,completed:rows.filter(row=>row.state==='complete').length,rows,reasons:readiness.reasons,
+    state:result.counts.returned?'returned':technical.length||!rows.length||!customerCode||rows.some(row=>row.state==='needs_information')?'needs_information':
+      rows.some(row=>row.state==='awaiting_price')?'awaiting_price':
+      result.counts.resubmitted?'awaiting_review':unmapped||result.counts.pendingCraftApproval?'awaiting_craft_approval':
+      readiness.canConfirm?'awaiting_customer_confirmation':'unverified'};
+  return {resource,quoteId:quote.quote_id,version:quote.version,unitCost,...result,readiness,designerStatus,
     ...(unmapped&&result.status==='awaiting_customer_confirmation'?{status:'awaiting_craft_approval' as const}:{}),
     saved:draft?{input:QuotationPricingInputSchema.parse(draft.pricing.input),version:draft.quote_version}:null,reviews:visibleReviews,
     confirmation:releaseReady?'joint_release_ready' as const:'awaiting_joint_release' as const};
