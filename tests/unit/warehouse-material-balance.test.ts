@@ -1,3 +1,5 @@
+import {projectWarehouseReceiptReconciliation,type ReconciliationBinding} from '../../apps/api/src/production-platform/warehouse-receipt-reconciliation-projection.js';
+import {preparationInvestmentRowKey,type PreparationMaterialFact} from '@dx-rework/contracts/production-readiness';
 import { describe, expect, it } from 'vitest';
 import { currentWarehouseReceiptQuantity, warehouseMaterialBalance, warehouseReceiptBatches, scopedWarehouseReceiptQuantity, warehouseReceiptTaskBasis, type WarehouseReceiptBasis, type WarehouseReceiptMovement } from '../../apps/api/src/production-platform/warehouse-material-balance.js';
 import {legacyPreparationMaterialFingerprint,preparationHash,preparationInvestmentScope,warehouseReceiptMaterialCurrent} from '../../apps/api/src/production-platform/preparation-material-repository.js';
@@ -193,5 +195,60 @@ describe('X3 evidence-driven awaiting receipt from native investment',()=>{
   expect(warehouseReceiptTaskBasis(basis,{...investment,state:'unknown'})).toBeNull();
   expect(warehouseReceiptTaskBasis(basis,{...investment,valid:false})).toBeNull();
   expect(warehouseReceiptTaskBasis({...basis,unit:'码'},investment)).toBeNull();
+ });
+});
+
+
+describe('WH-01 original fabric receipts and scope projection',()=>{
+ const unit='米',at=(minute:string)=>`2026-11-26T17:${minute}:00.000Z`;
+ const basis={resource:{kind:'order' as const,id:'test-order'},kind:'fabric_receipt' as const,scopeRef:'whole',
+  materialId:'fabric-a',lineId:'po-a',adoptedRef:'fingerprint-a',supplierId:null,unit};
+ const ref=(recordId:string,version=1)=>({recordId,version});
+ const purchase={invested:metres('520'),investedAt:at('01'),original:ref('purchase'),handover:ref('handover')};
+ const stored={materialId:null,lineId:'po-a',name:'原始主布',quantity:300,unit};
+ const old:PreparationMaterialFact={...ref('legacy'),resource:basis.resource,kind:basis.kind,scopeRef:'whole',expectedVersion:0,state:'partial',
+  occurredAt:at('05'),recordedAt:at('05'),recordedBy:'warehouse',operatorName:'原仓管',valid:true,invalidReasons:[],
+  quantities:[stored],evidenceIds:[],note:'原数量行',sourceDocumentVersion:null,recipientId:null};
+ const native:WarehouseReceiptMovement={basis,original:ref('same-stream'),quantity:metres('20'),occurredAt:at('08'),valid:true};
+ const binding:ReconciliationBinding={scopeRef:'whole',materialId:basis.materialId,lineId:basis.lineId,supplierId:null,unit,
+  investment:purchase.original,materialFingerprint:basis.adoptedRef,
+  legacy:{ref:ref('legacy'),quantityRowKey:preparationInvestmentRowKey(stored)},batch:native.original,relation:'independent',
+  proof:{mode:'document',legacy:{attachmentId:'file-left',documentNumber:'收货一',line:'1'},batch:{attachmentId:'file-right',documentNumber:'收货二',line:'1'}},
+  note:'已核对采购范围和独立到货',generation:1,state:'confirmed',recordedAt:at('09'),proofValid:true};
+ const calculate=(overrides:Partial<Parameters<typeof projectWarehouseReceiptReconciliation>[0]>={})=>
+  projectWarehouseReceiptReconciliation({basis,purchase,history:[old],movements:[native],asOf:at('10'),bindings:[],...overrides});
+ it('keeps known H1 20 separate from the 300 pending, then counts approved independent original rows once',()=>{
+  expect(calculate()).toMatchObject({verified:metres('20'),received:null,pending:[{quantity:metres('300')}],procurementRemaining:null,eligibleForInspection:false});
+  const joined=calculate({bindings:[binding]});
+  expect(joined).toMatchObject({verified:metres('320'),received:metres('320'),pending:[],procurementRemaining:'200',
+   firstArrival:{ref:ref('legacy'),occurredAt:at('05')},eligibleForInspection:false});
+  expect(joined.basisRevision).not.toBe(calculate().basisRevision);
+  expect(calculate({bindings:[{...binding,proofValid:false}]})).toMatchObject({verified:metres('20'),received:null});
+  expect(calculate({bindings:[binding,{...binding,generation:2,state:'revoked'}]})).toMatchObject({verified:metres('20'),received:null});
+ });
+ it('retains no amount for a proved same-batch reference, and never reattaches a corrected version',()=>{
+  const quantity={...stored,quantity:20};
+  const same={...binding,relation:'same_batch' as const,legacy:{...binding.legacy,quantityRowKey:preparationInvestmentRowKey(quantity)}};
+  expect(calculate({history:[{...old,quantities:[quantity]}],bindings:[same]})).toMatchObject({received:metres('20'),confirmed:[{relation:'same_batch'}]});
+  const correction={...native,original:ref('same-stream',2),replaces:native.original,quantity:metres('0')};
+  expect(calculate({history:[{...old,quantities:[quantity]}],bindings:[same],movements:[native,correction]}))
+   .toMatchObject({received:null,verified:metres('0'),pending:[{bindingState:'confirmed'}],firstArrival:null});
+ });
+ it('measures 104 against 90 before the later 3.6; reports 93.6 at the exact threshold and original arrival',()=>{
+  const ninety={...native,quantity:metres('90'),occurredAt:at('05')};
+  const later={...native,original:ref('same-stream',2),quantity:metres('3.6'),occurredAt:at('08')};
+  const inputs={history:[],purchase:{...purchase,invested:metres('104')},movements:[ninety,later]};
+  expect(calculate({...inputs,asOf:at('05')})).toMatchObject({
+   received:metres('90'),procurementRemaining:'14',eligibleForInspection:false,firstArrival:{ref:ninety.original,occurredAt:at('05')}});
+  expect(calculate({...inputs,asOf:at('08')})).toMatchObject({
+   received:metres('93.6'),procurementRemaining:'10.4',eligibleForInspection:true,firstArrival:{ref:ninety.original,occurredAt:at('05')}});
+ });
+ it('does not apply another PO, another material, a guessed unit, or a different version of the purchase',()=>{
+  expect(calculate({history:[{...old,quantities:[{...stored,lineId:'po-b'},{...stored,materialId:'fabric-b'}]}]}))
+   .toMatchObject({verified:metres('20'),received:metres('20'),pending:[]});
+  expect(calculate({history:[{...old,quantities:[{...stored,unit:'码'}]}],bindings:[binding]}))
+   .toMatchObject({received:null,pending:[{quantity:{quantity:'300',unit:'码'}}]});
+  expect(calculate({bindings:[binding],purchase:{...purchase,original:ref('purchase',2)}}))
+   .toMatchObject({received:null,verified:metres('20'),pending:[{bindingState:'confirmed'}]});
  });
 });

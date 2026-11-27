@@ -3,6 +3,7 @@ import {businessNow} from '../acceptance-clock/business-time.js';
 import {demandForWarehouseReceipt} from './warehouse-instruction-demand.js';
 import {currentWarehouseReceiptQuantity,scopedWarehouseReceiptQuantity,warehouseMaterialBalance,warehouseReceiptTaskBasis,
  type WarehouseReceiptBasis,type WarehouseReceiptMovement} from './warehouse-material-balance.js';
+import {projectWarehouseReceiptReconciliation,type ReconciliationBinding} from './warehouse-receipt-reconciliation-projection.js';
 export const warehouseReceiptScopePrefix='warehouse-receipt/';
 export const warehouseReceiptScope=(materialId:string,lineId:string|null)=>warehouseReceiptScopePrefix+materialId+'/'+(lineId??'shared');
 const receiptKey=(ref:WarehouseReceiptMovement['original'])=>JSON.stringify([ref.recordId,ref.version]);
@@ -37,7 +38,7 @@ function mayOverlapOriginalReceipt(fact:PreparationMaterialFact|undefined,basis:
   (!row.lineId||!basis.lineId||row.lineId===basis.lineId));
 }
 
-export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0]):WarehouseReceiptWorkItem[]{
+export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessState,'history'|'facts'|'lines'>,asOf=businessNow().toISOString(),demand?:Parameters<typeof demandForWarehouseReceipt>[0],bindings?:readonly ReconciliationBinding[]):WarehouseReceiptWorkItem[]{
  return original.facts.flatMap(investment=>{
   if(investment.kind!=='material_investment'||!investment.investmentScopeBasis)return [];
   const scope=investment.investmentScopeBasis;
@@ -66,7 +67,9 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const typedBalance=raw.length?scopedWarehouseReceiptQuantity(basis,raw,asOf):null;
    const replaced=new Set(raw.flatMap(row=>row.replaces?[receiptKey(row.replaces)]:[]));
    const activeBatches=typedBalance?raw.flatMap(row=>row.occurredAt&&!replaced.has(receiptKey(row.original))?
-    [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt}]:[]):[];
+    [{ref:row.original,quantity:row.quantity,occurredAt:row.occurredAt,
+     ...(bindings?{evidenceIds:original.history.find(fact=>fact.recordId===row.original.recordId&&fact.version===row.original.version)?.evidenceIds??[]}:{}),
+    }]:[]):[];
    // An unrelated PO or a quantityless status cannot suppress this exact
    // batch. Keep genuinely overlapping old physical quantities unresolved.
    const received=raw.length?(mayOverlapOriginalReceipt(receipt,basis,asOf)?null:typedBalance):
@@ -75,7 +78,9 @@ export function deriveWarehouseReceiptWork(original:Pick<ProductionReadinessStat
    const balance=warehouseMaterialBalance({unit:basis.unit,invested:purchase.invested,received,productionRequired,
     usableAfterOccupancy:null,dispatchRequired:null,dispatched:null});
    return [{kind,materialId:basis.materialId,name:material.name,scopeRef:basis.scopeRef,lineId:basis.lineId,
-    supplier:material.supplier||null,basis,purchase,received,productionRequired,balance,receiptVersion,activeBatches}];
+    supplier:material.supplier||null,basis,purchase,received,productionRequired,balance,receiptVersion,activeBatches,
+    ...(bindings&&kind==='fabric_receipt'?{reconciliation:projectWarehouseReceiptReconciliation({basis,purchase,history:original.history,
+     movements:raw,bindings,asOf})}:{})}];
   });
  });
 }

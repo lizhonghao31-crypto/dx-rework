@@ -2824,5 +2824,24 @@
       "access_is_root_actor"
     ],
     "sequences": []
+  },
+  "0319_warehouse_receipt_reconciliation": {
+    "checksum": "ba29fc32cf8cc11f524488b0e369c2c92d0f52b1fd5d41860943ff89327eca5d",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_preparation_material_versions"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_warehouse_receipt_reconciliations"
+    ],
+    "execute": [
+      "digital_journey_register_change",
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

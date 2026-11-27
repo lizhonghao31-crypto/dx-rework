@@ -1,6 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import {z} from 'zod';
-import {ConfirmPreorderMaterialApplicabilitySchema,WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
+import {ConfirmPreorderMaterialApplicabilitySchema,WarehouseReceiptAttestationSchema,WarehouseReceiptReconciliationSchema,WarehouseReceiptBatchSchema,WarehouseReceiptPageQuerySchema,PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
 import {CreateUploadIntentSchema} from '@dx-rework/contracts';
 import {ConfirmDevelopmentSampleHandoverSchema} from '@dx-rework/contracts/digital-development-workspace';
 import {businessActor} from '../access/business-authority.js';
@@ -14,7 +14,7 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
  if(deps.workbenchNumberedCreation)app.get('/digital-production/warehouse/receipts',async(r,reply)=>{
   reply.header('cache-control','private, no-store');
-  return service.warehouseReceipts(await actor(r),parse(WarehouseReceiptPageQuerySchema,r.query));
+  return service.warehouseReceipts(await actor(r),parse(WarehouseReceiptPageQuerySchema,r.query),true);
  });
  for(const [route,kind] of [['orders','order'],['sources','source']] as const){
   const base=`/digital-production/${route}/:resourceId/production-readiness`;
@@ -37,7 +37,15 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
    });
    app.get(`${base}/warehouse-receipt-work`,async(r,reply)=>{
     reply.header('cache-control','private, no-store');
-    return service.warehouseReceiptWork(await actor(r),resource(r));
+    return service.warehouseReceiptWork(await actor(r),resource(r),true);
+   });
+   app.post(`${base}/warehouse-receipt-reconciliation`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.reconcileWarehouseReceipt(await actor(r),resource(r),parse(WarehouseReceiptReconciliationSchema,r.body),key(r));
+   });
+   app.post(`${base}/warehouse-receipt-reconciliation/attest`,async(r,reply)=>{
+    reply.header('cache-control','private, no-store');
+    return service.attestWarehouseReceipt(await actor(r),resource(r),parse(WarehouseReceiptAttestationSchema,r.body),key(r));
    });
    app.post(`${base}/warehouse-receipts`,async(r,reply)=>{
     reply.header('cache-control','private, no-store');

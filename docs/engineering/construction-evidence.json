@@ -1,90 +1,156 @@
 {
   "version": 1,
-  "base": "2fd882ed421737b1e5ff0ae7abdead2df7afd7d7",
-  "sourceFingerprint": "ec5e6e103084d7e63648abcdb7d380575448da23f60da013477e627482b5c2db",
+  "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
+  "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
   "risk": "full",
   "rules": [
     {
-      "rule": "修正旧测试的真实业务验证：m01-cockpit-home",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
+      "rule": "原收料岗位核对只追加有原始版本和凭证的绑定",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
       "writes": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-command.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.ts",
+        "apps/api/migrations/0319_warehouse_receipt_reconciliation.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/receiving/native-receipt-admission.ts"
+        "apps/api/src/production-platform/preparation-material-repository.ts#preparationMaterialHistory",
+        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts#refreshPreparationWindows"
       ],
       "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts#Acceptance H1 projects an exact PO receipt"
       ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "真实仓库将第一个 PO 发原厂、审批转厂后第二个 PO 单独发新厂；保留真实发回、收货数量、原只读权限和附件验核。",
+      "initialization": "原材料证据不迁移或回填。0319仅新建关联表，兼容旧历史和迁移已初始化但尚未有关系时的读取。",
+      "dateAndPermission": "原业务生命周期锁、在职岗位与指派、原附件及审计规则。不同角色和撤权原会话不可确认或重放。沿实际时间保留原始版本。",
+      "expectation": "元数据变化不可替换原记录。同键重试同回执，错PO、重复或不一致的凭据拒绝，撤销仅追加，原台账与窗口零变更。",
       "checks": [
-        "baseline-original-three"
+        "wh01-pg",
+        "wh01-static"
       ]
     },
     {
-      "rule": "修正旧测试的真实业务验证：special-craft-browser",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
+      "rule": "按同一原采购范围输出仓库核对试算，正式余额和下游读法保持原样",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
       "writes": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-reconciliation-projection.ts",
+        "apps/api/src/production-platform/warehouse-receipt-page.ts",
+        "apps/api/src/production-platform/warehouse-receipt-work.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "tests/unit/warehouse-material-balance.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-development-create-form.tsx"
+        "apps/api/src/production-platform/warehouse-material-balance.ts#scopedWarehouseReceiptQuantity",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts"
       ],
       "oldTests": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "tests/unit/warehouse-material-balance.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts#Acceptance H1 projects an exact PO receipt"
       ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "通过真实已签名设计师草稿箱重新打开同一已保存档案，用现行独立工艺站位互换并再次保存。保留无时效采用、准确工艺版本和跨角色原拒绝。",
+      "initialization": "沿原查询的数据快照，以仓库授权范围批量读取1、15、50 项，影子投影不驱动现有流程。",
+      "dateAndPermission": "精确物料、PO或共享、物理单位、原采购和证据版本一致才可累计；使用业务asOf，不预读后来批次，不跨范围补量。",
+      "expectation": "20已核加300待核分别体现；证实有两个有效批才得到320、余200，低于468。104米时序只认当时的90和后来93.6，既有验布入口此PR不切换。",
       "checks": [
-        "baseline-original-three"
+        "wh01-unit",
+        "wh01-pg",
+        "wh01-static"
       ]
     },
     {
-      "rule": "修正旧测试的真实业务验证：special-craft-native",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
+      "rule": "原仓库按PO进入现有收料面板，在旁核对两个原件而不复制收料",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.2、§5.4、§6 WH-01，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
       "writes": [
-        "tests/integration/special-craft-native-postgres.test.ts"
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "apps/web/src/warehouse-receipt-reconciliation-panel.tsx",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/budget-service.ts"
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/preparation-material-original.tsx",
+        "apps/web/src/submission-attempt.ts"
       ],
       "oldTests": [
-        "tests/integration/special-craft-native-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft, recovers preorder publication and formally confirms the same numbered source"
       ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "实际已确认源 IE 价 10 带到原预算，保持样衣特种工艺 3、4 独立。大货另用 7、9、11，离开旧空值预期且不改交易、核价与快照规则。",
+      "initialization": "使用原角色会话、现行仓库中心、原 PO 收料面板和原件/文件权限；原编号开发与转正继续可办。",
+      "dateAndPermission": "按范围显示原证据及其版本。恢复原核对操作标识，不能以第二次提交掩盖回执丢失。",
+      "expectation": "真实 Chromium 从仓库入口显示20、300分开，选择有证的独立批后刷新仍读320/200；不增实收、不启用统一下游，现场H1未确认。",
       "checks": [
-        "baseline-original-three"
+        "wh01-pg",
+        "wh01-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "baseline-original-three",
+      "id": "wh01-unit",
       "kind": "tests",
-      "command": "runOwnedCommand: node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 1 --reporter=default --reporter=json tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts -t \"reuses whole-order receiving authority|keeps new managed drafts|assigns and completes multiple distinct special tasks\"",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3,
+      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
+      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
+      "startedAt": "2026-11-27T07:48:23Z",
+      "endedAt": "2026-11-27T07:48:28Z",
+      "log": "/workspace/scratch/wh01-evidence/unit.log",
+      "logSha256": "1b9ead9e5145df99dce315ec309d9199f63833a564bba3330b50b2d52312cec9",
+      "passed": 38,
       "failed": 0,
-      "skipped": 29,
-      "testedHead": "2fd882ed421737b1e5ff0ae7abdead2df7afd7d7",
-      "sourceFingerprint": "ec5e6e103084d7e63648abcdb7d380575448da23f60da013477e627482b5c2db",
-      "context": "Node v22.22.2, actual Chromium with authenticated App, existing isolated PostgreSQL and owned resource cleanup; exact three case filter, 29 not selected.",
-      "startedAt": "2026-11-27T07:10:02Z",
-      "endedAt": "2026-11-27T07:10:42Z",
-      "log": "/workspace/scratch/ui03-current/three-mapped-failures/current-base-owned.log",
-      "logSha256": "ec5f7a8c803c3a9871863e0aaf7aad2687eb812e91364d81daa2b79281e69f1b",
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "69c56a71ab4c83a2c44ed4df66350092f9971c4cf82ca8310e07cdeadab77a63"
+          "sha256": "5c73f9fd1aeeacf2e3e26d621e2856219d73c96d293d70e413281234e5e779c2"
         }
-      ]
+      ],
+      "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
+      "command": "npx vitest run --config vitest.config.ts tests/unit/warehouse-material-balance.test.ts tests/unit/warehouse-receipt-status.test.ts tests/unit/production-readiness-contract.test.ts --reporter=default --reporter=json",
+      "context": "Node 22.22.2, Vitest 4.1.10, local exact workspace sources; isolated deterministic unit fixtures."
+    },
+    {
+      "id": "wh01-pg",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
+      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
+      "startedAt": "2026-11-27T07:48:23Z",
+      "endedAt": "2026-11-27T07:49:07Z",
+      "log": "/workspace/scratch/wh01-evidence/pg.log",
+      "logSha256": "d73d6e5d30dac7b751864ad76a7c277b6e3262ca49850d62ebbdb15f10b718a0",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 96,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "43e22f9965a7a115ca0404ca0a06f8c6f7eb8031bb917bc24996b3624e944d64"
+        }
+      ],
+      "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --testNamePattern \"WH-01|Acceptance H1 projects|resumes an unnumbered draft\" --reporter=default --reporter=json",
+      "context": "Node 22.22.2, Vitest 4.1.10, installed Chromium, signed native App and isolated TEST PostgreSQL schemas created and disposed by existing fixtures; four selected cases only, not real Acceptance."
+    },
+    {
+      "id": "wh01-static",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
+      "sourceFingerprint": "76c14eb42808a16925b49e966db12257fedd32544d8127416a2b57a636426a9f",
+      "startedAt": "2026-11-27T07:48:23Z",
+      "endedAt": "2026-11-27T07:49:03Z",
+      "log": "/workspace/scratch/wh01-evidence/static.log",
+      "logSha256": "710fca14d6efb74ad961f78ef036aa27c40cac3e50a478b6b6585466e6133164",
+      "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node --test scripts/ci/test-execution-contract.test.mjs; npx eslint --max-warnings=0 <changed TS/TSX>; git diff --check",
+      "context": "Node 22.22.2, local exact workspace candidate, original static migration and execution compatibility validation."
     }
   ]
 }

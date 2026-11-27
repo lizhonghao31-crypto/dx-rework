@@ -13,6 +13,7 @@ import {DigitalReadFailure} from './digital-read-failure.js';
 import {useForegroundWait} from './foreground-loading.js';
 import {SubmissionAttempt} from './submission-attempt.js';
 import {SubmissionRequestError} from './submission-validation.js';
+import {WarehouseReceiptReconciliationPanel} from './warehouse-receipt-reconciliation-panel.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 
 const itemKey=(item:WarehouseReceiptWorkItem)=>JSON.stringify([item.materialId,item.lineId,item.scopeRef,item.kind]);
@@ -35,10 +36,11 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   [correction,setCorrection]=useState(''),[quantity,setQuantity]=useState(''),[occurredAt,setOccurredAt]=useState(''),[note,setNote]=useState('');
  const [busy,setBusy]=useState(false),[reading,setReading]=useState(true),[readError,setReadError]=useState<Error|null>(null);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[file,setFile]=useState<File|null>(null),[evidence,setEvidence]=useState<string[]>([]);
+ const [reconciliationPending,setReconciliationPending]=useState(false);
  const active=useRef(true),inflight=useRef<AbortController|null>(null),operation=useRef(new SubmissionAttempt()),writing=useRef(false);
  const current=items?.find(item=>itemKey(item)===selected),prior=current?.activeBatches.find(batch=>String(batch.ref.version)===correction);
  const pending=operation.current.hasPending,dirty=Boolean(quantity||occurredAt||note||file||evidence.length);
- useDigitalDetailNavigationGuard(dirty,busy||pending,writing,'本次收料尚未保存或结果待核，确认离开？');
+ useDigitalDetailNavigationGuard(dirty,busy||pending||reconciliationPending,writing,'本次收料尚未保存或结果待核，确认离开？');
  useForegroundWait(reading?`warehouse-receipts:${resource.id}`:undefined);
 
  const reload=useCallback(async()=>{
@@ -56,7 +58,7 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
 
  const clearInput=()=>{setCorrection('');setQuantity('');setOccurredAt('');setNote('');setFile(null);setEvidence([]);};
  const submit=async(retry=false)=>{
-  if(writing.current||!current)return;
+  if(writing.current||reconciliationPending||!current)return;
   if(!retry&&(readError||reading||pending||file))return;
   const when=prior&&occurredAt===asBeijingLocal(prior.occurredAt)?prior.occurredAt:asBusinessInstant(occurredAt);
   const parsed=WarehouseReceiptBatchSchema.safeParse({kind:current.kind,scopeRef:current.scopeRef,materialId:current.materialId,lineId:current.lineId,
@@ -81,7 +83,7 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   }finally{writing.current=false;if(active.current)setBusy(false);}
  };
  const upload=async()=>{
-  if(!file||writing.current||pending)return;
+  if(!file||writing.current||pending||reconciliationPending)return;
   writing.current=true;setBusy(true);setError('');
   try{
    const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
@@ -90,7 +92,8 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   }catch(reason){if(active.current)setError(reason instanceof Error?reason.message:'凭证上传未完成，原文件已保留');}
   finally{writing.current=false;if(active.current)setBusy(false);}
  };
- const disabled=busy||pending||reading||Boolean(readError);
+ const readOrWriteDisabled=busy||pending||reading||Boolean(readError);
+ const disabled=readOrWriteDisabled||reconciliationPending;
  return <section className="dx-production-panel dx-designer-astryx" aria-label="仓库实际收料">
   <style>{designerAstryxCss}</style>
   <header><Button type="button" label="返回来源" variant="secondary" onClick={onClose}/><h1>仓库实际收料</h1></header>
@@ -105,6 +108,8 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
    <h2>{current.name} · {current.kind==='fabric_receipt'?'实收面料':'实收辅料'}</h2>
    <p>供应方：{current.supplier||'原资料未登记'} · 原投料 {current.purchase.invested.quantity} {current.basis.unit}</p>
    <p>已实收：{current.received?`${current.received.quantity} ${current.basis.unit}`:'实际数量待核'} · 采购待收：{current.balance.procurementRemaining??'待核'}</p>
+   <WarehouseReceiptReconciliationPanel key={itemKey(current)} item={current} resource={resource}
+    base={base} reload={reload} disabled={readOrWriteDisabled||dirty} onPendingChange={setReconciliationPending}/>
    <p>生产需用：{current.productionRequired?`${current.productionRequired.quantity} ${current.productionRequired.unit}`:'待核'} · 生产欠料：{current.balance.productionShortage??'待核'}</p>
    <p>原验布、预缩及质量放行保持原办理入口。</p>
    <Selector label="选择新增或订正原批次" value={correction} options={[{value:'',label:'新增独立收料批次'},...current.activeBatches.map(row=>({

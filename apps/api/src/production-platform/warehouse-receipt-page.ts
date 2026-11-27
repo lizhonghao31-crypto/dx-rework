@@ -9,6 +9,7 @@ import {assignedWarehousePreparationResources} from './warehouse-assigned-resour
 import {developmentReadTables} from './development-amendment-repository.js';
 import {attachCurrentPreorderApplicability,currentPreparationMaterials,instructionInvestmentMaterials,legacyPreparationMaterialFingerprint,materialBasisChanged,preparationHandoverCurrent,sourceHandoverChanged,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
 import {readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
+import {readWarehouseReceiptReconciliations,reconciliationResourceKey} from './warehouse-receipt-reconciliation-repository.js';
 import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
@@ -47,7 +48,7 @@ function validMaterialEvidence(raw:Raw,ctx:Source){
 
 /** Only batch-load known authorized subjects. Projection, filter, total and
  * pagination share one read snapshot. No placeholder task or business write. */
-export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,input:WarehouseReceiptPageQuery):Promise<WarehouseReceiptPage>{
+export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,input:WarehouseReceiptPageQuery,includeReconciliation=false):Promise<WarehouseReceiptPage>{
  const db=await pool.connect();
  try{
   await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -101,6 +102,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     }:null,
     order:scope.order_id&&scope.order_number?{source_id:scope.source_id,design_style_no:scope.order_number}:null,
    })));
+   const bindings=includeReconciliation?await readWarehouseReceiptReconciliations(db,[...nativeKeys.values()]):null;
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
    for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
@@ -117,7 +119,9 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     const materialHistory=await attachCurrentPreorderApplicability(db,rawHistory,scope.source_id,scope.development&&scope.development_version!==null?
      {document:scope.development,version:scope.development_version,round_number:scope.development_round}:null,preorderProofs);
     const facts=currentPreparationMaterials(materialHistory,scope.order_id);
-    const work=deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined);
+    const work=deriveWarehouseReceiptWork({history:materialHistory,facts,lines:scope.lines},asOf,scope.order_id?demands.get(scope.order_id):undefined,
+     bindings?[...(bindings.get(reconciliationResourceKey(scope))??[]),
+      ...(scope.kind==='order'&&scope.source_id?bindings.get('source:'+scope.source_id)??[]:[])]:undefined);
     if(!work.length)continue;
     const orderNumber=resolvedNumbers[scopeIndex]??null;
     const matches=(value:string|null|undefined)=>value?.toLowerCase().includes(search);
@@ -132,7 +136,12 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
      out.push({id:JSON.stringify([scope.kind,scope.id,item.materialId,item.lineId,item.scopeRef,item.kind]),
       resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,issuedOrderNumber:orderNumber,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
       assigneeName:scope.assignee_name,kind:item.kind,materialId:item.materialId,name:item.name,lineId:item.lineId,scopeRef:item.scopeRef,supplier:item.supplier,
-      received:item.received,productionRequired:item.productionRequired,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt});
+      received:item.received,productionRequired:item.productionRequired,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt,
+      ...(item.reconciliation?{reconciliation:{
+       basisRevision:item.reconciliation.basisRevision,verified:item.reconciliation.verified,received:item.reconciliation.received,
+       nativeNeedsReview:item.reconciliation.nativeNeedsReview,procurementRemaining:item.reconciliation.procurementRemaining,
+       pendingCount:item.reconciliation.pending.length,
+      }}:{})});
     }
    }
   }

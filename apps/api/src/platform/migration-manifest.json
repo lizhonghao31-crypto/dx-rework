@@ -1331,6 +1331,10 @@
     {
       "version": "0318_development_designer_corrections",
       "checksum": "2977a62217d56de4731444a16e4db32535b3e590d833fc913ee668680411e44d"
+    },
+    {
+      "version": "0319_warehouse_receipt_reconciliation",
+      "checksum": "ba29fc32cf8cc11f524488b0e369c2c92d0f52b1fd5d41860943ff89327eca5d"
     }
   ]
 }
