@@ -34,7 +34,7 @@ function fixture(){
  },request:async(path,{method='GET',body}={})=>{
   if(method==='GET')state.reads.push(path);else state.writes.push({path,method,body});
   if(path==='/graphql')return {data:{repository:{pullRequest:{reviewThreads:{nodes:state.threads,pageInfo:{hasNextPage:false}}}}}};
-  if(path.includes('/contents/scripts/ci/affected-entry-map.json'))throw new GitHubError(404,'Not Found');
+  if(path.includes('/contents/scripts/ci/affected-entry-map.json')||path.includes('/contents/scripts/ci/hosted-review-preflight.mjs'))throw new GitHubError(404,'Not Found');
   if(path.includes('/contents/docs/engineering/construction-evidence.json'))return state.closeout.encoded();
   if(path.includes('/compare/'))return {status:'ahead',behind_by:0};
   if(path.includes('/logs'))return state.logs[Number(path.match(/jobs\/(\d+)/)[1])];

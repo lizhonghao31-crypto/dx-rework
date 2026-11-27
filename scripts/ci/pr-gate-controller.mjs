@@ -8,6 +8,7 @@ import {pathToFileURL} from 'node:url';
 import {verifyFinalCloseout} from './final-closeout.mjs';
 import {AFFECTED_MAP_PATH, affectedEntryPlan} from './full-gate-risk-map.mjs';
 import {AFFECTED_JOB, parseAffectedReceipt} from './affected-entry-preflight.mjs';
+import {HOSTED_REVIEW_POLICY, readHostedReview, reviewDigest} from './hosted-review-preflight.mjs';
 import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, REVIEW_BOT, gateKind, finalRef, requireSha,
   trustedReview, reviewDecision, parseReceipt, assertRunBinding, assertReuseLineage, allowedBase} from './pr-gate-protocol.mjs';
 
@@ -153,12 +154,14 @@ async function commitTree(api, sha) {
     .map(entry=>[entry.path,entry.type+':'+entry.mode+':'+entry.sha]));
 }
 
+const changedTreePaths=(base,head)=>[...new Set([...base.keys(),...head.keys()])].filter(path=>base.get(path)!==head.get(path));
+
 export async function affectedEntriesFor(api, plan) {
-  if (plan.kind !== 'full') return {active:false, selected:[]};
+  if (plan.kind !== 'full') return {active:false, selected:[], registry:null, paths:[]};
   let pinned;
   try { pinned = await api.request(`${prefix}/contents/${AFFECTED_MAP_PATH}?ref=${plan.base}`); }
   catch (error) {
-    if (error instanceof GitHubError && error.status === 404) return {active:false, selected:[]};
+    if (error instanceof GitHubError && error.status === 404) return {active:false, selected:[], registry:null, paths:[]};
     throw error;
   }
   if (pinned.type!=='file' || pinned.encoding!=='base64' || typeof pinned.content!=='string'
@@ -166,11 +169,34 @@ export async function affectedEntriesFor(api, plan) {
   const registry = JSON.parse(Buffer.from(pinned.content,'base64').toString('utf8'));
   const [base,head] = await Promise.all([commitTree(api,plan.base),commitTree(api,plan.head)]);
   if (!base.has(AFFECTED_MAP_PATH)) throw Error('Pinned affected-entry map is missing from its commit tree');
-  const paths=[...new Set([...base.keys(),...head.keys()])].filter(path=>base.get(path)!==head.get(path));
-  return {active:true, selected:affectedEntryPlan(registry,paths)};
+  const paths=changedTreePaths(base,head);
+  return {active:true, registry, paths, selected:affectedEntryPlan(registry,paths)};
 }
 
-async function verifyHostedAffected(api, run, plan, selected) {
+async function hostedReviewFor(api,plan,affected){
+  if(plan.kind!=='full')return null;
+  const present=async sha=>{
+    try{
+      const policy=await api.request(`${prefix}/contents/${HOSTED_REVIEW_POLICY}?ref=${sha}`);
+      if(policy.type!=='file')throw Error('Cannot identify the frozen hosted Review policy');
+      return true;
+    }catch(error){
+      if(error instanceof GitHubError&&error.status===404)return false;
+      throw error;
+    }
+  };
+  const [base,head]=await Promise.all([present(plan.base),present(plan.head)]);
+  if(!base&&!head)return null; // Historical workflow and receipts only.
+  return readHostedReview(api,plan,affected.registry,affected.paths,async (earlier,later)=>{
+    const comparison=await api.request(`${prefix}/compare/${earlier}...${later}`);
+    if(comparison.status!=='ahead'||comparison.behind_by!==0||comparison.merge_base_commit?.sha!==earlier)
+      throw Error('Reviewed commit is not an ancestor of the final Head');
+    const [oldTree,newTree]=await Promise.all([commitTree(api,earlier),commitTree(api,later)]);
+    return changedTreePaths(oldTree,newTree);
+  });
+}
+
+async function verifyHostedAffected(api, run, plan, selected, reviewSha256) {
   const attempts=await api.pages(`${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,'jobs');
   const matching=attempts.filter(j=>j.name===AFFECTED_JOB);
   if (matching.length!==1) throw Error('Missing or ambiguous actual hosted affected-entry job');
@@ -180,7 +206,10 @@ async function verifyHostedAffected(api, run, plan, selected) {
     || !job.steps?.some(step=>step.name==='Run and verify exact affected cases'&&step.conclusion==='success')) {
     throw Error('Hosted affected-entry check failed, was skipped, or belongs to a different attempt/Head');
   }
-  return parseAffectedReceipt(await api.request(`${prefix}/actions/jobs/${job.id}/logs`,{raw:true}),plan,run,selected);
+  if(reviewSha256&&selected.length&&!job.steps?.some(step=>step.name==='Preserve the original named test report'&&step.conclusion==='success')){
+    throw Error('Hosted affected-entry job did not retain the original named test report');
+  }
+  return parseAffectedReceipt(await api.request(`${prefix}/actions/jobs/${job.id}/logs`,{raw:true}),plan,run,selected,reviewSha256);
 }
 
 export async function proofForRun(api, run, plan, phase) {
@@ -215,7 +244,8 @@ export async function finalStatus(api, plan, ref) {
   if (run.conclusion !== 'success') return {state: 'failed', runId: run.id, ref, conclusion: run.conclusion};
   const proof=await proofForRun(api,run,plan,'final');
   const affected=await affectedEntriesFor(api,plan);
-  const affectedReceipt=affected.active ? await verifyHostedAffected(api,run,plan,affected.selected) : null;
+  const hosted=await hostedReviewFor(api,plan,affected);
+  const affectedReceipt=affected.active||hosted ? await verifyHostedAffected(api,run,plan,affected.selected,hosted?reviewDigest(hosted):undefined) : null;
   return {state: 'approved', ref, ...proof, ...(affectedReceipt?{affectedReceipt}:{})};
 }
 
@@ -235,6 +265,8 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
     return {...status, reviewDecision: review};
   }
   const affected = await affectedEntriesFor(api,snapshot.plan);
+  const hosted = await hostedReviewFor(api,snapshot.plan,affected);
+  if(hosted&&hosted.reviewedHead!==review.commit_sha)throw Error('Hosted Review and operator Review differ');
   const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review,affected.selected);
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
   const fresh = await inspect(api, number, head);

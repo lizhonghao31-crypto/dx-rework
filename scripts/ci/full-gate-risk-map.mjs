@@ -278,6 +278,7 @@ const SHARED_GATE_INPUTS = new Set([
   "scripts/ci/final-closeout.mjs",
   "scripts/ci/affected-entry-map.json",
   "scripts/ci/affected-entry-preflight.mjs",
+  "scripts/ci/hosted-review-preflight.mjs",
   "scripts/ci/start-affected-entry-postgres.sh",
   "scripts/ci/verify-actions-policy.mjs",
   "scripts/ci/light-reuse.mjs",

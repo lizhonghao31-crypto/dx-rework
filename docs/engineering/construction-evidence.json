@@ -1,8 +1,53 @@
 {
   "version": 1,
   "base": "3075f6a4e99c146d5f558f4e04ac4644726b70e3",
-  "sourceFingerprint": "713754e1dcb3b8a0857882fab308e442bcc464a188a58cc830e87e2beb26ba35",
   "risk": "full",
+  "sourceFingerprint": "abb1977ffc77b29462d575edbfe27494ddc7577c073dae15607bc01cf511fb1e",
+  "rules": [
+    {
+      "rule": "用真实 GitHub 托管 Review 及冻结 Base 的精确用例约束 Full，原入口报告仅执行一次并验证",
+      "source": "Eric 原四 UI 后单独授权的 #1131，复用原 scope，托管首先核 Review 和逐项用例；无可信映射不得猜测",
+      "writes": [
+        ".github/workflows/ci.yml",
+        "scripts/ci/affected-entry-map.json",
+        "scripts/ci/affected-entry-preflight.mjs",
+        "scripts/ci/affected-entry-preflight.test.mjs",
+        "scripts/ci/final-closeout.mjs",
+        "scripts/ci/final-closeout.test.mjs",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/ci/hosted-review-preflight.mjs",
+        "scripts/ci/hosted-review-preflight.test.mjs",
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/pr-gate-controller.test.mjs",
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/start-affected-entry-postgres.sh",
+        "scripts/ci/verify-actions-policy.mjs",
+        "scripts/ci/verify-actions-policy.test.mjs"
+      ],
+      "reads": [
+        ".github/workflows/full-gate.yml",
+        "scripts/ci/pr-gate-protocol.mjs",
+        "scripts/test-preflight.mjs",
+        "vitest.business-chain.config.ts",
+        "scripts/ci/prepare-settings-browser.mjs",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+      ],
+      "oldTests": [
+        "scripts/ci/pr-gate-controller.test.mjs",
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/verify-actions-policy.test.mjs"
+      ],
+      "newTests": [
+        "scripts/ci/hosted-review-preflight.test.mjs"
+      ],
+      "initialization": "原 GitHub 托管只读 job，部署后的协议和数据只从实际冻结 Base 读取。旧基座缺逐条映射是明确阻挡。",
+      "dateAndPermission": "保留原令牌 Contents/Metadata read，不向编译测试过程提供凭据，不变更业务库、分支保护、系统时间或 Review 次数。",
+      "expectation": "核实际分页与最新必要独立结论、已审祖先提交、原真实 issue 与可信 Base 范围，再以同次实际报告的 exact tuple/摘要放行；无登记、失败、过期、跳过拒绝；不要求第三轮且无关 PR 不选建单三条。",
+      "checks": [
+        "affected-entry-protocol"
+      ]
+    }
+  ],
   "checks": [
     {
       "id": "affected-entry-protocol",
@@ -10,60 +55,16 @@
       "command": "node scripts/test-preflight.mjs",
       "status": "passed",
       "exitCode": 0,
-      "passed": 296,
+      "passed": 303,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "27ac1c3244f3ae2ac220e9397c201eb8aa0e3f20",
-      "sourceFingerprint": "713754e1dcb3b8a0857882fab308e442bcc464a188a58cc830e87e2beb26ba35",
-      "context": "Node 22 canonical repository CI protocol, executable workflow selection, policy negatives and migration lint; browser proven separately on the unchanged release base",
-      "startedAt": "2026-11-27T06:10:50.225972+00:00",
-      "endedAt": "2026-11-27T06:10:56.187437+00:00",
-      "log": "/workspace/scratch/affected-entry-acceptance/governance-bounded-retry.log",
-      "logSha256": "15b6dc6f9b77c4e95d82bca121c6105799253fce390ef77af006ee70d5979fd1"
-    }
-  ],
-  "rules": [
-    {
-      "rule": "实际冻结差异选择受影响现有入口，并核真实原文件和候选谱系的定向报告",
-      "source": "Eric 已授权独立 Full 门禁和建单/预下单遗漏反例；类似改动与不相关改动分别验证",
-      "writes": [
-        ".github/workflows/ci.yml",
-        "scripts/ci/affected-entry-map.json",
-        "scripts/ci/affected-entry-preflight.mjs",
-        "scripts/ci/final-closeout.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/start-affected-entry-postgres.sh",
-        "scripts/ci/verify-actions-policy.mjs",
-        "scripts/ci/affected-entry-preflight.test.mjs",
-        "scripts/ci/final-closeout.test.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/verify-actions-policy.test.mjs"
-      ],
-      "reads": [
-        ".github/workflows/full-gate.yml",
-        "scripts/test-preflight.mjs",
-        "vitest.business-chain.config.ts",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
-      ],
-      "oldTests": [
-        "scripts/ci/final-closeout.test.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/verify-actions-policy.test.mjs"
-      ],
-      "newTests": [
-        "scripts/ci/affected-entry-preflight.test.mjs"
-      ],
-      "initialization": "只走现有 Full 请求与隔离临时 PostgreSQL，目标基线未引入配置时没有阶段性补跑；不改任一数据库迁移。",
-      "dateAndPermission": "保留 GitHub 只读 Contents 权限与既有分支设置，Review 自动恢复不请求第三轮，不更改业务时间。",
-      "expectation": "缺原既有路径、跳过、失败、错源和旧尝试一律挡住昂贵 Full，合并只采用相同运行的原始托管回执。无相关改动无需浏览器和数据库。 经原规则授权且已定位瞬态根因时保留同一 run 的第二次整轮校验，第三次不会分配昂贵任务。新尝试不承接旧证明。",
-      "checks": [
-        "affected-entry-protocol"
-      ]
+      "testedHead": "674e61173bca35f0ccbeb7bb71f69ed20138ab7a",
+      "sourceFingerprint": "abb1977ffc77b29462d575edbfe27494ddc7577c073dae15607bc01cf511fb1e",
+      "context": "Node 22 canonical GitHub policy/lifecycle tests, pinned Base coverage and original named tests; actual Actions permissions verified separately using run 45954133712",
+      "startedAt": "2026-11-27T06:59:11Z",
+      "endedAt": "2026-11-27T06:59:16Z",
+      "log": "/workspace/scratch/affected-entry-acceptance/hosted-review-protocol-final.log",
+      "logSha256": "01184c92093fa86faf636d2995ad6d86160f9857031e55ec2000f8bea45f0ff0"
     }
   ]
 }

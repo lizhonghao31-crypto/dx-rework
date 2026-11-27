@@ -393,21 +393,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
-      - name: Select affected native entries with the pinned base policy
+      - name: Verify Review and select required cases before preparation
         id: affected
         shell: bash
+        env:
+          REVIEW_READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$AFFECTED_HEAD"
           test "$(git rev-parse "refs/remotes/origin/$AFFECTED_BASE_REF")" = "$AFFECTED_BASE"
-          verify="$RUNNER_TEMP/dx-affected-entry.mjs"
-          if [[ -n "$(git ls-tree "$AFFECTED_BASE" -- scripts/ci/affected-entry-map.json)" ]]; then
-            git show "$AFFECTED_BASE:scripts/ci/affected-entry-preflight.mjs" > "$verify"
-          else
-            # Bootstrap on branches which have not yet adopted this policy.
-            cp scripts/ci/affected-entry-preflight.mjs "$verify"
-          fi
-          node "$verify" select
+          trusted="$RUNNER_TEMP/dx-affected-policy"
+          mkdir -m 700 "$trusted"
+          for file in hosted-review-preflight.mjs affected-entry-preflight.mjs pr-gate-protocol.mjs; do
+            if [[ -n "$(git ls-tree "$AFFECTED_BASE" -- scripts/ci/hosted-review-preflight.mjs)" ]]; then
+              git show "$AFFECTED_BASE:scripts/ci/$file" > "$trusted/$file"
+            else
+              # First activation: execute the candidate implementation, still
+              # reading mappings only from the frozen base, never its own diff.
+              cp "scripts/ci/$file" "$trusted/$file"
+            fi
+          done
+          node "$trusted/hosted-review-preflight.mjs" authorize
       - name: Install locked affected-entry dependencies
         if: steps.affected.outputs.required == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
@@ -422,7 +428,16 @@ jobs:
         if: steps.affected.outputs.required == 'true'
         run: node --input-type=module -e 'import {prepareSettingsBrowser} from "./scripts/ci/prepare-settings-browser.mjs"; prepareSettingsBrowser()'
       - name: Run and verify exact affected cases
-        run: node "$RUNNER_TEMP/dx-affected-entry.mjs" verify
+        env:
+          HOSTED_REVIEW_PLAN_SHA256: ${{ steps.affected.outputs.plan_sha256 }}
+        run: node "$RUNNER_TEMP/dx-affected-policy/hosted-review-preflight.mjs" verify
+      - name: Preserve the original named test report
+        if: steps.affected.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: affected-entry-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dx-affected-entry.json
+          if-no-files-found: error
 
   full:
     permissions:

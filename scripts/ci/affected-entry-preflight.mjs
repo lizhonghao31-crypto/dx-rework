@@ -49,19 +49,20 @@ export function requireAffectedCases(expected, results) {
   if (missing.length) throw Error('AFFECTED_ENTRY_PROOF_MISSING: ' + missing.map(t => t.id).join(', '));
 }
 
-export function affectedReceipt(plan, run, selected, reportHash) {
+export function affectedReceipt(plan, run, selected, reportHash, reviewSha256) {
   if (![1,2].includes(run.run_attempt)) throw Error('Affected-entry run exceeds the bounded recovery attempt');
   if (selected.length ? !HASH.test(reportHash ?? '') : reportHash !== null) throw Error('Missing or unexpected actual affected-entry report');
+  if (reviewSha256!==undefined&&!HASH.test(reviewSha256)) throw Error('Invalid hosted Review receipt digest');
   const {repository,pr,head,base,baseRef,kind} = plan;
   return {version:1,repository,pr,head,base,baseRef,kind,runId:run.id,attempt:run.run_attempt,
-    cases:selected.map(test=>test.id),reportSha256:reportHash};
+    cases:selected.map(test=>test.id),reportSha256:reportHash,...(reviewSha256?{reviewSha256}:{})};
 }
 
-export function parseAffectedReceipt(log, plan, run, selected) {
+export function parseAffectedReceipt(log, plan, run, selected, reviewSha256) {
   const lines = String(log).split(/\r?\n/).map(line => line.match(/(?:^|[\t ])DX_AFFECTED_ENTRY_V1=(.+)$/)?.[1]).filter(Boolean);
   if (lines.length !== 1) throw Error('Expected one actual hosted affected-entry receipt');
   const receipt = JSON.parse(lines[0]);
-  const expected = affectedReceipt(plan,run,selected,receipt.reportSha256);
+  const expected = affectedReceipt(plan,run,selected,receipt.reportSha256,reviewSha256);
   if (Object.keys(expected).some(k => JSON.stringify(receipt[k]) !== JSON.stringify(expected[k]))) {
     throw Error('Hosted affected-entry evidence is stale, missing or for another run/Head/Base');
   }
@@ -69,7 +70,7 @@ export function parseAffectedReceipt(log, plan, run, selected) {
 }
 
 const git = (...args) => execFileSync('git',args,{encoding:'utf8',maxBuffer:16*1024*1024});
-function hostedTuple(env = process.env) {
+export function hostedTuple(env = process.env) {
   const {AFFECTED_HEAD:head,AFFECTED_BASE:base,AFFECTED_PR:pr,AFFECTED_BASE_REF:baseRef,GITHUB_REPOSITORY:repository,
     GITHUB_RUN_ID:id,GITHUB_RUN_ATTEMPT:attempt} = env;
   if (![head,base].every(s=>/^[0-9a-f]{40}$/.test(s??'')) || ![pr,id,attempt].every(n=>/^[1-9][0-9]*$/.test(n??''))
@@ -78,13 +79,23 @@ function hostedTuple(env = process.env) {
   return {plan:{repository,pr:Number(pr),head,base,baseRef,kind:'full'},run:{id:Number(id),run_attempt:Number(attempt)}};
 }
 
-export function pinnedSelection(base, head) {
+export function pinnedInputs(base, head) {
   const mapExists = git('ls-tree',base,'--',AFFECTED_MAP_PATH).length !== 0;
   // Historical base has not adopted this profile. Never read the candidate's
   // map to select cases for its own change.
   const registry = mapExists ? JSON.parse(git('show',base+':'+AFFECTED_MAP_PATH)) : null;
   const paths = git('diff','--no-renames','--name-only','-z',base,head).split('\0').filter(Boolean);
+  return {registry,paths};
+}
+
+export function pinnedSelection(base,head){
+  const {registry,paths}=pinnedInputs(base,head);
   return affectedEntryPlan(registry,paths);
+}
+
+export function revisionPaths(previous,head){
+  execFileSync('git',['merge-base','--is-ancestor',previous,head],{stdio:'ignore'});
+  return git('diff','--no-renames','--name-only','-z',previous,head).split('\0').filter(Boolean);
 }
 
 export function runSelectedCases(selected, reportFile, cwd = process.cwd()) {
@@ -93,10 +104,12 @@ export function runSelectedCases(selected, reportFile, cwd = process.cwd()) {
   const files = [...new Set(selected.map(test=>test.file))];
   const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const pattern = '^(?:' + selected.map(test => escape(test.name)).join('|') + ')$';
+  const env={...process.env,NODE_ENV:'test',DX_REWORK_TEST_SUITE_KIND:'postgres'};
+  for(const key of ['REVIEW_READ_TOKEN','GH_TOKEN','GITHUB_TOKEN','GITHUB_OUTPUT','GITHUB_ENV','GITHUB_PATH','GITHUB_STATE','GITHUB_STEP_SUMMARY'])delete env[key];
   const result = spawnSync(process.execPath,['node_modules/vitest/vitest.mjs','run',
     '--config','vitest.business-chain.config.ts','--maxWorkers','1','--reporter=default','--reporter=json',
     '--outputFile.json',reportFile,'--testNamePattern',pattern,...files],
-  {cwd,stdio:'inherit',env:{...process.env,NODE_ENV:'test',DX_REWORK_TEST_SUITE_KIND:'postgres'}});
+  {cwd,stdio:'inherit',env});
   if (result.error) throw result.error;
   if (result.status !== 0) throw Error('Affected native entry cases did not succeed');
   const file = lstatSync(reportFile);
