@@ -1,90 +1,89 @@
 {
   "version": 1,
-  "base": "2fd882ed421737b1e5ff0ae7abdead2df7afd7d7",
-  "sourceFingerprint": "ec5e6e103084d7e63648abcdb7d380575448da23f60da013477e627482b5c2db",
+  "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
+  "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
   "risk": "full",
   "rules": [
     {
-      "rule": "修正旧测试的真实业务验证：m01-cockpit-home",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
+      "rule": "真实审查身份和实修差异派生定向回归，不预登记未来评论",
+      "source": "Eric 2026-11-27 明确批准独立修正 Full 托管 Review 对最后一轮新发现的误拦。保留真实 GitHub、可信执行、影响范围、同次绑定、早失败，不改权限、分支保护或工作流。",
       "writes": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "scripts/ci/hosted-review-preflight.mjs",
+        "scripts/ci/hosted-review-preflight.test.mjs",
+        "docs/governance/final-closeout-v1.md"
       ],
       "reads": [
-        "apps/api/src/receiving/native-receipt-admission.ts"
+        ".github/workflows/ci.yml#Verify Review and select required cases before preparation",
+        "scripts/ci/affected-entry-map.json",
+        "scripts/ci/pr-gate-protocol.mjs#trustedReview"
       ],
       "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "scripts/ci/hosted-review-preflight.test.mjs"
       ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "真实仓库将第一个 PO 发原厂、审批转厂后第二个 PO 单独发新厂；保留真实发回、收货数量、原只读权限和附件验核。",
+      "initialization": "已有发布基线照原逻辑；新基线沿 existing trusted Base policy 加载，无独立授权或历史迁移。",
+      "dateAndPermission": "同一完整 GitHub PR、实际发布 Base、Head、真实审查提交及已解决线程。无权限变化，仍与时效无关。",
+      "expectation": "最后一轮未知 finding 有实际源码修复和同批新增或改正文的相关标准用例可以验证；仅关闭、没改、缺审、假声明、错误线程应拒绝，增加零无关用例。 已验证注释/模板/类型/动态导入不是运行依赖，受审提交与候选差异仍能验证恢复到 Base 的有效修复。",
       "checks": [
-        "baseline-original-three"
+        "review-protocol",
+        "review-live"
       ]
     },
     {
-      "rule": "修正旧测试的真实业务验证：special-craft-browser",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
+      "rule": "托管实际命名测试与本地请求、最终核验使用同一派生清单",
+      "source": "Eric 2026-11-27 明确批准独立修正 Full 托管 Review 对最后一轮新发现的误拦。保留真实 GitHub、可信执行、影响范围、同次绑定、早失败，不改权限、分支保护或工作流。",
       "writes": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "scripts/ci/affected-entry-preflight.mjs",
+        "scripts/ci/pr-gate-controller.mjs"
       ],
       "reads": [
-        "apps/web/src/digital-development-create-form.tsx"
+        "scripts/ci/final-closeout.mjs#requireAffectedCases",
+        ".github/workflows/ci.yml#Run and verify exact affected cases"
       ],
       "oldTests": [
-        "tests/integration/special-craft-browser-postgres.test.ts"
+        "scripts/ci/affected-entry-preflight.test.mjs",
+        "scripts/ci/pr-gate-controller.test.mjs",
+        "scripts/ci/final-closeout.test.mjs"
       ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "通过真实已签名设计师草稿箱重新打开同一已保存档案，用现行独立工艺站位互换并再次保存。保留无时效采用、准确工艺版本和跨角色原拒绝。",
+      "initialization": "仍用一个受信托管运行、原数据库/浏览器准备、无新增全量前置及工作流设置。此前无动态用例的回执结构兼容。",
+      "dateAndPermission": "report 哈希、真实 job/step、PR/Head/Base/run/attempt、已解析的实际用例身份共同验证；读取权限不进入候选测试。",
+      "expectation": "固定 Base 的原入口和派生的精准回归只定向执行；失败、跳过、缺证明、重复、陈旧回执不能放行。同真实案例验证原入口及修复回归。",
       "checks": [
-        "baseline-original-three"
-      ]
-    },
-    {
-      "rule": "修正旧测试的真实业务验证：special-craft-native",
-      "source": "独立基线问题已复现，用户授权仅修复三条旧用例与真实起测前置",
-      "writes": [
-        "tests/integration/special-craft-native-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/budget-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/special-craft-native-postgres.test.ts"
-      ],
-      "initialization": "使用实际隔离 PostgreSQL 与真实 Chromium，按原测试和角色生成可核验数据，不更改已发布业务代码。",
-      "dateAndPermission": "沿用测试原业务时钟、原角色和原校验，不放宽任何操作权限或数据库限制。",
-      "expectation": "实际已确认源 IE 价 10 带到原预算，保持样衣特种工艺 3、4 独立。大货另用 7、9、11，离开旧空值预期且不改交易、核价与快照规则。",
-      "checks": [
-        "baseline-original-three"
+        "review-protocol",
+        "review-live"
       ]
     }
   ],
   "checks": [
     {
-      "id": "baseline-original-three",
+      "id": "review-protocol",
       "kind": "tests",
-      "command": "runOwnedCommand: node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 1 --reporter=default --reporter=json tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/special-craft-browser-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts -t \"reuses whole-order receiving authority|keeps new managed drafts|assigns and completes multiple distinct special tasks\"",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3,
+      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
+      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
+      "startedAt": "2026-11-27T08:26:45Z",
+      "endedAt": "2026-11-27T08:26:49Z",
+      "log": "/workspace/scratch/hosted-review-current-proof/protocol-r2.tap",
+      "logSha256": "eb1c1b1869d746a75ba4a88981748376403b4c6b7252cb88edddad4f4c213f10",
+      "command": "node --test scripts/ci/*.test.mjs",
+      "passed": 307,
       "failed": 0,
-      "skipped": 29,
-      "testedHead": "2fd882ed421737b1e5ff0ae7abdead2df7afd7d7",
-      "sourceFingerprint": "ec5e6e103084d7e63648abcdb7d380575448da23f60da013477e627482b5c2db",
-      "context": "Node v22.22.2, actual Chromium with authenticated App, existing isolated PostgreSQL and owned resource cleanup; exact three case filter, 29 not selected.",
-      "startedAt": "2026-11-27T07:10:02Z",
-      "endedAt": "2026-11-27T07:10:42Z",
-      "log": "/workspace/scratch/ui03-current/three-mapped-failures/current-base-owned.log",
-      "logSha256": "ec5f7a8c803c3a9871863e0aaf7aad2687eb812e91364d81daa2b79281e69f1b",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "69c56a71ab4c83a2c44ed4df66350092f9971c4cf82ca8310e07cdeadab77a63"
-        }
-      ]
+      "skipped": 0,
+      "context": "Node 22.22.2, current CI source fingerprint. Existing full cheap CI protocol tests plus positive/negative hosted Review cases."
+    },
+    {
+      "id": "review-live",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
+      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
+      "startedAt": "2026-11-27T08:26:45Z",
+      "endedAt": "2026-11-27T08:26:53Z",
+      "log": "/workspace/scratch/hosted-review-current-proof/live-r2.log",
+      "logSha256": "76905eae6fffd5495d6685cca2db903ae7ea1a61251e8b15af53c0fd018ac3d3",
+      "command": "Read-only GitHub Review and exact Git blob proof using the final parser, validate selected cases against the previously executed named Vitest report with exact matching business source",
+      "context": "Recomputed production-review fix evidence using current parser and original immutable warehouse candidate/real report. Existing two PG/Chromium cases are reused as unchanged business proof, not claimed as newly executed."
     }
   ]
 }
