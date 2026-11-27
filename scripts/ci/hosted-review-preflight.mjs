@@ -101,12 +101,45 @@ function namedCases(text){
   return result;
 }
 
-function directlyConsumes(testSource,file,reviewPath){
-  return [...testSource.matchAll(/^\s*import\s+(?!type\b)[^;]*?\sfrom\s*(['"])(\.[^'"\r\n]+)\1/gm)].some(([, ,specifier])=>{
+// Read only the leading static import declarations, before any executable
+// suite body. Never look for apparent imports inside that body or its strings.
+const importTrivia=/^(?:\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/)*/;
+const bareImport=/^import\s*(['"])([^"'\\\r\n]+)\1\s*;/;
+const valueImport=/^import\s+(?:(type)\s+)?([A-Za-z0-9_$,\s*{}]+?)\s+from\s*(['"])([^"'\\\r\n]+)\3\s*;/;
+const identifier=/^[A-Za-z_$][\w$]*$/;
+const namespaceBinding=/^\*\s+as\s+[A-Za-z_$][\w$]*$/;
+const nameBinding=/^(?:type\s+)?[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?$/;
+
+function runtimeBinding(text){
+  const bindings=text.trim();
+  if(identifier.test(bindings)||namespaceBinding.test(bindings))return true;
+  const named=bindings.indexOf('{');
+  if(named<0||!bindings.endsWith('}'))return null;
+  const prefix=bindings.slice(0,named).trim();
+  if(prefix&&(!prefix.endsWith(',')||!identifier.test(prefix.slice(0,-1).trim())))return null;
+  const entries=bindings.slice(named+1,-1).trim().replace(/,$/,'').split(',').map(item=>item.trim());
+  if(entries.some(item=>item&&!nameBinding.test(item)))return null;
+  return Boolean(prefix)||entries.some(item=>item&&!/^type\s+/.test(item));
+}
+function directlyConsumes(text,file,reviewPath){
+  while(text.length){
+    text=text.slice(importTrivia.exec(text)[0].length);
+    const literal=bareImport.exec(text),binding=literal?null:valueImport.exec(text),matched=literal??binding;
+    if(!matched)break;
+    let use=Boolean(literal);
+    if(binding){
+      const valid=runtimeBinding(binding[2]);
+      if(valid===null)break;
+      use=!binding[1]&&valid;
+    }
+    const specifier=literal?.[2]??binding[4];
+    text=text.slice(matched[0].length);
+    if(!use||!specifier.startsWith('.'))continue;
     const resolved=posix.normalize(posix.join(posix.dirname(file),specifier));
     const stem=resolved.replace(/\.(?:m?js|tsx?)$/,'');
-    return reviewPath===resolved||['.ts','.tsx','.mjs'].some(ext=>reviewPath===stem+ext);
-  });
+    if(reviewPath===resolved||['.ts','.tsx','.mjs'].some(ext=>reviewPath===stem+ext))return true;
+  }
+  return false;
 }
 
 async function evidenceCases(registry,item,earlier,head,changed,readText){
@@ -136,7 +169,7 @@ export const affectedCasesWithReview=(pinned,review)=>mergeAffectedCases(pinned,
 
 /** Match real changed regression bodies to the repaired, reviewed code and
  * resolved GitHub finding. Closing a thread is not the execution proof. */
-export async function readHostedReview(api,plan,registry,changedPaths,compare,readText){
+export async function readHostedReview(api,plan,registry,compare,readText){
   await verifyTuple(api,plan);
   const prPath=prefix+'/pulls/'+plan.pr;
   const [comments,reviews,inline,threads]=await Promise.all([
@@ -154,7 +187,7 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare,re
     return comparisons.get(key);
   };
   await after(review.commit_sha);
-  const files=new Set(changedPaths), seen=new Set();
+  const seen=new Set();
   const texts=new Map();
   const read=async(commit,file)=>{
     const key=commit+':'+file;
@@ -181,7 +214,7 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare,re
         continue;
       }
     }
-    const actual=(await after(submission.commit_id)).filter(path=>files.has(path));
+    const actual=await after(submission.commit_id);
     if(!actual.includes(item.path)||meaning((await read(submission.commit_id,item.path))??'')===meaning((await read(plan.head,item.path))??''))
       throw Error('REVIEW_FIX_NOT_ON_HEAD: finding '+item.id+' '+item.path);
     const proofs=await evidenceCases(registry,item,submission.commit_id,plan.head,actual,read);
@@ -215,7 +248,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const selected=affectedEntryPlan(registry,paths);
   const planned=resolve(process.env.RUNNER_TEMP,'dx-hosted-review-plan.json');
   if(process.argv[2]==='authorize'){
-    const review=await readHostedReview(readOnlyReviewApi(process.env.REVIEW_READ_TOKEN),plan,registry,paths,revisionPaths,revisionText);
+    const review=await readHostedReview(readOnlyReviewApi(process.env.REVIEW_READ_TOKEN),plan,registry,revisionPaths,revisionText);
     const cases=affectedCasesWithReview(selected,review);
     const raw=JSON.stringify(hostedPlan(plan,run,review,cases));
     writeFileSync(planned,raw,{flag:'wx',mode:0o600});

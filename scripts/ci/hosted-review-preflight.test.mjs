@@ -67,7 +67,7 @@ function fixture(){
     if(file===repair||file===create)return commit===head?(state.fixedSource??'return updatedOriginal();'):'return original();';
     return null;
   };
-  return {state,api,authorize:(map=registry,paths=[repair,suite])=>readHostedReview(api,plan,map,paths,compare,readText)};
+  return {state,api,authorize:(map=registry)=>readHostedReview(api,plan,map,compare,readText)};
 }
 
 test('second-round new finding closes on changed source and exact test without prior Base mapping',async()=>{
@@ -99,10 +99,10 @@ test('second-round new finding closes on changed source and exact test without p
 
 test('an already re-reviewed changed file preserves the earlier Review without requesting another round',async()=>{
   const f=fixture();f.state.findings=[firstFinding];
-  const checked=await f.authorize(null,[unrelated]);
+  const checked=await f.authorize(null);
   assert.equal(checked.findings[0].independentlyReviewedAt,second);
   f.state.earlierBefore=[unrelated];
-  await assert.rejects(f.authorize(null,[unrelated]),/REVIEW_FIX_NOT_ON_HEAD: finding 23/);
+  await assert.rejects(f.authorize(null),/REVIEW_FIX_NOT_ON_HEAD: finding 23/);
 });
 
 test('missing, running or self-reported Review cannot authorize preparation',async()=>{
@@ -138,6 +138,31 @@ test('an unrelated, duplicate or missing test and mismatched actual Review fail 
   await assert.rejects(f.authorize(),/original submission cannot be confirmed/);
 });
 
+test('commented, quoted, type-only and dynamic import text cannot prove a runtime dependency',async()=>{
+  const f=fixture(), original=preamble[0],spec=original.split("'")[1];
+  for(const decoy of [
+    '// disabled import\n/*\n'+original+'\n*/',
+    'const decoy=String.raw\x60\n'+original+'\n\x60;',
+    "import type {service} from '"+spec+"';",
+    "import {type service} from '"+spec+"';",
+    "const service=await import('"+spec+"');",
+  ]){
+    f.state.fixedTest=fixedTest.replace(original,decoy);
+    await assert.rejects(f.authorize(),/REVIEW_CASE_EVIDENCE_MISSING/);
+  }
+  f.state.fixedTest=fixedTest.replace(original,"/* leading notes */\nimport {type Example, service} from '"+spec+"';");
+  assert.equal((await f.authorize()).findings[1].proofs[0].name,leaf);
+});
+test('a repair reverting a source file to Base is still evidence from the reviewed tree',async()=>{
+  const f=fixture();
+  // Only the test remains different from Base. The actual reviewed commit
+  // temporarily contained the issue in the repaired source file.
+  const pinned=affectedEntryPlan(registry,[suite]);
+  assert.deepEqual(pinned,[]);
+  const checked=await f.authorize();
+  assert.deepEqual(affectedCasesWithReview(pinned,checked).map(t=>t.name),[leaf]);
+});
+
 test('actual Review threads, exact live tuple and reviewed-commit lineage fail closed',async()=>{
   for(const [patch,error] of [
     [{threads:[thread('r1',23),thread('r2',24,false)]},/unresolved threads/],
@@ -155,7 +180,7 @@ test('actual Review threads, exact live tuple and reviewed-commit lineage fail c
 test('unrelated PR gets completed Review but no original creation or additional Review cases',async()=>{
   const f=fixture();
   Object.assign(f.state,{findings:[],reviews:[],comments:[summary(head)],threads:[]});
-  const checked=await f.authorize(registry,[unrelated]);
+  const checked=await f.authorize(registry);
   assert.deepEqual(checked.findings,[]);
   const selected=affectedCasesWithReview(affectedEntryPlan(registry,[unrelated]),checked);
   assert.deepEqual(selected,[]);

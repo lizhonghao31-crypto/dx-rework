@@ -192,7 +192,7 @@ async function hostedReviewFor(api,plan,affected){
     if(!trees.has(sha))trees.set(sha,commitTree(api,sha));
     return trees.get(sha);
   };
-  return readHostedReview(api,plan,affected.registry,affected.paths,async (earlier,later)=>{
+  return readHostedReview(api,plan,affected.registry,async (earlier,later)=>{
     const comparison=await api.request(`${prefix}/compare/${earlier}...${later}`);
     if(comparison.status!=='ahead'||comparison.behind_by!==0||comparison.merge_base_commit?.sha!==earlier)
       throw Error('Reviewed commit is not an ancestor of the final Head');

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-  "sourceFingerprint": "b37d47c3d1ea96d9a1c61d52d50cd99fb09e5affd29615f4ac2caefe1fbbe4cc",
+  "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
   "risk": "full",
   "rules": [
     {
@@ -22,7 +22,7 @@
       ],
       "initialization": "已有发布基线照原逻辑；新基线沿 existing trusted Base policy 加载，无独立授权或历史迁移。",
       "dateAndPermission": "同一完整 GitHub PR、实际发布 Base、Head、真实审查提交及已解决线程。无权限变化，仍与时效无关。",
-      "expectation": "最后一轮未知 finding 有实际源码修复和同批新增或改正文的相关标准用例可以验证；仅关闭、没改、缺审、假声明、错误线程应拒绝，增加零无关用例。",
+      "expectation": "最后一轮未知 finding 有实际源码修复和同批新增或改正文的相关标准用例可以验证；仅关闭、没改、缺审、假声明、错误线程应拒绝，增加零无关用例。 已验证注释/模板/类型/动态导入不是运行依赖，受审提交与候选差异仍能验证恢复到 Base 的有效修复。",
       "checks": [
         "review-protocol",
         "review-live"
@@ -59,41 +59,31 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-      "sourceFingerprint": "b37d47c3d1ea96d9a1c61d52d50cd99fb09e5affd29615f4ac2caefe1fbbe4cc",
-      "startedAt": "2026-11-27T08:19:43Z",
-      "endedAt": "2026-11-27T08:19:47Z",
-      "log": "/workspace/scratch/hosted-review-current-proof/protocol.tap",
-      "logSha256": "9912e809bac6ccfdd093833a404b68530e98da7be1111a49b36a61a30a2475bd",
+      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
+      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
+      "startedAt": "2026-11-27T08:26:45Z",
+      "endedAt": "2026-11-27T08:26:49Z",
+      "log": "/workspace/scratch/hosted-review-current-proof/protocol-r2.tap",
+      "logSha256": "eb1c1b1869d746a75ba4a88981748376403b4c6b7252cb88edddad4f4c213f10",
       "command": "node --test scripts/ci/*.test.mjs",
-      "passed": 305,
+      "passed": 307,
       "failed": 0,
       "skipped": 0,
       "context": "Node 22.22.2, current CI source fingerprint. Existing full cheap CI protocol tests plus positive/negative hosted Review cases."
     },
     {
       "id": "review-live",
-      "kind": "tests",
+      "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "28a23b1e5fadae5818830cb6b272248a37fb4409",
-      "sourceFingerprint": "b37d47c3d1ea96d9a1c61d52d50cd99fb09e5affd29615f4ac2caefe1fbbe4cc",
-      "startedAt": "2026-11-27T08:19:43Z",
-      "endedAt": "2026-11-27T08:20:27Z",
-      "log": "/workspace/scratch/hosted-review-current-proof/live.log",
-      "logSha256": "a2c479bf21074060698e1ac532306100676e205eb959740615d68e6679df5573",
-      "command": "readHostedReview on live warehouse PR GitHub metadata and exact Git blobs, then runSelectedCases on frozen worktree; vitest.business-chain.config.ts",
-      "passed": 2,
-      "failed": 0,
-      "skipped": 98,
-      "cwd": "/workspace/scratch/wh01-receipt-reconciliation",
-      "context": "Tests run in the actual frozen warehouse branch with existing isolated TEST PostgreSQL and Chromium. Read-only GitHub comparison; does not claim a remote Full.",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "dd7770d2d926e7bb2def4438e8bb61a67b67be451c6b2a775e6f3825d0359396"
-        }
-      ]
+      "testedHead": "080618c6569bf146d0ac4db8d2ff404df6b9ed77",
+      "sourceFingerprint": "e7a70b63b530ebc4887cb4d663bbeb288138c704c9a05280f4e86888ba844452",
+      "startedAt": "2026-11-27T08:26:45Z",
+      "endedAt": "2026-11-27T08:26:53Z",
+      "log": "/workspace/scratch/hosted-review-current-proof/live-r2.log",
+      "logSha256": "76905eae6fffd5495d6685cca2db903ae7ea1a61251e8b15af53c0fd018ac3d3",
+      "command": "Read-only GitHub Review and exact Git blob proof using the final parser, validate selected cases against the previously executed named Vitest report with exact matching business source",
+      "context": "Recomputed production-review fix evidence using current parser and original immutable warehouse candidate/real report. Existing two PG/Chromium cases are reused as unchanged business proof, not claimed as newly executed."
     }
   ]
 }
