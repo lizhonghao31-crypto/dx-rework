@@ -1,70 +1,264 @@
 {
   "version": 1,
   "base": "3075f6a4e99c146d5f558f4e04ac4644726b70e3",
-  "risk": "full",
-  "sourceFingerprint": "abb1977ffc77b29462d575edbfe27494ddc7577c073dae15607bc01cf511fb1e",
+  "sourceFingerprint": "8dda2b36a108375904b2102ce95f33fa17511c53b28059767278ccd5fbef9a3f",
   "rules": [
     {
-      "rule": "用真实 GitHub 托管 Review 及冻结 Base 的精确用例约束 Full，原入口报告仅执行一次并验证",
-      "source": "Eric 原四 UI 后单独授权的 #1131，复用原 scope，托管首先核 Review 和逐项用例；无可信映射不得猜测",
+      "rule": "首页四卡使用真实订单根和当前交接依据，寄样和品名与原详情同源",
+      "source": "定稿 §4.1 §4.7，T13 T14 T20。原授权选择、有效订单、发布预下单及当前交接证据。",
+      "initialization": "签名普通设计师从开发工作区进入；本地真 PostgreSQL 建真实预下单、正式母单、独立复版和样衣寄出。",
+      "dateAndPermission": "授权前不读品名与原任务。寄样用中国业务日历的真实日期；原负责设计师可写，Root 保持只读。",
+      "expectation": "草稿不算，复版不加订单；已交接是已下单子集，四卡不拿 SLA 或详情缺失假造零。原受控寄样任务只写一次；列表与详情共用原授权暂停、恢复及实际寄出读取。真实 1/15/50 笔正式交接各用 17 条 SQL；原凭证不可用、交接换人和报价新版本失效只改变当前完成状态，不删历史。 真实寄样丢响应与 5xx 后保留输入，由原操作核对使用原 HTTP 方法、请求体与幂等键。两种故障下都只产生一条实际寄样和任务完成记录。 旧的一代原独立寄样仍可在其它开发任务完成前办理，只有真实同来源第一轮独立任务沿原契约。新版受控寄样在最终设计确认前拦截，确认后由原任务登记；同源读回以及实际日期和原幂等键保持。两种网络失败各只记一笔，真实旧寄出后原禁止订正不变。",
       "writes": [
-        ".github/workflows/ci.yml",
-        "scripts/ci/affected-entry-map.json",
-        "scripts/ci/affected-entry-preflight.mjs",
-        "scripts/ci/affected-entry-preflight.test.mjs",
-        "scripts/ci/final-closeout.mjs",
-        "scripts/ci/final-closeout.test.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/hosted-review-preflight.mjs",
-        "scripts/ci/hosted-review-preflight.test.mjs",
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/start-affected-entry-postgres.sh",
-        "scripts/ci/verify-actions-policy.mjs",
-        "scripts/ci/verify-actions-policy.test.mjs"
+        "apps/api/src/production-platform/development-workspace-query.ts",
+        "apps/api/src/production-platform/development-workbench-business-roots.ts",
+        "apps/api/src/production-platform/development-workbench-shipping.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/development-current-handover-batch.ts",
+        "apps/api/src/production-platform/development-electronic-handover.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/development-shipping-display.ts",
+        "apps/web/src/development-sample-handover.tsx",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts",
+        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "apps/api/src/production-platform/development-legacy-shipping.ts",
+        "tests/integration/development-amendment-postgres.test.ts"
       ],
       "reads": [
-        ".github/workflows/full-gate.yml",
-        "scripts/ci/pr-gate-protocol.mjs",
-        "scripts/test-preflight.mjs",
-        "vitest.business-chain.config.ts",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/development-formal-handover-evidence.ts",
+        "apps/api/src/production-platform/development-route-service.ts"
       ],
       "oldTests": [
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/verify-actions-policy.test.mjs"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
-      "newTests": [
-        "scripts/ci/hosted-review-preflight.test.mjs"
-      ],
-      "initialization": "原 GitHub 托管只读 job，部署后的协议和数据只从实际冻结 Base 读取。旧基座缺逐条映射是明确阻挡。",
-      "dateAndPermission": "保留原令牌 Contents/Metadata read，不向编译测试过程提供凭据，不变更业务库、分支保护、系统时间或 Review 次数。",
-      "expectation": "核实际分页与最新必要独立结论、已审祖先提交、原真实 issue 与可信 Base 范围，再以同次实际报告的 exact tuple/摘要放行；无登记、失败、过期、跳过拒绝；不要求第三轮且无关 PR 不选建单三条。",
       "checks": [
-        "affected-entry-protocol"
+        "ui03-postfull-types",
+        "ui03-postfull-risk",
+        "ui03-native-original-entry",
+        "ui03-legacy-original-pg",
+        "ui03-postfull-inventory"
+      ]
+    },
+    {
+      "rule": "详情七个原区以及已发布简单资料订正沿同一当前版本，文员退回走原任务",
+      "source": "定稿 §4.2 §4.3 §4.5，T14 T15 T18。原开发任务候选、原版与同轮资料修订契约。",
+      "initialization": "从已有来源和原待办进入，当前资料默认开，其余独立折叠，历史版只读。从真实归属来源书写同轮保留原版。",
+      "dateAndPermission": "同来源、轮、预期版本、权限和现有开关都必须仍有效。退回保持原任务，不能假登记实收或技术制作。",
+      "expectation": "原位取消不写，保存成功一次；并发旧版本不覆盖新版本。纯实物和改资料分别走原文员复核；页面在访问范围读取到达时不丢失已展开的原客户确认区，真实会话变化仍隔离。不扩到新建或实际制作。",
+      "writes": [
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "packages/contracts/src/digital-development.ts",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/development-designer-correction.tsx",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/web/src/digital-development-workspace.css",
+        "apps/web/src/order-document-container.tsx",
+        "apps/web/src/production-readiness-panel.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-amendment-repository.ts",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "checks": [
+        "ui03-postfull-types",
+        "ui03-postfull-risk",
+        "ui03-native-original-entry"
+      ]
+    },
+    {
+      "rule": "版本化原附件、原版单打印和独立客户评语纸保存实际历史",
+      "source": "定稿 §4.4 §4.6，T16 T17 T19 T21。按后续批准仅原模板打印及浏览器另存 PDF，服务端直下载明确暂缓。",
+      "initialization": "实际打开原开发和客户复版，原 HTML 模板打印，原件实际获取；评语历史按原游标读取全部，而不覆盖采用记录。",
+      "dateAndPermission": "旧轮旧版本只读，旧实际发生/登记时间分别保留；取图用原授权附件，普通评价不变更已认可依据。",
+      "expectation": "版单 A4 横向只第一页，独立评语表仍可续页，跨单原件不可取。正式生产原客户最终认可及原技术复核守卫不改。",
+      "writes": [
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/web/src/attachment-identity.css",
+        "apps/web/src/attachment-identity.tsx",
+        "apps/web/src/development-craft-requirements.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/development-print-pages.ts",
+        "apps/web/src/development-print-preview.ts",
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/digital-development-print.css",
+        "apps/web/src/digital-development-print.tsx",
+        "tests/unit/special-craft-steps.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-revision-comment-basis.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/development-print-pair.test.ts"
+      ],
+      "checks": [
+        "ui03-postfull-types",
+        "ui03-postfull-risk",
+        "ui03-native-original-entry"
+      ]
+    },
+    {
+      "rule": "折叠报价标题和原表消费已合 UI04 同一个报价读回的唯一状态",
+      "source": "定稿 §4.2 §5 §6，T22。UI04 原报价投影是唯一状态来源，UI03 不自行计算。",
+      "initialization": "签名原工作区折叠状态先用原授权 GET，展开复用同一结果。历史、已回执和有效版本从原资源读取。",
+      "dateAndPermission": "锁原来源与轮次，变更重取，一次失败不假装完成，撤权不展示旧价格，原报价/预算提交门槛原样。",
+      "expectation": "折叠标题使用原合同映射；原表可恢复由同一合法真实读结果恢复，不多一条手工状态或第二报价。",
+      "writes": [
+        "apps/web/src/digital-quotation-panel.tsx",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-workbench.ts",
+        "packages/contracts/src/digital-quotation.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
+      ],
+      "checks": [
+        "ui03-postfull-types",
+        "ui03-postfull-risk",
+        "ui03-native-original-entry"
       ]
     }
   ],
   "checks": [
     {
-      "id": "affected-entry-protocol",
-      "kind": "tests",
-      "command": "node scripts/test-preflight.mjs",
+      "id": "ui03-postfull-types",
+      "kind": "command",
+      "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "passed": 303,
+      "testedHead": "5b300f14099c426235f290c65be167bd32687475",
+      "sourceFingerprint": "8dda2b36a108375904b2102ce95f33fa17511c53b28059767278ccd5fbef9a3f",
+      "context": "Node 22 monorepo original type checks, frozen candidate on real release base",
+      "startedAt": "2026-11-27T06:04:51.985238+00:00",
+      "endedAt": "2026-11-27T06:05:37.868596+00:00",
+      "log": "/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-postfull-types.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245"
+    },
+    {
+      "id": "ui03-postfull-inventory",
+      "kind": "command",
+      "command": "node scripts/acceptance/time-site-inventory.mjs --check",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5b300f14099c426235f290c65be167bd32687475",
+      "sourceFingerprint": "8dda2b36a108375904b2102ce95f33fa17511c53b28059767278ccd5fbef9a3f",
+      "context": "Actual Acceptance time-source ledger static check, no live Acceptance changes",
+      "startedAt": "2026-11-27T06:06:40.275743+00:00",
+      "endedAt": "2026-11-27T06:06:40.840167+00:00",
+      "log": "/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-postfull-inventory.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
+    },
+    {
+      "id": "ui03-postfull-risk",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-postfull-risk.json tests/unit/full-gate-risk-map.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5b300f14099c426235f290c65be167bd32687475",
+      "sourceFingerprint": "8dda2b36a108375904b2102ce95f33fa17511c53b28059767278ccd5fbef9a3f",
+      "context": "Node 22 Full Gate exact suite registry",
+      "startedAt": "2026-11-27T06:07:35.285905+00:00",
+      "endedAt": "2026-11-27T06:07:36.090855+00:00",
+      "log": "/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-postfull-risk.log",
+      "logSha256": "983ef35fc41b3a9f27b3c39d925744f48ebe68aa6add62aed5df40f99bf045c6",
+      "passed": 143,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "674e61173bca35f0ccbeb7bb71f69ed20138ab7a",
-      "sourceFingerprint": "abb1977ffc77b29462d575edbfe27494ddc7577c073dae15607bc01cf511fb1e",
-      "context": "Node 22 canonical GitHub policy/lifecycle tests, pinned Base coverage and original named tests; actual Actions permissions verified separately using run 45954133712",
-      "startedAt": "2026-11-27T06:59:11Z",
-      "endedAt": "2026-11-27T06:59:16Z",
-      "log": "/workspace/scratch/affected-entry-acceptance/hosted-review-protocol-final.log",
-      "logSha256": "01184c92093fa86faf636d2995ad6d86160f9857031e55ec2000f8bea45f0ff0"
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "05831a2a1e85578ee4246652b3223aa925819979a4e93a63a50771575e7819c4"
+        }
+      ]
+    },
+    {
+      "id": "ui03-native-original-entry",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers 1 tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-full-native.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5b300f14099c426235f290c65be167bd32687475",
+      "sourceFingerprint": "8dda2b36a108375904b2102ce95f33fa17511c53b28059767278ccd5fbef9a3f",
+      "context": "Real signed App, real isolated PG, canonical Chromium; entire original 34-case file, both shipping paths, unaffected original workbench actions, and print",
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/workspace/scratch/ui03-current/shipping-legacy-compat/ui03-full-native.log",
+      "logSha256": "4b5d97a712ac28808c825b9950accddb5378ba60e63a40f645b83a6b7e7358b7",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "600c8d0e15f3954171860827162c672006cde027568ae587e3da2b0e3f4781dc"
+        }
+      ],
+      "startedAt": "2026-11-27T06:03:28.437000+00:00",
+      "endedAt": "2026-11-27T06:07:37.344388+00:00"
+    },
+    {
+      "id": "ui03-legacy-original-pg",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts --maxWorkers 1 tests/integration/development-amendment-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui03-current/shipping-legacy-compat/legacy-pg-fixed.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5b300f14099c426235f290c65be167bd32687475",
+      "sourceFingerprint": "1eed3ade9476cd6eec17f2f56ac20377d89e885211fe0dedfbe25b06b23ff37c",
+      "context": "Complete two previously failing original PG suites. Only the independent native browser test file was expanded after this PG command launched, with no dependencies from the PG cases.",
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/workspace/scratch/ui03-current/shipping-legacy-compat/legacy-pg-fixed.log",
+      "logSha256": "1107159d930e1d719d86c9cdf5d7ef7cd88dec123094f4a13838695ee42b34b3",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2f8f11cced4569e17446a6a7bff453f76fea228326e9d7d73cb8cc8a8f7a91f9"
+        }
+      ],
+      "startedAt": "2026-11-27T05:59:45.831000+00:00",
+      "endedAt": "2026-11-27T06:00:07.257196+00:00",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
+      ],
+      "inputFingerprint": "1ff8b1845cfb9e82ee7f884ad8fd8f778f3a9e2a0dfd429e4d80a2a2e11fdf05"
     }
   ]
 }

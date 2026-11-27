@@ -172,13 +172,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // Only the named check transport fails. Original auth, saved source, form,
    // publication/confirmation commands and all later requests stay native.
    await tab.page.route('**/api/digital-production/order-time/check',async route=>{checks++;await route.fulfill({status:500,contentType:'application/json',headers:{'x-request-id':'TEST-read-check-'+operation},body:JSON.stringify({error:{code:'INTERNAL_ERROR',message:'原提交结果尚未确认，请先核对原记录，不要重复提交'}})});});
-   const customerArea=tab.page.getByRole('region',{name:'客户意见',exact:true});
+   const customerArea=tab.page.getByRole('region',{name:'客户评语',exact:true});
    if(operation==='publish')await tab.page.getByRole('button',{name:'打板信息',exact:true}).click();
    else await customerArea.getByRole('button',{name:'客户确认下单',exact:true}).click();
    const button=operation==='publish'?tab.page.getByRole('button',{name:'发布开发单',exact:true})
     :customerArea.getByRole('button',{name:'确认下单',exact:true});
-   if(operation==='confirm')for(const name of ['版单资料','报价']){
-    expect(await tab.page.getByRole('region',{name,exact:true}).getByRole('button',{name:/确认.*订单|确认下单/}).count()).toBe(0);
+   if(operation==='confirm')for(const id of ['designer-order-document','designer-order-quotation']){
+    const area=tab.page.locator(`details.designer-order-area:has(> #${id})`);
+    await area.waitFor();
+    expect(await area.getByRole('button',{name:/确认.*订单|确认下单/,includeHidden:true}).count()).toBe(0);
    }
    for(let attempt=0;attempt<2;attempt++){
     const check=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/check')&&response.request().method()==='POST');
@@ -203,8 +205,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(new URL(tab.page.url()).searchParams.get('area')).toBe('customer');
     expect(await tab.page.getByRole('navigation',{name:'本单区域'}).count()).toBe(0);
     const workbench=tab.page.locator('.designer-order-workbench');
-    expect(await workbench.locator(':scope > header > h1, :scope > section > h2').allTextContents()).toEqual([
-     '本单资料','版单资料','交资料','客户意见','报价','样衣寄出','订单单据','操作记录',
+    expect(await workbench.locator(':scope > header > h1, :scope > details > summary > h2').allTextContents()).toEqual([
+     '本单资料','开发单资料','交资料','客户评语','对客户报价表','样衣寄出','订单单据','操作记录',
     ]);
    }
   }finally{await tab.context.close();}

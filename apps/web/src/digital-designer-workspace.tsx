@@ -1,7 +1,6 @@
 import {designerWorkspaceSection} from './digital-workspace-navigation.js';
 import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
-import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 import {useDevelopmentCreationDraft} from './use-development-creation-draft.js';
 import {developmentDraftRows,pendingDevelopmentCommands,unboundNumberedDraftKeys,type DevelopmentDraftRow,type SavedDevelopmentDraft} from './development-draft-list.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
@@ -13,6 +12,7 @@ import {DevelopmentEntryAction,DevelopmentEntryLanguage,DevelopmentEntryText} fr
 import {designerAstryxCss as workspaceAstryxCss} from './designer-astryx.js';
 import {registerSessionInvalidator,sessionCacheVersion} from './auth-session.js';
 import {createClientRequestId} from './client-request-id.js';
+import {developmentShippingLabel,developmentShippingTone} from './development-shipping-display.js';
 import {confirmInApp} from './system-dialog.js';
 import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
@@ -22,7 +22,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button,Surface } from "@dx-rework/ui";
 import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
-import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
+import { DESIGNER_BUSINESS_VIEWS, DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
 import { DigitalIdSchema,type DigitalCustomer,type DigitalOrder } from "@dx-rework/contracts/digital-production";
 import {DEVELOPMENT_GARMENTS,type DevelopmentDocument,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import { DigitalRequestError,digitalRequest } from "./digital-production-api.js";
@@ -44,7 +44,7 @@ type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNex
 type DraftReceiptResolution={page:SavedDevelopmentDraftPage;keys:string;resolvedSourceIds:Set<string>;unverified:boolean};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
-  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
+  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "businessView", "designer", "startDate", "endDate"].includes(key))));
   return parsed.success ? parsed.data : DevelopmentWorkspaceFilterSchema.parse({});
 }
 function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
@@ -72,7 +72,6 @@ function DigitalDesignerWorkspaceContent() {
   const [drafts,setDrafts]=useState<SavedDevelopmentDraftPage|null>(null),[draftError,setDraftError]=useState('');
   const [draftReceiptResolution,setDraftReceiptResolution]=useState<DraftReceiptResolution|null>(null);
   const [appliedDraftQuery,setAppliedDraftQuery]=useState<string|null>(null);
-  const [draftTotal,setDraftTotal]=useState<{search:string;total:number}|null>(null);
   const [creationMessage,setCreationMessage]=useState(''),[creationBusy,setCreationBusy]=useState(false);
   const discardKeys=useRef(new Map<string,{version:number;key:string}>());
   const [confirmSheet,setConfirmSheet]=useState<DevelopmentSheet|undefined>(),[preparingConfirm,setPreparingConfirm]=useState(false),[confirmError,setConfirmError]=useState("");
@@ -112,8 +111,16 @@ function DigitalDesignerWorkspaceContent() {
     else current.searchParams.delete('creationDraft');
     window.history.replaceState(window.history.state,'',current.pathname+current.search);
   };
+  // Authorization resolving for the current session must not close a region
+  // the user has already opened. Actual session invalidation resets the view.
+  const [editorSession,setEditorSession]=useState(0);
   const [openedSheet,setOpenedSheet]=useState<{sheet:DevelopmentSheet;requestedRound:number|undefined;refresh:number}|null>(null);
-  const rememberOpenedSheet=useCallback((sheet:DevelopmentSheet,requestedRound:number|undefined)=>setOpenedSheet({sheet,requestedRound,refresh}),[refresh]);
+  const lastOpenedSheet=useRef<DevelopmentSheet|null>(null);
+  const rememberOpenedSheet=useCallback((sheet:DevelopmentSheet,requestedRound:number|undefined)=>{
+    const prior=lastOpenedSheet.current;lastOpenedSheet.current=sheet;
+    setOpenedSheet({sheet,requestedRound,refresh});
+    if(prior?.sourceId===sheet.sourceId&&prior.roundNumber===sheet.roundNumber&&prior.version!==sheet.version)updateEditorFacts();
+  },[refresh,updateEditorFacts]);
   const contextUrl = (parameters: Record<string, string> = {}, next = filter, selected = selectedId) => {
     const query = new URLSearchParams({workspace: "designer", section: creatingPage ? "create" : "workspace", ...Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)])), ...(selected ? {selected} : {}), ...parameters});
     return `${urls.pageUrl("ui/digital-production")}?${query}`;
@@ -174,7 +181,7 @@ function DigitalDesignerWorkspaceContent() {
       .catch(reason=>{if(live)setAccessError(reason.message);});
     return()=>{live=false;abort.abort();};
   },[editor,creatingPage,refresh]);
-  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftReceiptResolution(null);setDraftError('');setFollowup(null);setFollowupOpen(false);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setRefresh(value=>value+1);}),[]);
+  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftReceiptResolution(null);setDraftError('');setFollowup(null);setFollowupOpen(false);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setEditorSession(value=>value+1);setRefresh(value=>value+1);}),[]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
     const item = editor?undefined:result?.items.find(value => value.journey.id === selectedId);
@@ -233,16 +240,6 @@ function DigitalDesignerWorkspaceContent() {
       .finally(finish);
     return()=>{abort.abort();finish();};
   },[creatingPage,draftQuery,liveSearch.pending,intent,refresh,options?.creationEnabled,access?.actorId,access?.create]);
-  useEffect(()=>{
-    setDraftTotal(null);
-    if(editor||creatingPage||liveSearch.pending||!options?.creationEnabled||!access?.actorId||!access.create)return;
-    const abort=new AbortController();
-    const search=filter.search,params=new URLSearchParams({view:'count',search});
-    void digitalRequest<SavedDevelopmentDraftPage>(`sources/drafts?${params}`,'GET',undefined,undefined,{signal:abort.signal})
-      .then(value=>{if(!abort.signal.aborted)setDraftTotal({search,total:value.total});})
-      .catch(()=>{/* An unavailable count remains unknown. The draft list has its own retry. */});
-    return()=>abort.abort();
-  },[editor,creatingPage,liveSearch.pending,refresh,filter.search,options?.creationEnabled,access?.actorId,access?.create]);
   useEffect(()=>{
     if(!creatingPage||!followupOpen||intent||liveSearch.pending||!options?.creationEnabled||!access?.create)return;
     const abort=new AbortController(),params=new URLSearchParams({page:String(followupPage),search:filter.search,bucket:'followup'});
@@ -350,7 +347,7 @@ function DigitalDesignerWorkspaceContent() {
     {(error||accessError)&&<p role="alert">开发档案读取失败：{error||accessError} <Button onClick={retryList}>重试读取开发档案</Button></p>}
     {confirmedOrderId&&<><p role="status">客户订单已确认。{confirmedOrder?`已读取关联订单：${confirmedOrder.designStyleNo}。`:!confirmedOrderError?"正在读取关联客户订单…":""} <a href={`${urls.pageUrl("ui/digital-production")}?order=${confirmedOrderId}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}>查看关联客户订单</a></p>{confirmedOrderError&&<p role="alert">订单确认已成功，关联订单读取失败：{confirmedOrderError} <Button onClick={()=>setOrderRetry(value=>value+1)}>重试读取关联订单</Button></p>}</>}
     {confirmError&&<p role="alert">{confirmError}</p>}
-    {workbench?<DesignerOrderWorkbench key={`${editor}:${round??'current'}:${access?.actorId??'unverified'}`} sourceId={editor} round={round} actorId={access?.actorId} item={editorItem} sheet={editorSheet}
+    {workbench?<DesignerOrderWorkbench key={`${editor}:${round??'current'}:${editorSession}`} sourceId={editor} round={round} actorId={access?.actorId} item={editorItem} sheet={editorSheet}
       image={editorItem&&<StyleImage item={editorItem}/>} document={document} confirmation={confirm?creationForm:confirmButton} onClose={close} onChanged={updateEditorFacts}/>:document}
    </div>;
   }
@@ -453,15 +450,24 @@ function DigitalDesignerWorkspaceContent() {
     <div className="development-breadcrumb">设计开发工作台 › <strong>开发工作区</strong></div>
     <section className="dx-production-panel development-list-panel">
 
-      <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>状态<select value={filter.view} onChange={event => update({view:event.target.value as DevelopmentWorkspaceFilter['view']})}>{DEVELOPMENT_VIEWS.map(view => <option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label></FilterBar>
-      {(error||accessError) && <p role="alert">{error||accessError}</p>}{result?.freshness&&<p role="status">部分订单信息尚未更新，数量暂不显示。<CockpitRetryUpdates ids={result.freshness.retryIds??[]} onUpdated={()=>setRefresh(value=>value+1)}/></p>}{result?.detailFailures?.length? <p role="status">{result.detailFailures.map(item=>item.designStyleNo).join("、")} 的详情读取失败。<Button onClick={retryList}>重新读取本页</Button></p>:null}
+      <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>订单状态<select value={filter.businessView??''} onChange={event=>update({view:'all',
+          businessView:(event.target.value||undefined) as DevelopmentWorkspaceFilter['businessView']})}>
+          <option value="">全部订单</option>{DESIGNER_BUSINESS_VIEWS.map(view=><option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label></FilterBar>
+      {(error||accessError) && <p role="alert">{error||accessError}</p>}{result?.freshness&&<p role="status">本页有部分明细未能读取。 <Button onClick={retryList}>重新读取</Button></p>}{result?.detailFailures?.length? <p role="status">{result.detailFailures.map(item=>item.designStyleNo).join("、")} 的详情读取失败。<Button onClick={retryList}>重新读取本页</Button></p>:null}
       <>
-      <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"} />} className={`development-kpi development-kpi-${index}`} label={view.label} value={view.key==='draft'?(draftTotal?.search===filter.search?draftTotal.total:'—'):(result?.counts?.[view.key]??'—')} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
-      <div className="development-table-scroll development-list-viewport">
+      <div className="development-view-cards">{DESIGNER_BUSINESS_VIEWS.map((view,index)=><KpiCard key={view.key}
+       icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"}/>}
+       className={`development-kpi development-kpi-${index}`} label={view.label}
+       value={appliedListQuery===listQuery&&!liveSearch.pending?(result?.businessCounts?.[view.key]??'—'):'—'}
+       detail={['已实际发布开发','已发布待正式确认','已确认正式母单','电子资料与样衣均已交接'][index]}
+       selected={filter.businessView===view.key}
+       onClick={()=>update({view:'all',businessView:filter.businessView===view.key?undefined:view.key})}/>)}</div>
+      <div className="development-table-scroll development-list-viewport" role="region" aria-label="开发工作区列表，可横向查看全部列" tabIndex={0}>
         <BusinessTable>
-          <thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th></tr></thead>
+          <thead><tr><th>序号</th><th>款图 / 款号</th><th>款式（品名）</th><th>客户</th><th>设计师</th><th>订单ID</th><th>订单类型</th><th>当前轮次</th><th>当前待办理 / 状态</th><th>样衣寄出</th><th>要求完成</th><th>创建日期</th></tr></thead>
           <tbody>{result?.items.map((item,index)=>{
             const href=item.journey.sourceId?openUrl(item):null;
+            const shipping=item.business?.shipping;
             const title=<><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong><OrderRushBadge value={item.orderRush}/></>;
             return <tr key={item.journey.id} className={selectedId===item.journey.id?'is-selected':''} onClick={event=>{
               const target=event.target;
@@ -474,12 +480,17 @@ function DigitalDesignerWorkspaceContent() {
               <td>{((result?.page??filter.page)-1)*15+index+1}</td>
               <td>{href?<Link type="inherit" className="development-row-select" id={`development-open-${item.journey.id}`} href={href}>{title}</Link>
                 :<button className="development-row-select development-text-action" type="button" onClick={()=>select(item.journey.id)}>{title}</button>}</td>
-              <td>{item.journey.styleName??"未登记"}</td><td>{item.journey.customer??"通用开发"}</td><td>{item.journey.developmentType??"待完善"}</td>
+              <td>{item.journey.styleName??"未登记"}</td><td>{item.journey.customer??"通用开发"}</td>
+              <td>{item.journey.designer??'未登记'}</td><td>{item.journey.identity?.businessNumber??'未登记'}</td>
+              <td>{item.business?DESIGNER_BUSINESS_VIEWS.find(view=>view.key===item.business!.kind)?.label:'待核对'}
+               {item.journey.developmentType&&<small>{item.journey.developmentType}</small>}</td>
               <td>{item.journey.sourceVersion?`第 ${item.journey.selectedRound??1} 轮`:"待填写"}</td>
-              <td><StatusBadge tone={item.view==='ordered'?'success':item.view==='draft'?'neutral':'info'}>{viewLabel(item)}</StatusBadge>
-                {item.handling&&<DesignerHandlingItems key={`${item.journey.id}:${appliedListQuery}`} handling={item.handling} limit={1}
+              <td><StatusBadge tone={item.view==='ordered'?'success':item.view==='draft'?'neutral':'info'}>{item.business?.handoverComplete?'已交接完成':viewLabel(item)}</StatusBadge>
+                {Boolean(item.handling?.items.length)&&<DesignerHandlingItems key={`${item.journey.id}:${appliedListQuery}`} handling={item.handling!} limit={1}
                   hrefFor={target=>digitalChildDetailHref(target,contextUrl({},filter,item.journey.id),urls.base)}/>}
               </td>
+              <td><StatusBadge tone={developmentShippingTone(shipping?.state??'unknown')}>{developmentShippingLabel[shipping?.state??'unknown']}</StatusBadge>
+               {shipping?.state==='sent'&&<small><time dateTime={shipping.sentDate}>{date(shipping.sentDate)}</time><span>{shipping.trackingNo}</span></small>}</td>
               <td>{date(item.journey.requiredCompletionDate)}</td><td>{date(item.journey.createdAt)}</td>
             </tr>;
           })}</tbody>

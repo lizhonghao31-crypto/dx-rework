@@ -333,6 +333,7 @@ export type DevelopmentSheet = DevelopmentPrintDetails & {
   orderRush?:true;
   workbenchBasics?:DevelopmentWorkbenchBasics;
   workbenchBasicsEditable?:true;
+  designerCorrectionEditable?:true;
   numberedSales?:{year:number;series:string|null};
   preorderPublication?:{at:string;documentVersion:number};
   numberedIdentity?:{orderNumber:string|null};

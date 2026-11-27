@@ -13,12 +13,13 @@ import {DocumentSection} from './document-editor.js';
 export const DEVELOPMENT_CRAFT_FILE_TYPES='image/jpeg,image/png,image/webp,application/pdf';
 
 export function DevelopmentCraftRequirements({
-  document, edit, controls, readonly, disabled, draftsOnly, upload, viewFile, fileIdentity, metadataPath,
+  document, edit, controls, readonly, disabled, draftsOnly, upload, viewFile, fileIdentity, metadataPath,downloadFile,
 }:{document:DevelopmentDocument;edit:(patch:Partial<DevelopmentDocument>)=>void;controls?:ReactNode;
   readonly:boolean;disabled:boolean;draftsOnly:boolean;
   upload:(files:File[],kind:'工艺开发板',stepKey:string)=>Promise<void>;viewFile:(id:string)=>string;
   fileIdentity?:((id:string)=>AttachmentIdentityData|undefined)|undefined;
   metadataPath?:((id:string)=>string|undefined)|undefined;
+  downloadFile?:((id:string)=>string)|undefined;
 }){
   const steps=developmentCraftOptions(document),boards=document.files.filter(file=>file.kind==='工艺开发板');
   return <DocumentSection id="development-craft-requirements" title="工艺要求">
@@ -52,7 +53,8 @@ export function DevelopmentCraftRequirements({
               {(!file||file.mimeType.startsWith('image/'))&&<img src={url} alt="" onError={event=>{event.currentTarget.hidden=true;}}/>}
               查看原件
             </a>}
-            <AttachmentIdentity label={labelText} local={file} metadataPath={metadataPath?.(id)}/>
+            <AttachmentIdentity label={labelText} local={file} metadataPath={metadataPath?.(id)} directName={Boolean(downloadFile)}/>
+            {downloadFile&&<a href={downloadFile(id)}>下载原附件</a>}
             {!readonly&&<Button label="解除本项引用" variant="ghost" size="sm" type="button" isDisabled={disabled}
               onClick={()=>change({attachmentIds:row.attachmentIds.filter(other=>other!==id)})}/>}
           </li>;

@@ -138,10 +138,10 @@ describe('special crafts have distinct native steps rather than another combined
   const old=print(original,1),current=print(revised,2);
   const specialSection=old.match(/<section aria-label="TEST 激光"[^>]*>(.*?)<\/section>/s)?.[1];
   const printingSection=old.match(/<section aria-label="印花"[^>]*>(.*?)<\/section>/s)?.[1];
-  expect(specialSection).toContain('<td>原版袖口</td>');
-  expect(specialSection).toContain('<td>双线效果</td>');
-  expect(specialSection).toContain('<td>沿版标定位</td>');
-  expect(printingSection).toContain('<td>后幅</td>');
+  expect(specialSection).toContain('<dd>原版袖口</dd>');
+  expect(specialSection).toContain('<dd>双线效果</dd>');
+  expect(specialSection).toContain('<dd>沿版标定位</dd>');
+  expect(printingSection).toContain('<dd>后幅</dd>');
   const figures=(printed:string)=>Array.from(printed.matchAll(/<figure[^>]+data-print-craft-image="([^"]+)"[^>]*><a href="([^"]+)">([^<]+)<\/a><\/figure>/g),match=>match.slice(1));
   expect(figures(old)).toEqual([[originalBoard,`/versions/1/attachments/${originalBoard}`,'TEST 激光 · 工艺开发板 1'],[printingBoard,`/versions/1/attachments/${printingBoard}`,'印花 · 工艺开发板 2']]);
   expect(figures(current)).toEqual([[revisedBoard,`/versions/2/attachments/${revisedBoard}`,'TEST 激光 · 工艺开发板 1'],[printingBoard,`/versions/2/attachments/${printingBoard}`,'印花 · 工艺开发板 2']]);

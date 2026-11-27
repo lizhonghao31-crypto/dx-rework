@@ -1,5 +1,5 @@
 import {SaveDevelopmentAmendmentSchema,SubmitDevelopmentAmendmentSchema} from "@dx-rework/contracts/digital-development-amendments";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
 import { SaveDevelopmentDesignerCorrectionSchema,DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, SaveDevelopmentWorkbenchBasicsSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
@@ -50,10 +50,12 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
     const ref=await versionFile(request);
     return attachments.readIdentity(ref.trusted,ref.attachmentId,row=>Promise.resolve(row.entityType==='digital_development'&&service.canDownloadVersion(ref.trusted,ref.sourceId,ref.round,ref.documentVersion,ref.attachmentId)));
   });
-  app.get(`${versionBase}/attachments/:attachmentId`,async(request,reply)=>{
-    const ref=await versionFile(request),grant=await attachments.createDownloadIntent(ref.trusted,ref.attachmentId,row=>Promise.resolve(row.entityType==='digital_development'&&service.canDownloadVersion(ref.trusted,ref.sourceId,ref.round,ref.documentVersion,ref.attachmentId)),'inline');
+  const readVersionAttachment=(disposition:'inline'|'attachment')=>async(request:FastifyRequest,reply:FastifyReply)=>{
+    const ref=await versionFile(request),grant=await attachments.createDownloadIntent(ref.trusted,ref.attachmentId,row=>Promise.resolve(row.entityType==='digital_development'&&service.canDownloadVersion(ref.trusted,ref.sourceId,ref.round,ref.documentVersion,ref.attachmentId)),disposition);
     return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
-  });
+  };
+  app.get(`${versionBase}/attachments/:attachmentId`,readVersionAttachment('inline'));
+  app.get(`${versionBase}/attachments/:attachmentId/download`,readVersionAttachment('attachment'));
   app.get(`${versionBase}/attachments/:attachmentId/preview`,async(request,reply)=>{
     const grant=await attachments.createImagePreviewDownloadIntent(async()=>{const ref=await versionFile(request);return ref.trusted;},id(request,'attachmentId'),async(trusted,row)=>{
       const ref=versionReference(request);return row.entityType==='digital_development'&&service.canDownloadVersion(trusted,ref.sourceId,ref.round,ref.documentVersion,id(request,'attachmentId'));
@@ -96,13 +98,15 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
     await service.authorizeAttachmentRead(trusted,sourceId);
     return attachments.readIdentity(trusted,attachmentId,async row=>row.entityType==="digital_development"&&service.canDownload(trusted,sourceId,attachmentId));
   });
-  app.get(`${base}/attachments/:attachmentId`, async (request,reply) => {
+  const readSourceAttachment=(disposition:'inline'|'attachment')=>async(request:FastifyRequest,reply:FastifyReply)=>{
     const trusted = await actor(request), sourceId = id(request,"sourceId"), attachmentId = id(request,"attachmentId");
     // Includes source scope even for unbound drafts owned by the same uploader.
     await service.authorizeAttachmentRead(trusted,sourceId);
-    const grant = await attachments.createDownloadIntent(trusted,attachmentId, async row => row.entityType === "digital_development" && service.canDownload(trusted,sourceId,attachmentId),"inline");
-    return reply.redirect(grant.downloadUrl);
-  });
+    const grant = await attachments.createDownloadIntent(trusted,attachmentId, async row => row.entityType === "digital_development" && service.canDownload(trusted,sourceId,attachmentId),disposition);
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  };
+  app.get(`${base}/attachments/:attachmentId`,readSourceAttachment('inline'));
+  app.get(`${base}/attachments/:attachmentId/download`,readSourceAttachment('attachment'));
   app.get(`${base}/attachments/:attachmentId/preview`,async(request,reply)=>{
     const sourceId=id(request,'sourceId'),attachmentId=id(request,'attachmentId');
     const grant=await attachments.createImagePreviewDownloadIntent(async()=>{const trusted=await actor(request);await service.authorizeAttachmentRead(trusted,sourceId);return trusted;},attachmentId,

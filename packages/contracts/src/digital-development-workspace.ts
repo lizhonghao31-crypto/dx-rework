@@ -8,13 +8,18 @@ export const DEVELOPMENT_VIEWS = [
   { key: "ordered", label: "已下单" },
 ] as const;
 export type DevelopmentView = Exclude<typeof DEVELOPMENT_VIEWS[number]["key"], "all">;
+export const DESIGNER_BUSINESS_VIEWS=[{key:'pure',label:'纯开发订单'},{key:'preorder',label:'预下单'},
+ {key:'ordered',label:'已下单'},{key:'handover',label:'已交接完成'}] as const;
+export type DesignerBusinessKind=Exclude<typeof DESIGNER_BUSINESS_VIEWS[number]['key'],'handover'>;
+export type DevelopmentShippingDisplay={state:'sent';sentDate:string;trackingNo:string;round:number}
+ |{state:'wait_tail'|'wait_design'|'unassigned'|'ready'|'not_applicable'|'paused'|'cancelled'|'unknown'};
 export const DEVELOPMENT_HANDLING_FILTERS=['all','mine','waiting','returned'] as const;
 export const DevelopmentWorkspaceFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""), customer: z.string().trim().max(100).optional(),
   view: z.enum(DEVELOPMENT_VIEWS.map(item => item.key)).default("all"),
   designer: z.string().trim().max(100).optional(),
-  layout: z.literal('workbench').optional(), handling: z.enum(DEVELOPMENT_HANDLING_FILTERS).optional(),
+  layout: z.literal('workbench').optional(),businessView:z.enum(DESIGNER_BUSINESS_VIEWS.map(view=>view.key)).optional(), handling: z.enum(DEVELOPMENT_HANDLING_FILTERS).optional(),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
@@ -27,13 +32,13 @@ export const DESIGNER_WORKBENCH_TASK_KINDS:ReadonlySet<string>=new Set([
 export type DevelopmentWorkspaceAction={id:string;kind:'mine'|'waiting'|'returned';label:string;ownerName?:string;reason?:string;route:TodoRouteDescriptor};
 export type DevelopmentWorkspaceHandling={items:DevelopmentWorkspaceAction[];complete:boolean};
 export type DevelopmentWorkspaceItem = {
-  journey: OrderJourney; view: DevelopmentView; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling;
+  journey: OrderJourney; view: DevelopmentView;business?:{kind:DesignerBusinessKind;handoverComplete:boolean;shipping?:DevelopmentShippingDisplay}; canConfirm: boolean; handling?:DevelopmentWorkspaceHandling;
   /** Published order marker, not approval to alter any deadline. */
   orderRush?:true;
 };
 export type DevelopmentWorkspaceResult = {
   asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;
-  counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;
+  counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;businessCounts?:Record<DesignerBusinessKind|'handover',number>;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
 
