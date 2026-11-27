@@ -4,7 +4,7 @@ import {developmentRevisionSource,inheritedDevelopmentFile} from './development-
 import {acceptanceBusinessContext,assertAcceptanceAssignee,observedBusinessTime,businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
-import {developmentDraftForSave,validateDevelopmentMaterialPlan} from "./development-document-format.js";
+import {developmentDraftForSave,validateDevelopmentMaterialPlan,withDevelopmentMaterialLineTotals} from "./development-document-format.js";
 import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
@@ -15,12 +15,12 @@ import {readDevelopmentOrderRush} from './development-order-rush.js';
 import {readDevelopmentMaterialSuppliers,validateDevelopmentMaterialSuppliers} from './development-material-suppliers.js';
 import {materialReadiness} from "./development-material-readiness.js";
 import { beijingCalendarDate } from "@dx-rework/contracts/digital-production";
-import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
+import {developmentDocumentRow,developmentRoundsAvailable,readDevelopmentWorkbenchBasics} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DevelopmentWorkbenchBasicsSchema,SaveDevelopmentWorkbenchBasicsSchema,type DevelopmentWorkbenchBasics,type SaveDevelopmentWorkbenchBasics,DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
+import { SaveDevelopmentDesignerCorrectionSchema,type SaveDevelopmentDesignerCorrection,SaveDevelopmentWorkbenchBasicsSchema,type SaveDevelopmentWorkbenchBasics,DevelopmentSubmissionReceiptQuerySchema,DevelopmentSubmissionReceiptSchema,developmentAuxiliaryPlanningPublishIssues,developmentCreationBasicsIssues,developmentPreparationQuantityIssues,projectDevelopmentSewingRows,developmentPublishErrors,usesDevelopmentMaterialPlanning,withoutDevelopmentAlternateSizeDraft, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet, type DevelopmentPublishedVersion, type DevelopmentSubmissionOperation } from "@dx-rework/contracts/digital-development";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -137,14 +137,6 @@ export class DigitalDevelopmentService {
     if(source.draft_reserved)return observedBusinessTime(this.now).now;
     return (await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at;
   }
-  private async workbenchBasics(db:Database,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentWorkbenchBasics|undefined>{
-    const row=(await db.query<{value:unknown}>(`SELECT after_state->'basics' AS value FROM audit_events
-      WHERE entity_type='digital_development' AND entity_id=$1 AND action='development_workbench_basics_saved'
-        AND after_state->>'roundNumber'=$2 AND after_state->>'documentVersion'=$3
-      ORDER BY ((after_state->'basics')->>'revision')::integer DESC LIMIT 1`,
-    [sourceId,String(roundNumber),String(documentVersion)])).rows[0];
-    return row?DevelopmentWorkbenchBasicsSchema.parse(row.value):undefined;
-  }
   async saveWorkbenchBasics(actor:TrustedActorContext,sourceId:string,raw:SaveDevelopmentWorkbenchBasics,key:string){
     const input=SaveDevelopmentWorkbenchBasicsSchema.parse(raw);
     return this.command(actor,sourceId,'workbench_basics',key,input,async db=>{
@@ -154,7 +146,7 @@ export class DigitalDevelopmentService {
       if(!sheet.document?.workbenchSheet||!(sheet.status==='published'||sheet.preorderPublication)||
          sheet.version!==input.documentVersion||(sheet.roundNumber??1)!==input.roundNumber)
         conflict('本单有效版单已更新，请核对后再编辑基础信息');
-      const prior=await this.workbenchBasics(db,sourceId,input.roundNumber,input.documentVersion);
+      const prior=await readDevelopmentWorkbenchBasics(db,sourceId,input.roundNumber,input.documentVersion);
       if((prior?.revision??0)!==input.expectedRevision)conflict('基础信息已更新，请核对后再保存');
       const basics={brand:input.brand,referenceNote:input.referenceNote,revision:input.expectedRevision+1};
       await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
@@ -169,6 +161,77 @@ export class DigitalDevelopmentService {
       if(owner!==actor.actorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer'))digitalForbidden();
     });
   }
+  async correctDesignerDocument(actor:TrustedActorContext,sourceId:string,raw:SaveDevelopmentDesignerCorrection,key:string){
+    const input=SaveDevelopmentDesignerCorrectionSchema.parse(raw);
+    return this.command(actor,sourceId,'designer_document_correction',key,input,async db=>{
+      await assertWholeOrderActive(db,'source',sourceId);
+      const scope=(await db.query(`SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1`,[sourceId])).rows[0];
+      if(scope&&scope.state!=='active')conflict('本单暂停或取消，不能订正资料');
+      const basis=await developmentDocumentRow(db,sourceId);
+      const preorder=await workbenchPreorderPublication(db,sourceId);
+      if(!basis?.document||!(basis.status==='published'||preorder)
+        ||basis.round_number!==input.roundNumber||basis.latest_round_number!==input.roundNumber||basis.version!==input.expectedDocumentVersion)
+        conflict('当前资料版本或轮次已变化，请核对实际原版后再订正');
+      if((await db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount&&input.materialQuantities?.length)
+        conflict('本单已正式确认，采购数量请从原投料更正入口办理');
+      const original=basis.document as DevelopmentDocument,document=structuredClone(original);
+      const changes:Array<{field:string;materialId?:string;before:string;after:string}>=[];
+      const notes=await readDevelopmentWorkbenchBasics(db,sourceId,input.roundNumber,input.expectedDocumentVersion);
+      const fields=original.workbenchSheet??{version:1 as const,styleName:'',brand:'',referenceNote:'',gender:null,boardType:null,processingSelected:false,sewingRows:[]};
+      for(const field of ['styleName','brand','referenceNote'] as const){
+        const from=(field==='brand'||field==='referenceNote')?notes?.[field]??fields[field]:fields[field],value=input[field];
+        if(value===undefined||value===from)continue;
+        if(field!=='referenceNote'&&!value.trim())conflict('已登记的款式（品名）和品牌不能清空');
+        changes.push({field,before:from,after:value});
+      }
+      if(changes.length||notes)document.workbenchSheet={...fields,...(notes?{brand:notes.brand,referenceNote:notes.referenceNote}:{}),
+        ...Object.fromEntries(changes.map(({field,after})=>[field,after]))};
+      for(const selected of input.materialQuantities??[]){
+        const index=document.materials.findIndex(row=>row.materialId===selected.materialId);
+        const previous=document.materials[index]??conflict('原材料不存在，不可新增或替代材料');
+        if(!previous.name.trim())conflict('原材料不存在或尚无真实品名，不可在本次订正新增或替代材料');
+        const next={...previous};
+        for(const field of ['quantity','quantityUnit'] as const){
+          const value=selected[field]?.trim(),from=previous[field]?.trim()??'';
+          if(value===undefined||value===from)continue;
+          if(from||!value)conflict('此处只补缺失的原备料数量或单位，变更已登记资料请从原投料更正办理');
+          if(field==='quantityUnit'&&previous.pricingUnit&&previous.pricingUnit.trim()!==value)
+            conflict('原价单位与拟补单位不同，请核对原投料和报价依据');
+          changes.push({field,materialId:selected.materialId,before:from,after:value});next[field]=value;
+        }
+        const issues=developmentPreparationQuantityIssues({materials:[next]},true);
+        if(issues.length)throw new ApplicationError('VALIDATION_ERROR',issues.map(issue=>issue.message).join('；'),400);
+        if(next.quantityUnit!==previous.quantityUnit){
+          const mismatch=(await db.query(`WITH latest AS(
+           SELECT DISTINCT ON(record_id) body,state FROM digital_preparation_material_versions
+           WHERE resource_kind='source' AND resource_id=$1 AND kind='material_investment' ORDER BY record_id,version DESC
+          ) SELECT 1 FROM latest, LATERAL jsonb_array_elements(COALESCE(body->'quantities','[]')) item
+          WHERE state IN('partial','ready') AND item->>'materialId'=$2 AND item->>'unit' IS DISTINCT FROM $3 LIMIT 1`,
+          [sourceId,selected.materialId,next.quantityUnit])).rowCount;
+          if(mismatch)conflict('原投料已登记不同的实际单位，请走原投料更正；未改变原批次');
+        }
+        document.materials[index]=withDevelopmentMaterialLineTotals({...document,materials:[next]}).materials[0]!;
+      }
+      if(!changes.length)conflict('没有可保存的资料订正');
+      const id=randomUUID(),eventId=randomUUID(),version=(await db.query(`SELECT greatest(
+        (SELECT version FROM digital_development_documents WHERE source_id=$1),
+        (SELECT max(document_version) FROM digital_development_rounds WHERE source_id=$1),
+        (SELECT max(document_version) FROM digital_development_amendments WHERE source_id=$1))::integer+1 AS version`,[sourceId])).rows[0]!.version as number;
+      await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+        VALUES($1,$2,$3,'development_designer_correction','digital_development',$4,$5,$6)`,
+        [eventId,actor.requestId,actor.actorId,sourceId,JSON.stringify({version:input.expectedDocumentVersion}),
+         JSON.stringify({version,round:input.roundNumber,changes,reason:input.reason})]);
+      await db.query(`INSERT INTO digital_development_amendments(amendment_id,source_id,round_number,document_version,base_document_version,
+        amendment_kind,correction_event_id,document,reason,changes,published_by)
+        VALUES($1,$2,$3,$4,$5,'designer_correction',$6,$7,$8,$9,$10)`,
+        [id,sourceId,input.roundNumber,version,input.expectedDocumentVersion,eventId,JSON.stringify(document),input.reason,JSON.stringify(changes),actor.actorId]);
+      return {sourceId,roundNumber:input.roundNumber,version};
+    },async db=>{
+      const owner=(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.created_by;
+      const root=isRootActor(actor)&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed;
+      if(!root&&(owner!==actor.actorId||!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,'sample_designer')))digitalForbidden();
+    });
+  }
   async readDocument(actor:TrustedActorContext,sourceId:string,roundNumber?:number,enableWorkbenchBasics=false):Promise<DevelopmentSheet>{
     const db=await this.database.connect();
     try{
@@ -177,7 +240,7 @@ export class DigitalDevelopmentService {
       const orderRush=(result.status==='published'||result.preorderPublication)
         &&(await readDevelopmentOrderRush(db,[{sourceId,orderId:null}])).has(`source:${sourceId}`);
       const basics=enableWorkbenchBasics&&result.document?.workbenchSheet&&result.version>0
-        ?await this.workbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
+        ?await readDevelopmentWorkbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
       const basicsEditable=enableWorkbenchBasics&&result.canEdit&&result.document?.workbenchSheet&&
         (result.status==='published'||result.preorderPublication)&&(isRootActor(actor)||actor.actorRoles.includes('sample_designer')&&
         (await db.query("SELECT 1 FROM digital_production_sources WHERE source_id=$1 AND created_by=$2",[sourceId,actor.actorId])).rowCount&&
@@ -296,12 +359,12 @@ export class DigitalDevelopmentService {
   }
   async save(actor: TrustedActorContext, sourceId: string, input: { expectedVersion: number; document: DevelopmentDocument }, key: string,enableMaterialSuppliers=false) {
     return this.command(actor, sourceId, "save", key, input, async db => {
-      const row = (await db.query("SELECT version,status,document FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0];
+      const row=await developmentDocumentRow(db,sourceId);
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("开发单已更新，请重新打开后再保存");
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
       const source=(await db.query("SELECT created_at,(to_jsonb(s)->>'draft_reserved')::boolean AS draft_reserved,(to_jsonb(s)->>'workbench_generated_number')::boolean AS workbench_generated_number FROM digital_production_sources s WHERE source_id=$1",[sourceId])).rows[0];
       const catalog=Boolean(enableMaterialSuppliers&&input.document.templateConfirmed||source.workbench_generated_number||row?.document?.materialSupplierCatalog);
-      const document=developmentDraftForSave({...input.document,materialSupplierCatalog:catalog?true:undefined},row?.document,await this.draftDocumentOrigin(db,sourceId,source));
+      const document=developmentDraftForSave({...input.document,materialSupplierCatalog:catalog?true:undefined},row?.document,await this.draftDocumentOrigin(db,sourceId,source),Boolean(source.workbench_generated_number));
       if(preorderDraftOrder(row?.document)&&!preorderDraftOrder(document)){
         const identity=await this.source(db,actor,sourceId,true);
         if(identity.workbench_generated_number&&await workbenchPreorderPublication(db,sourceId))conflict('已发布的预下单须沿本单补资料或确认正式订单');
@@ -312,8 +375,8 @@ export class DigitalDevelopmentService {
       await validateDevelopmentMaterialSuppliers(db,document,row?.document,{catalog});
       await validateSpecialCraftChoices(db,document.craftSteps??[],row?.document?.craftSteps??[],'development');
       await this.bindFiles(db, actor, sourceId, document);
-      await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
-        ON CONFLICT(source_id) DO UPDATE SET version=digital_development_documents.version+1,document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [sourceId, JSON.stringify(document), actor.actorId]);
+      await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,$4,'draft',$2,$3)
+        ON CONFLICT(source_id) DO UPDATE SET version=EXCLUDED.version,document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [sourceId, JSON.stringify(document), actor.actorId,(row?.version??0)+1]);
       return this.read(actor, sourceId, db);
     });
   }
@@ -343,7 +406,8 @@ export class DigitalDevelopmentService {
         return conflict('请指定有效订单跟单接收资料');
       await assertAcceptanceAssignee(recipientId);
       const document=row.document as DevelopmentDocument;
-      const planningErrors=developmentAuxiliaryPlanningPublishIssues(document);
+      const planningErrors=[...developmentCreationBasicsIssues(document),
+        ...developmentPreparationQuantityIssues(document,true),...developmentAuxiliaryPlanningPublishIssues(document)];
       if(planningErrors.length)throw new ApplicationError('VALIDATION_ERROR',planningErrors.map(issue=>issue.message).join('；'),400);
       await validateDevelopmentMaterialSuppliers(db,document,document,{catalog:true,publish:true});
       const fabrics=document.materials.filter(material=>material.category!=='辅料'&&(material.name.trim()||material.quantity.trim()||material.supplier.trim()));
@@ -366,7 +430,7 @@ export class DigitalDevelopmentService {
   }
   async publish(actor: TrustedActorContext, sourceId: string, expectedVersion: number, key: string, patternOrder?:{categoryId:string;priceVersion:number}) {
     return this.command(actor, sourceId, "publish", key, { expectedVersion,...(patternOrder?{patternOrder}:{}) }, async db => {
-      const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? conflict("请先保存开发单");
+      const row=await developmentDocumentRow(db,sourceId)??conflict("请先保存开发单");
       if (row.status === "published") { if (row.version === expectedVersion + 1) return this.read(actor, sourceId, db); conflict("开发单已经发布"); }
       if (row.version !== expectedVersion) conflict("开发单已更新，请重新打开后发布");
       const actorSource=preorderDraftOrder(row.document)?await this.source(db,actor,sourceId,true):null;
@@ -377,7 +441,23 @@ export class DigitalDevelopmentService {
         await assertWholeOrderActive(db,'source',sourceId);
       }
       await validateSpecialCraftChoices(db,row.document.craftSteps??[],[],'development');
-      const errors = developmentPublishErrors(numberedPreorder?{...row.document,customerOrderDraft:null}:row.document);
+      const errors=developmentPublishErrors(numberedPreorder?{...row.document,customerOrderDraft:null}:row.document);
+      const document=row.document as DevelopmentDocument;
+      const currentIdentity=actorSource??await this.source(db,actor,sourceId,true);
+      if(currentIdentity.workbench_generated_number||document.templateConfirmed&&document.workbenchSheet){
+        errors.push(...developmentCreationBasicsIssues(document).map(issue=>issue.message),
+          ...developmentPreparationQuantityIssues(document,Boolean(document.customerOrderDraft?.withOrder)).map(issue=>issue.message));
+        if((await developmentRevisionSource(db,sourceId))?.outputKind!=='工艺布片'){
+          if((document.craftSteps?.length??(document.craft==='印绣花'?2:0))>=2&&document.craftOrderConfirmed!==true)
+            errors.push('请选择并确认每一站的实际工艺顺序');
+          const projection=projectDevelopmentSewingRows(document);
+          errors.push(...projection.issues.map(issue=>issue.message));
+          if(projection.document&&(projection.document.quantity!==document.quantity
+            ||JSON.stringify(projection.document.sizes)!==JSON.stringify(document.sizes)
+            ||JSON.stringify(projection.document.sizeQuantities)!==JSON.stringify(document.sizeQuantities)))
+            errors.push('制作数量与当前打板分行资料不一致，请在打板信息核对，不可提交第二套数量');
+        }
+      }
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
       await validateDevelopmentMaterialSuppliers(db,row.document,row.document,{catalog:Boolean(numberedPreorder||row.document.materialSupplierCatalog),publish:true});
       if(row.document.customerOrderDraft?.withOrder){
@@ -425,7 +505,7 @@ export class DigitalDevelopmentService {
       const eligible: string[] = [];
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
       const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId, routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
-      await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP,document=document-'alternateSizeDraft' WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
+      await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=$5,updated_by=$3,updated_at=CURRENT_TIMESTAMP,document=$6 WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now,row.version+1,JSON.stringify(publishedDocument)]);
       if (preorder||publishedPlan) {
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
         await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:"source",id:sourceId},kind:"development_shipping",routeId:randomUUID(),routeVersion:1,occurrence:1,

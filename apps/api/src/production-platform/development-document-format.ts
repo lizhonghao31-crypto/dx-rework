@@ -34,11 +34,11 @@ export function withDevelopmentMaterialLineTotals(document:DevelopmentDocument):
  })};
 }
 /** Called only with the original row held by the development command transaction. */
-export function developmentDraftForSave(input:DevelopmentDocument,previous:DevelopmentDocument|undefined,createdAt:Date|string):DevelopmentDocument{
+export function developmentDraftForSave(input:DevelopmentDocument,previous:DevelopmentDocument|undefined,createdAt:Date|string,allowNumberedBasics=false):DevelopmentDocument{
  const fixedDate=previous?.orderDate??beijingCalendarDate(new Date(createdAt));
  if(input.orderDate&&input.orderDate!==fixedDate)reject(`开发下单日期固定为${fixedDate}，请重新读取本单；客户下单日期在订单资料中单独填写`);
  if(previous?.workbenchSheet&&!input.workbenchSheet)reject("不能移除已保存的新版版单；请重新读取当前资料");
- if(previous&&!previous.workbenchSheet&&input.workbenchSheet)reject("原草稿须沿用保存时的版单格式");
+ if(previous&&!previous.workbenchSheet&&input.workbenchSheet&&!allowNumberedBasics)reject("原草稿须沿用保存时的版单格式");
  if(previous?.documentFormatVersion===2&&(input.documentFormatVersion!==2||!input.sizeQuantities))reject("不能移除已保存的每码制作数量，请重新读取当前资料");
  validateNewMaterialPriceIdentity(input,previous);
  validateDevelopmentStylePictures(input,previous);

@@ -220,6 +220,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
   const pageSize=compact&&!showAllPictures?6:attachmentPageSize??Math.max(pictures.length,1),currentPage=Math.min(picturePage,Math.max(1,Math.ceil(pictures.length/pageSize))),visiblePictures=pictures.slice((currentPage-1)*pageSize,currentPage*pageSize);
   const heroPicture=pictures.find(file=>file.attachmentId===activePicture)??pictures[0];
   const light=creationView==="preorder",requirements=creationView==="requirements";
+  const separateMakingRows=Boolean(requirements&&document.workbenchSheet);
   const preorderFabricFields=[['name','面料名称'],['specification','规格'],['quantity','数量与单位'],['supplier','供应商']] as const;
   const templateControl=<>{select("template","尺寸模板",["上衣","裤子"],value=>void replaceTemplate(value))}
     {previousTemplate&&!readonly&&<Button type="button" disabled={busy} onClick={()=>void undoTemplate()}>撤回模板替换</Button>}</>;
@@ -262,17 +263,89 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       </label>}
   </>}</div></details></td></tr></Fragment>)}
             </tbody></table></DocumentTableScroll>{!readonly&&<div className="development-actions">{(onlyAuxiliary?["辅料"] as const:["主布","配布","辅料"] as const).map(category=><DocumentAddRow key={category} label={`添加${category}`} disabled={busy||document.materials.length>=100} onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});if(compact)locate(`development-${next.materialId}-name`);else requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());}}/> )}</div>}</section>;
+  const inlineMaterials=Boolean(creationView||designerInput&&!readonly);
+  const materialRows=(onlyAuxiliary=false)=>document.materials.map((item,index)=>({item,index}))
+    .filter(({item})=>!onlyAuxiliary||item.category==='辅料');
+  const inlineMaterialFields=(onlyAuxiliary=false,onlyFabric=false)=><div className="development-materials-inline">
+    {materialRows(onlyAuxiliary).filter(({item})=>!onlyFabric||item.category!=='辅料').map(({item,index})=>{
+      const auxiliary=item.category==='辅料',label=item.label||item.category;
+      const id=(name:string)=>`development-${item.materialId}-${name}`;
+      const rawUnit=item.quantityUnit?.trim()||'',unit=auxiliary?rawUnit:'米';
+      const amount=workbenchMaterialAmount(item);
+      const priceIdentityIssue=readonly?null:developmentMaterialPriceIdentityIssue(item);
+      const input=(key:'name'|'specification'|'quantity'|'width'|'weight'|'composition'|'color'|'garmentColor'|'part'|'consumption'|'label'|'unitPrice',name:string,marker='（选填）')=>{
+        const message=issue(id(key));
+        return <DevelopmentEntryText id={id(key)} label={`${label} ${name}`} visibleLabel
+          value={item[key]??''} isDisabled={busy||readonly} isRequired={marker===' *'} maxLength={100}
+          {...(key==='quantity'||key==='unitPrice'?{inputMode:'decimal' as const}:{})}
+          {...(message?{status:{type:'error' as const,message}}:{})}
+          onChange={value=>changeMaterial(index,{[key]:value,...(key==='unitPrice'&&unit&&(!item.pricingUnit||item.pricingUnit===unit)?{pricingUnit:unit}:{}),
+           ...(key==='quantity'&&!auxiliary&&!rawUnit?{quantityUnit:'米'}:{})})}/>;
+      };
+      return <section key={item.materialId} className="development-material-inline-row" aria-label={`${label} ${index+1}`}>
+        <header><h3>{item.category} · {item.name||index+1}</h3>{!readonly&&<DevelopmentEntryAction type="button" disabled={busy} onClick={async()=>{
+          if(await confirmInApp(`删除${item.name||label}？`)&&!writing.current)edit({materials:document.materials.filter(row=>row.materialId!==item.materialId)});
+        }}>删除</DevelopmentEntryAction>}</header>
+        {auxiliary&&!readonly&&<div className="development-auxiliary-selection">
+          <DevelopmentEntryAction type="button" aria-label={`选择辅料 ${index+1}`} disabled={busy} onClick={()=>setAuxiliaryMaterialId(item.materialId)}>搜索或新增辅料</DevelopmentEntryAction>
+          {item.auxiliaryCatalog&&<small>原目录版本 {item.auxiliaryCatalog.version}</small>}
+        </div>}
+        <div className="development-material-inline-grid">
+          <div {...materialNameFocus(item)}>{input('name','品名',' *')}</div>
+          {input('specification','规格')}
+          <div><span>{auxiliary?'供应商':'供应商 *'}</span>{supplierField(item,index,`${label} 供应商`)}</div>
+          {!light&&input('label','材料标记')}
+          {input('quantity','数量',light?' *':'（选填）')}
+          <div>{auxiliary?<Selector id={id('quantityUnit')} label={`${label} 数量单位`} placeholder="请选择" size="sm" isDisabled={busy||readonly}
+            value={rawUnit} options={['个','米','条','箱',...(rawUnit&&!['个','米','条','箱'].includes(rawUnit)?[rawUnit]:[])]}
+            onChange={value=>{if(!['个','米','条','箱'].includes(value))return;
+              changeMaterial(index,{quantityUnit:value,...(!item.unitPrice||item.pricingUnit===value?{pricingUnit:value}:{})});
+            }}/> :<><span>数量单位</span><output id={id('quantityUnit')}>米</output></>}
+            {issue(id('quantityUnit'))&&<small role="alert">{issue(id('quantityUnit'))}</small>}</div>
+          <div>{input('unitPrice',`单价（元${unit?'/'+unit:''}）`)}
+            {priceIdentityIssue&&<small role="status">{priceIdentityIssue}</small>}
+            {(item.pricingUnit&&unit&&item.pricingUnit!==unit||!auxiliary&&rawUnit&&rawUnit!=='米')&&<small role="status">原单位与当前物理单位不同，请核对后明确采用。
+              {!readonly&&<DevelopmentEntryAction type="button" disabled={busy} onClick={async()=>{
+                if(await confirmInApp(`确认本行数量与价格使用${unit}？不换算原数值。`)&&!writing.current)
+                  changeMaterial(index,{quantityUnit:unit,pricingUnit:unit});
+              }}>{`确认按${unit}计量`}</DevelopmentEntryAction>}</small>}</div>
+          <div><span>总价</span><output data-material-total={item.materialId} title={amount?.exact}>{amount?`${amount.label} 元`:'待核'}</output></div>
+          {(!light||auxiliary)&&<>{!auxiliary&&input('width','幅宽',' *')}{!auxiliary&&input('weight','克重')}{!auxiliary&&input('composition','成分',' *')}
+            {input('color','物料颜色')}{input('garmentColor','款式颜色')}{input('part','使用部位')}{input('consumption','单件用量')}</>}
+          {!light&&<Selector id={id('sampleAttachmentId')} label={`${label} 实样图片`} size="sm" value={item.sampleAttachmentId??''} isDisabled={busy||readonly}
+            options={[{value:'',label:'不引用图片'},...document.files.filter(file=>file.kind==='局部图').map((file,ordinal)=>({value:file.attachmentId,
+              label:[`局部图 ${ordinal+1}`,fileIdentity?.(file.attachmentId)?.filename].filter(Boolean).join(' · ')}))]}
+            onChange={value=>changeMaterial(index,{sampleAttachmentId:value||null})}/>}
+          {auxiliary&&!readonly&&auxiliaryPlanning&&<Selector label={`${label} 已有实物（设计填写）`} size="sm" isDisabled={busy}
+            value={item.designerHasMaterial===undefined?'':item.designerHasMaterial?'yes':'no'}
+            options={[{value:'yes',label:'是'},{value:'no',label:'否'}]} onChange={value=>{if(value==='yes'||value==='no')changeMaterial(index,{designerHasMaterial:value==='yes'});}}/>}
+          {auxiliary&&item.designerHasMaterial===false&&<DevelopmentEntryDate id={id('expectedDate')} label={`${label} 预计到料日期`} visibleLabel isRequired
+            value={item.expectedDate??''} isDisabled={busy||readonly} onChange={value=>changeMaterial(index,{expectedDate:value??null})}
+            {...(issue(id('expectedDate'))?{status:{type:'error' as const,message:issue(id('expectedDate'))!}}:{})}/>}
+        </div>
+        <p>{auxiliary?'实际到料由文员核验':'面料由跟单跟进，实际核料由文员确认'}
+          {item.sampleAttachmentId&&<> · <a href={imageUrl(item.sampleAttachmentId)} target="_blank" rel="noreferrer">查看原实样</a></>}
+          {item.auxiliaryCatalog?.referencePricing&&` · 目录参考价：${item.auxiliaryCatalog.referencePricing.amount} 元 / ${item.auxiliaryCatalog.referencePricing.unit}`}</p>
+      </section>;
+    })}
+    {!readonly&&<div className="development-actions">
+      {(onlyAuxiliary?['辅料'] as const:onlyFabric?['主布','配布'] as const:['主布','配布','辅料'] as const).map(category=><DevelopmentEntryAction
+        key={category} type="button" className="dx-doc-add-row budget-controls" disabled={busy||document.materials.length>=100}
+        onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});
+        requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());}}>{`＋ 添加${category}`}</DevelopmentEntryAction>)}
+    </div>}
+  </div>;
   const compactSection=(title:string,summary:string,children:ReactNode)=>compact
     ?<details className="development-optional-section"><summary>{title} · {summary}</summary>{children}</details>:children;
   const dimensions=compactSection("尺寸资料",`${document.template} · ${document.unit} · 已填 ${document.sizes.filter(size=>size.trim()).length} 个尺码`,<DocumentSection id="development-sizes" title="尺寸表（创建开发单选填）" detail={`${document.sizes.length} 尺码 · ${document.measurements.length} 项目`}>
 <p>创建及发布开发资料时可暂不填写尺码；技术纸样完成时再提供有效基码尺寸。订购配码在正式确认客户订单时单独核对。</p>
-            {readonly&&document.documentFormatVersion!==2&&<p className="development-legacy-making">历史打样尺码：{document.sampleSize||"未登记"}；原单没有逐码制作数量，未推算或改写。</p>}<div className="development-size-controls">{!creationView&&!compact&&templateControl}{select("unit","尺寸单位",["cm","inch"])}{!readonly&&<div className="development-actions"><DocumentAddRow label="添加尺码列" disabled={busy||document.sizes.length>=20} onClick={()=>{sizeIds.current.push(createClientRequestId());setSizeQuantityInputs([...sizeQuantityInputs,""]);edit({documentFormatVersion:2,sizes:[...document.sizes,""],sizeQuantities:[...(document.sizeQuantities??document.sizes.map(()=>null)),null],measurements:document.measurements.map(row=>({...row,values:[...row.values,""]}))});}}/><DocumentAddRow label="添加尺寸行" disabled={busy||document.measurements.length>=100} onClick={()=>{const id=createClientRequestId();measurementIds.current.push(id);edit({measurements:[...document.measurements,{name:"",values:document.sizes.map(()=>"")}]});requestAnimationFrame(()=>window.document.getElementById(`development-measurement-${id}-name`)?.focus());}}/></div>}</div><DocumentTableScroll><table className="development-size-table"><thead><tr><th>测量项目</th>{document.sizes.map((size,index)=><th key={sizeIds.current[index]}><DocumentField id={`development-size-${index}`} label={`制作尺码列 ${index+1}`} value={size} readonly={readonly} disabled={busy} issue={issue(`development-size-${index}`)} onValue={value=>edit({sizes:document.sizes.map((old,i)=>i===index?value:old)})}/>{!readonly&&<Button type="button" className="development-matrix-remove" aria-label={`删除制作尺码列 ${index+1}`} disabled={busy} onClick={()=>void removeSize(index)}>×</Button>}{!readonly&&<span className="development-size-move">{([-1,1] as const).map(delta=><button key={delta} type="button" aria-label={`${document.sizes[index]||`第${index+1}列`}尺码${delta<0?"左移":"右移"}`} disabled={busy||index+delta<0||index+delta>=document.sizes.length} onClick={()=>{const to=index+delta;[sizeIds.current[index],sizeIds.current[to]]=[sizeIds.current[to]!,sizeIds.current[index]!];const inputs=[...sizeQuantityInputs];const value=inputs.splice(index,1)[0]!;inputs.splice(to,0,value);setSizeQuantityInputs(inputs);edit(moveDevelopmentSize(document,index,to));}}>{delta<0?"←":"→"}</button>)}</span>}</th>)}</tr></thead><tbody><tr id="development-size-quantities" tabIndex={-1} className="development-making-quantities"><th>本轮制作数量<small>0件表示本轮不做</small></th>{document.sizes.map((size,index)=><td key={sizeIds.current[index]}><DocumentField id={`development-size-quantity-${index}`} label={`${size||`第${index+1}列`}尺码制作数量`} value={sizeQuantityInputs[index]??""} numeric readonly={readonly} disabled={busy} issue={issue(`development-size-quantity-${index}`)} onValue={value=>{const inputs=[...sizeQuantityInputs];inputs[index]=value;setSizeQuantityInputs(inputs);edit({documentFormatVersion:2,sizeQuantities:document.sizes.map((_,position)=>position===index?(value!==""&&!developmentMakingQuantityError(value)?Number(value):null):document.sizeQuantities?.[position]??null)});}}/></td>)}</tr>{document.measurements.map((row,index)=><tr key={measurementIds.current[index]} data-doc-row><th><DocumentField id={`development-measurement-${measurementIds.current[index]}-name`} label={`尺寸项目 ${index+1}`} value={row.name} readonly={readonly} disabled={busy} column="name" issue={issue(`development-measurement-${measurementIds.current[index]}-name`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,name:value}:old)})}/>{!readonly&&<Button type="button" className="development-matrix-remove" aria-label={`删除尺寸行 ${index+1}`} disabled={busy} onClick={()=>void removeMeasurement(index)}>×</Button>}</th>{row.values.map((value,column)=><td key={column}><DocumentField id={`development-measurement-${measurementIds.current[index]}-${column}`} label={`${row.name} ${document.sizes[column]}`} value={value} readonly={readonly} disabled={busy} column={`size-${column}`} issue={issue(`development-measurement-${measurementIds.current[index]}-${column}`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,values:old.values.map((v,c)=>c===column?value:v)}:old)})}/></td>)}</tr>)}</tbody></table></DocumentTableScroll><p className="development-making-total">各码制作合计：{!document.sizes.length||sizeQuantityInputs.every(value=>value==="")?"待技术补充":sizeQuantityInputs.some(value=>value===""||developmentMakingQuantityError(value))?"待填写":sizeQuantityInputs.reduce((sum,value)=>sum+Number(value),0)}件 · 本轮打板数量：{document.quantity??"待填写"}件{issue("development-size-quantities")&&<span role="alert">{issue("development-size-quantities")}</span>}</p>
+            {readonly&&document.documentFormatVersion!==2&&<p className="development-legacy-making">历史打样尺码：{document.sampleSize||"未登记"}；原单没有逐码制作数量，未推算或改写。</p>}<div className="development-size-controls">{!creationView&&!compact&&templateControl}{select("unit","尺寸单位",["cm","inch"])}{!readonly&&<div className="development-actions"><DocumentAddRow label="添加尺码列" disabled={busy||document.sizes.length>=20} onClick={()=>{sizeIds.current.push(createClientRequestId());setSizeQuantityInputs([...sizeQuantityInputs,""]);edit({documentFormatVersion:2,sizes:[...document.sizes,""],sizeQuantities:[...(document.sizeQuantities??document.sizes.map(()=>null)),null],measurements:document.measurements.map(row=>({...row,values:[...row.values,""]}))});}}/><DocumentAddRow label="添加尺寸行" disabled={busy||document.measurements.length>=100} onClick={()=>{const id=createClientRequestId();measurementIds.current.push(id);edit({measurements:[...document.measurements,{name:"",values:document.sizes.map(()=>"")}]});requestAnimationFrame(()=>window.document.getElementById(`development-measurement-${id}-name`)?.focus());}}/></div>}</div><DocumentTableScroll><table className="development-size-table"><thead><tr><th>测量项目</th>{document.sizes.map((size,index)=><th key={sizeIds.current[index]}><DocumentField id={`development-size-${index}`} label={`制作尺码列 ${index+1}`} value={size} readonly={readonly} disabled={busy} issue={issue(`development-size-${index}`)} onValue={value=>edit({sizes:document.sizes.map((old,i)=>i===index?value:old)})}/>{!readonly&&<Button type="button" className="development-matrix-remove" aria-label={`删除制作尺码列 ${index+1}`} disabled={busy} onClick={()=>void removeSize(index)}>×</Button>}{!readonly&&<span className="development-size-move">{([-1,1] as const).map(delta=><button key={delta} type="button" aria-label={`${document.sizes[index]||`第${index+1}列`}尺码${delta<0?"左移":"右移"}`} disabled={busy||index+delta<0||index+delta>=document.sizes.length} onClick={()=>{const to=index+delta;[sizeIds.current[index],sizeIds.current[to]]=[sizeIds.current[to]!,sizeIds.current[index]!];const inputs=[...sizeQuantityInputs];const value=inputs.splice(index,1)[0]!;inputs.splice(to,0,value);setSizeQuantityInputs(inputs);edit(moveDevelopmentSize(document,index,to));}}>{delta<0?"←":"→"}</button>)}</span>}</th>)}</tr></thead><tbody>{!separateMakingRows&&<tr id="development-size-quantities" tabIndex={-1} className="development-making-quantities"><th>本轮制作数量<small>0件表示本轮不做</small></th>{document.sizes.map((size,index)=><td key={sizeIds.current[index]}><DocumentField id={`development-size-quantity-${index}`} label={`${size||`第${index+1}列`}尺码制作数量`} value={sizeQuantityInputs[index]??""} numeric readonly={readonly} disabled={busy} issue={issue(`development-size-quantity-${index}`)} onValue={value=>{const inputs=[...sizeQuantityInputs];inputs[index]=value;setSizeQuantityInputs(inputs);edit({documentFormatVersion:2,sizeQuantities:document.sizes.map((_,position)=>position===index?(value!==""&&!developmentMakingQuantityError(value)?Number(value):null):document.sizeQuantities?.[position]??null)});}}/></td>)}</tr>}{document.measurements.map((row,index)=><tr key={measurementIds.current[index]} data-doc-row><th><DocumentField id={`development-measurement-${measurementIds.current[index]}-name`} label={`尺寸项目 ${index+1}`} value={row.name} readonly={readonly} disabled={busy} column="name" issue={issue(`development-measurement-${measurementIds.current[index]}-name`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,name:value}:old)})}/>{!readonly&&<Button type="button" className="development-matrix-remove" aria-label={`删除尺寸行 ${index+1}`} disabled={busy} onClick={()=>void removeMeasurement(index)}>×</Button>}</th>{row.values.map((value,column)=><td key={column}><DocumentField id={`development-measurement-${measurementIds.current[index]}-${column}`} label={`${row.name} ${document.sizes[column]}`} value={value} readonly={readonly} disabled={busy} column={`size-${column}`} issue={issue(`development-measurement-${measurementIds.current[index]}-${column}`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,values:old.values.map((v,c)=>c===column?value:v)}:old)})}/></td>)}</tr>)}</tbody></table></DocumentTableScroll>{!separateMakingRows&&<p className="development-making-total">各码制作合计：{!document.sizes.length||sizeQuantityInputs.every(value=>value==="")?"待技术补充":sizeQuantityInputs.some(value=>value===""||developmentMakingQuantityError(value))?"待填写":sizeQuantityInputs.reduce((sum,value)=>sum+Number(value),0)}件 · 本轮打板数量：{document.quantity??"待填写"}件{issue("development-size-quantities")&&<span role="alert">{issue("development-size-quantities")}</span>}</p>}
 
           </DocumentSection>);
   const labelSection=<DocumentSection id="development-labels" title="唛类">            <section><div>{(["mainLabel","sizeLabel","careLabel"] as const).map((key,index)=><div key={key}>{flag(`development-${key}`,["主唛","码唛","洗水唛"][index]!,document[key],value=>edit({[key]:value}))}</div>)}{field("mainLabelMethod","主唛车法",1000,true)}</div></section></DocumentSection>;
   return <div className={`development-document-layout development-document-layout--grouped${creationView?" development-document-layout--creation":""}`}>
     {supplierMaterialId&&!readonly&&<DevelopmentMaterialSupplierPicker key={supplierMaterialId} disabled={busy} onChoose={pickSupplier} onClose={()=>setSupplierMaterialId(null)}/>}
-    {auxiliaryMaterialId&&!readonly&&<AuxiliaryCatalogDialog disabled={busy} onClose={()=>setAuxiliaryMaterialId(null)} onSelect={chooseAuxiliary}/>}
+    {auxiliaryMaterialId&&!readonly&&<AuxiliaryCatalogDialog disabled={busy} presentation={inlineMaterials?'page':'dialog'} embeddedPage={inlineMaterials} onClose={()=>setAuxiliaryMaterialId(null)} onSelect={chooseAuxiliary}/>}
 <DocumentSectionGroup chapters={["development-images","development-basic","development-labels"]} title={requirements?"开发需求":currentInput?"款图与制作说明":`${sectionStart} · 款图与制作说明`}>
 {!requirements&&<DocumentSection id="development-images" title="款图与制作说明" {...((light||workbench)?{detail:`共 ${document.files.length} 个附件`}:{detail:"主款图发布必填；其它附件与说明选填"})}>
             <div className="development-file-tabs" role="group" aria-label="附件分类">{visibleFileKinds.map(kind=>currentInput
@@ -313,20 +386,21 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
 {!light&&creationView!=="sheet"&&<><DocumentSection id="development-basic" title="打板信息"><div className="development-basic-grid">
             {!basicDetailsExternal&&<><label>开发下单日期<DocumentField id="development-orderDate" label="开发下单日期" value={document.orderDate??"首次开发日期未登记"} readonly issue={issue("development-orderDate")}/></label>{fixedCraft?<IndependentCraftField label="工艺" value={document.craft} steps={document.craftSteps} readonly={readonly} disabled={busy} onChange={changeCraft}/>:select("craft","工艺",["无","印花","绣花","印绣花"],value=>changeCraft(value as DevelopmentDocument["craft"]))}</>}
             {patternSection??<label>打板品类<span className="dx-doc-readonly">沿已发布打板执行单</span></label>}
-            <label>本轮打板数量（发布必填）<DocumentField id="development-quantity" label="本轮打板数量" value={quantityInput} numeric readonly={readonly} disabled={busy} issue={issue("development-quantity")} onValue={value=>{setQuantityInput(value);edit({quantity:/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):null});}}/></label>
+            {!separateMakingRows&&<label>本轮打板数量（发布必填）<DocumentField id="development-quantity" label="本轮打板数量" value={quantityInput} numeric readonly={readonly} disabled={busy} issue={issue("development-quantity")} onValue={value=>{setQuantityInput(value);edit({quantity:/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):null});}}/></label>}
             {<label>预计样板完成日期（选填）<DocumentField id="development-returnDate" label="预计样板完成日期" type="date" value={document.returnDate??""} readonly={readonly} disabled={busy} issue={issue("development-returnDate")} onValue={value=>edit({returnDate:value||null})}/></label>}
           </div></DocumentSection>
 {!workbench&&labelSection}</>}
+{creationView==="sheet"&&workbench&&labelSection}
 </DocumentSectionGroup>
 {workbench&&!creationView&&document.workbenchSheet&&<WorkbenchDevelopmentSheetFields sheet={document.workbenchSheet} readonly={busy||readonly} issue={issue} onChange={workbenchSheet=>edit({workbenchSheet})}/>}
 {!requirements&&!light&&<DocumentSectionGroup chapters={creationView==="sheet"?["development-materials"]:["development-sizes","development-materials"]} title={creationView==="sheet"?"面辅料":currentInput?"面辅料与尺寸表":`${sectionStart+1} · 面辅料与尺寸表`}>
 {!creationView&&dimensions}
 <DocumentSection id="development-materials" title="面辅料" detail={`技术材料 · 共 ${document.materials.length} 行`}>
-            {compact&&<div className="development-material-overview">
+            {!inlineMaterials&&compact&&<div className="development-material-overview">
               <p>共 {document.materials.length} 行 · 已填 {document.materials.filter(row=>!isDevelopmentMaterialPlaceholder(row)||hasDevelopmentMaterialPricing(row)).length} 行 · 待核 {document.materials.filter(row=>developmentMaterialPriceIdentityIssue(row)||materialIssueFields.some(field=>issue(`development-${row.materialId}-${field}`))).length} 行</p>
               <Button type="button" onClick={()=>setMaterialDialog(true)}>查看全部 / 继续添加面辅料</Button>
             </div>}
-            {compact&&materialDialog?
+            {inlineMaterials?inlineMaterialFields():compact&&materialDialog?
               <Dialog isOpen onOpenChange={setMaterialDialog} className="development-material-dialog" purpose="form" width="min(94vw, 1200px)">
                 <DialogHeader title="全部面辅料" onOpenChange={setMaterialDialog}/>
                 {materialTable(document.materials.length)}
@@ -336,7 +410,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
 </DocumentSectionGroup>}
 {compact&&compactSection("唛头资料",`已填 ${[document.mainLabel,document.mainLabelMethod,document.sizeLabel,document.careLabel].filter(Boolean).length} 项`,labelSection)}
 {workbench&&!creationView&&labelSection}
-{light&&<DocumentSection id="development-materials" title="备料面料">
+{light&&<DocumentSection id="development-materials" title="备料面料">{inlineMaterials?inlineMaterialFields(false,true):<>
   <DocumentTableScroll scrollLabel="备料面料">
     <table className="development-preorder-materials"><thead><tr><th scope="col">类型</th>
       {preorderFabricFields.map(([field,label])=><th scope="col" key={field}>{label}</th>)}
@@ -364,16 +438,23 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
     edit({materials:[...document.materials,next]});
     requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());
   }}>{`＋ 添加${category}`}</DevelopmentEntryAction>)}</div>}
-</DocumentSection>}
+</>}</DocumentSection>}
 {light&&auxiliaryPlanning&&<DocumentSection id="development-preorder-auxiliary" title="已知辅料（选填）">
-  {materialTable(document.materials.length,true)}
+  {inlineMaterials?inlineMaterialFields(true):materialTable(document.materials.length,true)}
 </DocumentSection>}
 {!light&&(requirements||!creationView&&(designerInput&&!readonly||readonly&&Boolean(document.craftRequirements?.length)))&&
   <DevelopmentCraftRequirements document={document} edit={edit} controls={craftControls} readonly={readonly} disabled={busy}
     draftsOnly={requirements&&!readonly} upload={upload} viewFile={imageUrl} fileIdentity={fileIdentity} metadataPath={metadataPath}/>}
 {requirements&&dimensions}
 {(!creationView||requirements)&&compactSection("制作要求",`已填 ${Object.keys(labels).filter(key=>Boolean(document[key as keyof typeof labels])).length} 项`,<DocumentSection id="development-craft" title={currentInput?"制作要求":`${sectionStart+2} · 工艺要求`}><div className="development-craft-groups">
-            {([{title:"洗水要求",keys:["washingMethod"]},{title:"整烫与包装",keys:["ironing","packaging"]},{title:"朴料",keys:["interlining","placketInterlining"]},{title:"车缝",keys:["sewingThread","buttonholeThread","stitchDensity"]},{title:"尺码标识",keys:["formalSizes","casualSizes"]}] as const).map(group=><section key={group.title}><h3>{group.title}</h3><div>{group.title==="洗水要求"&&select("washing","洗水",["免洗","内洗","外洗"])}{group.keys.map(key=>key==="washingMethod"&&document.washing==="免洗"?null:<div key={key}>{field(key,labels[key],key==="formalSizes"||key==="casualSizes"?100:1000,key==="washingMethod"||key==="ironing"||key==="packaging")}</div>)}</div></section>)}
+            {currentInput&&!readonly?<div className="development-making-grid">
+              <section><h3>朴料</h3><div>{field('interlining','朴号（选填）')}{field('placketInterlining','门筒朴（选填）')}</div>
+                <h3>洗水要求</h3><div>{select('washing','洗水',['免洗','内洗','外洗'])}
+                {document.washing!=='免洗'&&field('washingMethod','洗水方法',1000,true)}</div></section>
+              <section><h3>车缝</h3><div>{field('sewingThread','车缝线（选填）')}{field('buttonholeThread','纽门线（选填）')}{field('stitchDensity','针距（选填）')}</div></section>
+              <section><h3>整烫与包装</h3><div>{field('ironing','整烫方法（选填）',1000,true)}{field('packaging','包装方法（选填）',1000,true)}</div></section>
+              <section><h3>尺码标识</h3><div>{field('formalSizes','正装尺码（选填）')}{field('casualSizes','休闲尺码（选填）')}</div></section>
+            </div>:<>{([{title:"洗水要求",keys:["washingMethod"]},{title:"整烫与包装",keys:["ironing","packaging"]},{title:"朴料",keys:["interlining","placketInterlining"]},{title:"车缝",keys:["sewingThread","buttonholeThread","stitchDensity"]},{title:"尺码标识",keys:["formalSizes","casualSizes"]}] as const).map(group=><section key={group.title}><h3>{group.title}</h3><div>{group.title==="洗水要求"&&select("washing","洗水",["免洗","内洗","外洗"])}{group.keys.map(key=>key==="washingMethod"&&document.washing==="免洗"?null:<div key={key}>{field(key,labels[key],key==="formalSizes"||key==="casualSizes"?100:1000,key==="washingMethod"||key==="ironing"||key==="packaging")}</div>)}</div></section>)}</>}
 
             {document.washingIroning&&<section><h3>原洗水整烫说明</h3><p className="dx-doc-readonly">{document.washingIroning}</p></section>}
 

@@ -2,7 +2,7 @@ import {SaveDevelopmentAmendmentSchema,SubmitDevelopmentAmendmentSchema} from "@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, SaveDevelopmentWorkbenchBasicsSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
+import { SaveDevelopmentDesignerCorrectionSchema,DevelopmentSubmissionReceiptQuerySchema,SaveDevelopmentSchema, PublishDevelopmentSchema, PublishDevelopmentPreorderSchema, SaveDevelopmentWorkbenchBasicsSchema, DevelopmentMaterialEventSchema } from "@dx-rework/contracts/digital-development";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -24,6 +24,8 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const base = "/digital-production/sources/:sourceId/development";
   app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.readDocument(await actor(request),id(request,"sourceId"),query.round,dependencies.workbenchNumberedCreation===true);});
   if(dependencies.creationEnabled&&dependencies.workbenchNumberedCreation){
+    app.put(`${base}/designer-correction`,async request=>service.correctDesignerDocument(await actor(request),id(request,'sourceId'),
+      parse(SaveDevelopmentDesignerCorrectionSchema,request.body),key(request)));
     app.put(`${base}/workbench-basics`,async request=>service.saveWorkbenchBasics(await actor(request),id(request,'sourceId'),
       parse(SaveDevelopmentWorkbenchBasicsSchema,request.body),key(request)));
   }

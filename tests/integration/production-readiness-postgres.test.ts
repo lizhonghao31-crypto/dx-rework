@@ -1,3 +1,4 @@
+import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
 import {developmentLifecycleAvailable} from '../../apps/api/src/production-platform/development-source-lifecycle.js';
 import type {Pool,PoolClient} from 'pg';
@@ -232,7 +233,7 @@ async function originalWarehouseReadiness(db:Pool){
   expect(orderNumber).toBe('PDMLH2027P01-001');
   const resource={kind:'source' as const,id:sourceId},photo=await f.image(designer);
   const document=documentFixture(photo,{available:false}),supplier=await preorderFabricSupplier('TEST-PO-DRAFT-FABRIC');
-  const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,materials:document.materials.map(material=>({...material,...supplier})),
+  const draft=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,workbenchSheet:numberedDevelopmentSheetFixture('TEST 未发布原预下单'),materials:document.materials.map(material=>({...material,...supplier})),
    quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],customerOrderDraft:{withOrder:true,stage:'preorder',
     order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,
      primaryMerchandiserId:primary.actorId,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
@@ -282,7 +283,7 @@ async function originalWarehouseReadiness(db:Pool){
   const resource={kind:'source' as const,id:sourceId},photo=await f.image(designer);
   const document=documentFixture(photo,{available:false}),supplier=await preorderFabricSupplier('TEST-X3-PREORDER-FABRIC');
   const material={...document.materials[0]!,...supplier};
-  const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,materials:[material],
+  const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:{...document,workbenchSheet:numberedDevelopmentSheetFixture('TEST 实投原预下单'),materials:[material],
     quantity:null,sampleSize:'',sizes:[],sizeQuantities:[],measurements:[],customerOrderDraft:{withOrder:true,stage:'preorder',
      order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,primaryMerchandiserId:primary.actorId,
       temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,lines:[{color:'',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,
@@ -1499,9 +1500,9 @@ async function originalWarehouseReadiness(db:Pool){
    const {sourceId,orderNumber}=await identity.reserveNumberedDraft(designer,{developmentType:'头版',temporaryStyleNo:null,
     numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P02'}},randomUUID());
    const resource={kind:'source' as const,id:sourceId},base=initialDevelopmentDocument(),photo=await f.image(designer);
-   const material={...base.materials[0]!,...supplier,name:'TEST 预下单主布',quantity:fill?'520米':'75米',specification:fill?'':'TEST 已知原布规格'};
-   const accessory={...material,materialId:randomUUID(),category:'辅料' as const,label:'辅料',name:'TEST 后续辅料',quantity:'12件',expectedDate:'2026-11-24'};
-   const document=DevelopmentDocumentSchema.parse({...base,materials:[material,accessory],files:[{attachmentId:photo,kind:'款图'}],
+   const material={...base.materials[0]!,...supplier,name:'TEST 预下单主布',composition:'棉',width:'150',quantity:fill?'520米':'75米',specification:fill?'':'TEST 已知原布规格'};
+   const accessory={...material,materialId:randomUUID(),category:'辅料' as const,label:'辅料',name:'TEST 后续辅料',quantity:'12',quantityUnit:'个',expectedDate:'2026-11-24'};
+   const document=DevelopmentDocumentSchema.parse({...base,workbenchSheet:numberedDevelopmentSheetFixture('TEST R4 预下单与转正'),materials:[material,accessory],files:[{attachmentId:photo,kind:'款图'}],
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'preorder',
      order:{customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
       primaryMerchandiserId:merch.actorId,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]}}});
@@ -1536,7 +1537,8 @@ async function originalWarehouseReadiness(db:Pool){
     const price=await new PatternRoomPriceService(f.db).quote(root,'category',category.price_id);
     const current=await forms.read(designer,sourceId);
     const technical=await forms.save(designer,sourceId,{expectedVersion:current.version,document:{...current.document!,
-     quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',measurements:[{name:'胸围',values:['48']}],patternCategoryId:category.price_id}},randomUUID());
+     quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',measurements:[{name:'胸围',values:['48']}],
+     workbenchSheet:numberedDevelopmentSheetFixture('TEST R4 预下单与转正',true),patternCategoryId:category.price_id}},randomUUID());
     const released=await forms.publish(designer,sourceId,technical.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version});
     developmentTaskId=released.taskId;
     expect(developmentTaskId).toBeTruthy();
@@ -1559,7 +1561,7 @@ async function originalWarehouseReadiness(db:Pool){
   const fact=await f.runtime.run(scene,merch,async()=>{
    expect(await materialInvestmentTodos(f.db,merch,{todoId:original.handover.recordId})).toMatchObject([{dueAt:null}]);
    const quantities=[{materialId:original.material.materialId,lineId:null,name:original.material.name,quantity:fill?520:75,unit:'米'}];
-   if(requiresColorMatching)quantities.push({materialId:original.accessory.materialId,lineId:null,name:original.accessory.name,quantity:12,unit:'件'});
+   if(requiresColorMatching)quantities.push({materialId:original.accessory.materialId,lineId:null,name:original.accessory.name,quantity:12,unit:'个'});
    const state=await service.record(merch,original.resource,{kind:'material_investment',scopeRef:'whole',expectedVersion:0,state:'ready',
     occurredAt:investedAt,note:'TEST 预下单期间实际投料',quantities,evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
    expect(state.materialInvestmentReminder).toBeUndefined();
@@ -1585,7 +1587,8 @@ async function originalWarehouseReadiness(db:Pool){
     const current=await forms.read(designer,original.sourceId);
     const pattern=requiresColorMatching?(await f.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]:null;
     await forms.save(designer,original.sourceId,{expectedVersion:current.version,document:{...current.document!,
-     ...(pattern?{quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',measurements:[{name:'胸围',values:['48']}],patternCategoryId:pattern.price_id}:{}),
+     ...(pattern?{quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',measurements:[{name:'胸围',values:['48']}],
+      workbenchSheet:numberedDevelopmentSheetFixture('TEST R4 预下单与转正',true),patternCategoryId:pattern.price_id}:{}),
      materials:current.document!.materials.map(material=>
       material.materialId===original.material.materialId?{...material,specification:'TEST 按原采购凭证补原规格'}:material)}},randomUUID());
    });
@@ -1693,7 +1696,7 @@ async function originalWarehouseReadiness(db:Pool){
    const base=initialDevelopmentDocument(),photo=await f.image(designer);
    const fabric={...base.materials[0]!,...supplier,name:'TEST 原实购主布',quantity:'520米',specification:'TEST 原规格'};
    const stable={...fabric,materialId:randomUUID(),category:'配布' as const,name:'TEST 不变配布',quantity:'120米'};
-   const document=DevelopmentDocumentSchema.parse({...base,materials:[fabric,stable],files:[{attachmentId:photo,kind:'款图'}],
+   const document=DevelopmentDocumentSchema.parse({...base,workbenchSheet:numberedDevelopmentSheetFixture('TEST R4 部分物料更正'),materials:[fabric,stable],files:[{attachmentId:photo,kind:'款图'}],
     productionPlanning:{craftSteps:[],preshrink:false},customerOrderDraft:{withOrder:true,stage:'preorder',
      order:{customerCode:'PD',productGroup:'男装',designStyleNo:orderNumber,temporaryStyleNo:null,orderDate:'',contractDeliveryDate:null,
       primaryMerchandiserId:merch.actorId,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]}}});

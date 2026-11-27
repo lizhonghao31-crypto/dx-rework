@@ -359,3 +359,22 @@
 
 .development-create .development-code-check{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;min-width:0}
 .development-create .development-code-check small{flex:1 1 160px;font-size:inherit;color:inherit;overflow-wrap:anywhere}
+
+/* Development materials: compare the actual fields without nested table/dialog layouts. */
+.development-materials-inline{display:grid;gap:var(--dx-v2-space-3,12px);min-width:0}
+.development-material-inline-row{padding:var(--dx-v2-space-3,12px);border:1px solid var(--dx-form-control-border,#c9ced6);border-radius:var(--dx-v2-radius-2,6px);min-width:0}
+.development-material-inline-row>header{display:flex;justify-content:space-between;align-items:start;gap:var(--dx-v2-space-2,8px);margin-bottom:var(--dx-v2-space-2,8px)}
+.development-material-inline-row>header>h3{overflow-wrap:anywhere;margin:0}
+.development-material-inline-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:var(--dx-v2-space-3,12px)}
+.development-material-inline-grid>div{min-width:0}
+.development-material-inline-grid output{display:block;overflow-wrap:anywhere}
+
+.dx-doc-development .development-craft-groups:has(> .development-making-grid){display:block}
+.development-making-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--dx-v2-space-3,12px);align-items:stretch}
+.development-making-grid>section{min-width:0;border:1px solid var(--dx-form-control-border,#c9ced6);border-radius:var(--dx-v2-radius-2,6px);overflow:hidden}
+.development-making-grid>section>div{display:grid;gap:var(--dx-v2-space-2,8px);padding:var(--dx-v2-space-3,12px)}
+.development-making-grid>section>div>label{min-width:0}
+.development-making-grid textarea{height:4.5rem;min-height:4.5rem;resize:vertical}
+@media(max-width:700px){.development-making-grid{grid-template-columns:minmax(0,1fr)}}
+
+.development-create-grid.development-create-compact-grid{margin-block-start:var(--dx-v2-space-2,8px)}

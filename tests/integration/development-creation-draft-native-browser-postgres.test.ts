@@ -1,3 +1,4 @@
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import {DEVELOPMENT_MEASUREMENTS} from '@dx-rework/contracts/digital-development';
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
@@ -25,6 +26,13 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+function nativeWarehouseReceiptTime(now:number){
+ const instant=Math.floor(now/1000)*1000;
+ // datetime-local strips :00 seconds. Playwright requires the canonical
+ // value, while the receipt must keep the original actual instant.
+ const local=new Date(instant+8*3600000).toISOString().slice(0,19).replace(/:00$/,'');
+ return {local,occurredAt:new Date(instant).toISOString()};
+}
 async function inspectCreationControl(page:Page,selector:string){
  const session=await page.context().newCDPSession(page);
  try{
@@ -48,7 +56,7 @@ async function openNewWizard(page:Page,label:'纯开发'|'已确认订单'|'预�
 }
 async function changeGarment(page:Page,garment:'上衣'|'裤子',confirm?:boolean){
  const choice=page.getByRole('combobox',{name:/^衣类/});
- await choice.click();await page.getByRole('option',{name:garment,exact:true}).click();
+ await choice.click();await page.getByRole('option',{name:garment==='上衣'?/^(上装|上衣)$/:/^(下装|裤子)$/}).click();
  if(confirm!==undefined){
   const warning=page.getByRole('alertdialog',{name:'更正衣类'});
   await warning.getByRole('button',{name:confirm?'确认更正':'取消',exact:true}).click();
@@ -56,10 +64,12 @@ async function changeGarment(page:Page,garment:'上衣'|'裤子',confirm?:boolea
  }
 }
 async function fillRequiredWorkbenchSheet(page:Page){
- const styleName=page.getByRole('textbox',{name:'款名（必填）'});
- const gender=page.getByRole('combobox',{name:'性别（必填）'}),board=page.getByRole('combobox',{name:'板类（必填）'});
+ const styleName=page.getByRole('textbox',{name:/款式（品名）|款名（必填）/});
+ const gender=page.getByRole('combobox',{name:/^性别/}),board=page.getByRole('combobox',{name:/^板类/});
  if(!await gender.isVisible())return;
  if(await styleName.isVisible()&&!await styleName.inputValue())await styleName.fill('TEST 款名');
+ const brand=page.getByRole('textbox',{name:/^品牌/});
+ if(await brand.isVisible()&&!await brand.inputValue())await brand.fill('TEST 品牌');
  for(const [field,option] of [[gender,'男装'],[board,'头版']] as const){
   if(await field.evaluate(el=>el instanceof HTMLSelectElement)){
    if(!await field.inputValue())await field.selectOption(option);
@@ -82,11 +92,20 @@ async function fillRequiredCraft(page:Page){
 async function wizardNext(page:Page,{fillRequirements=true}={}){
  await fillRequiredWorkbenchSheet(page);
  await fillRequiredCraft(page);
+ const category=page.locator('.development-pattern-preparation [aria-haspopup="listbox"]').filter({visible:true});
  if(fillRequirements&&await page.getByLabel('建单步骤').getByRole('heading',{name:'开发需求',exact:true}).isVisible()
-    &&await page.getByRole('combobox',{name:'打板品类',exact:true}).isVisible()){
-  const category=page.getByRole('combobox',{name:'打板品类',exact:true});
+    &&await category.isVisible()){
   const boardCount=page.getByRole('textbox',{name:'本轮打板数量',exact:true});
-  if(!await boardCount.inputValue())await boardCount.fill('1');
+  if(await boardCount.count()){if(!await boardCount.inputValue())await boardCount.fill('1');}
+  else{
+   const making=page.getByRole('table',{name:'颜色尺码与制作件数',exact:true});
+   if(!await making.getByRole('spinbutton').count())await page.getByRole('button',{name:'添加颜色尺码行',exact:true}).click();
+   if(!await making.getByRole('textbox',{name:'第 1 行 颜色',exact:true}).inputValue()){
+    await making.getByRole('textbox',{name:'第 1 行 颜色',exact:true}).fill('黑');
+    await making.getByRole('textbox',{name:'第 1 行 尺码',exact:true}).fill('M');
+    await making.getByRole('spinbutton',{name:'第 1 行 件数',exact:true}).fill('1');
+   }
+  }
   if(!(await page.getByText(/^执行单价：/).count())){
    await category.click();
    await page.getByRole('listbox').getByRole('option').filter({hasNotText:/^请选择$/}).first().click();
@@ -166,6 +185,10 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     await openNewWizard(page,'预下单','上衣',true);
     const code=page.getByRole('textbox',{name:'订单ID',exact:true});
     await code.waitFor();expect(await code.inputValue()).toBe('待生成');
+    expect(await code.evaluate(node=>(node as HTMLInputElement).readOnly)).toBe(true);
+    await page.getByRole('textbox',{name:/^款式（品名）/}).fill('TEST 预下单品名');
+    await page.getByRole('textbox',{name:/^品牌/}).fill('TEST 预下单品牌');
+    expect(await page.getByRole('combobox',{name:/^板类/}).count()).toBe(0);
     const reservedResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/sources/numbered-drafts'));
     const savedResponse=page.waitForResponse(r=>r.request().method()==='PUT'&&/\/sources\/[a-f0-9-]+\/development$/.test(new URL(r.url()).pathname));
     await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
@@ -180,9 +203,9 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     await page.getByRole('listbox',{name:'客户',exact:true}).getByRole('option',{name:/^PD ·/}).click();
     await page.getByRole('combobox',{name:/^销售年份/}).click();await page.getByRole('option',{name:/^\d{4}(?:\s|$)/}).first().click();
     await page.getByRole('combobox',{name:/^销售系列/}).click();await page.getByRole('option',{name:/^P02 ·/}).click();
-    await page.getByRole('textbox',{name:'主布 面料名称',exact:true}).fill('TEST G2 真实面料');
-    await page.getByRole('textbox',{name:'主布 规格',exact:true}).fill('TEST G2 原规格');
-    await page.getByRole('textbox',{name:'主布 数量与单位',exact:true}).fill('20 米');
+    await page.getByRole('textbox',{name:/^主布(?: A)? 品名/,exact:true}).fill('TEST G2 真实面料');
+    await page.getByRole('textbox',{name:/^主布(?: A)? 规格/}).fill('TEST G2 原规格');
+    await page.locator('.development-material-inline-row').first().locator('input[id$="-quantity"]').fill('20 米');
     const forbiddenSelection=await page.evaluate(async({id,reference})=>{
      const path=`/api/digital-production/sources/${id}/development`;
      const {version,document}=await (await fetch(path)).json();
@@ -191,22 +214,23 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     },{id:sourceId,reference:otherSupplier});
     expect(forbiddenSelection).toBe(409);
     const readSuppliers=page.waitForResponse(r=>r.ok()&&r.url().includes('/development/material-suppliers?'));
-    await page.getByRole('button',{name:'主布 供应商',exact:true}).click();
+    await page.getByRole('button',{name:/^主布(?: A)? 供应商$/}).click();
     const supplierOptions=await (await readSuppliers).json();
     expect(supplierOptions.items).toContainEqual({...supplier,code:'TEST-C2-FABRIC',name:'TEST G2 供应商'});
     const supplierCodes=supplierOptions.items.map((option:{code:string})=>option.code);
     expect(supplierCodes).not.toContain('TEST-C2-OTHER');
     expect(supplierCodes).not.toContain('TEST-C2-STOPPED');
     await page.getByRole('button',{name:'TEST G2 供应商 · TEST-C2-FABRIC',exact:true}).click();
-    await page.getByRole('textbox',{name:/^主布.*计价单位$/}).fill('米');
-    await page.getByRole('textbox',{name:/^主布.*材料单价$/}).fill('0.35');
-    await page.getByText('总价 7 元',{exact:true}).waitFor();
+    await page.getByRole('textbox',{name:/^主布(?: A)? 单价/}).fill('0.35');
+    await page.locator('[data-material-total]').filter({hasText:'7 元'}).waitFor();
     const aux=page.locator('#development-preorder-auxiliary');
     await aux.getByRole('button',{name:/添加辅料/}).click();
-    await aux.getByRole('textbox',{name:/^辅料品名/}).fill('TEST G2 辅料计划');
+    await aux.getByRole('textbox',{name:/^辅料 品名/}).fill('TEST G2 辅料计划');
     await aux.getByRole('combobox',{name:/^辅料 已有实物/}).click();
     await page.getByRole('option',{name:'否',exact:true}).click();
-    await aux.locator('summary').filter({hasText:'技术详情'}).click();
+    await aux.locator('input[id$="-quantity"]').fill('2');
+    await aux.getByRole('combobox',{name:/^辅料 数量单位/}).click();
+    await page.getByRole('option',{name:'个',exact:true}).click();
     await aux.getByRole('button',{name:'辅料 供应商',exact:true}).click();
     await page.getByRole('button',{name:'TEST G2 供应商 · TEST-C2-FABRIC',exact:true}).click();
     const planned=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/development`));
@@ -274,11 +298,16 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await open.click();
      const work=receiving.page.getByRole('region',{name:'仓库实际收料',exact:true});
      await work.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('12');
-     await work.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     const exactMinute=Date.parse('2026-11-27T05:07:00.000Z');
+     expect(nativeWarehouseReceiptTime(exactMinute)).toEqual({local:'2026-11-27T13:07',occurredAt:'2026-11-27T05:07:00.000Z'});
+     expect(nativeWarehouseReceiptTime(exactMinute+1000)).toEqual({local:'2026-11-27T13:07:01',occurredAt:'2026-11-27T05:07:01.000Z'});
+     const receiptTime=nativeWarehouseReceiptTime(Date.now());
+     await work.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(receiptTime.local);
      await work.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST signed browser registers the first warehouse batch');
-     const target=`/sources/${sourceId}/production-readiness/warehouse-receipts`,receiptKeys:string[]=[];
+     const target=`/sources/${sourceId}/production-readiness/warehouse-receipts`,receiptKeys:string[]=[],receiptTimes:number[]=[];
      await receiving.page.route(url=>url.pathname.endsWith(target),async route=>{
       receiptKeys.push(route.request().headers()['idempotency-key']??'');
+      receiptTimes.push(Date.parse(route.request().postDataJSON().occurredAt));
       if(receiptKeys.length===1){
        const result=await route.fetch();expect(result.status()).toBe(200);
        await route.abort('failed');
@@ -291,6 +320,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await retry.click();
      await work.getByText(/已实收：12 米/).waitFor();
      expect(receiptKeys).toHaveLength(2);expect(receiptKeys[0]).toBeTruthy();expect(receiptKeys[1]).toBe(receiptKeys[0]);
+     expect(receiptTimes).toEqual([Date.parse(receiptTime.occurredAt),Date.parse(receiptTime.occurredAt)]);
      expect(await work.getByText(/采购待收：8/).isVisible()).toBe(true);
      await receiving.page.setViewportSize({width:390,height:747});
      expect(await receiving.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -336,7 +366,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      await formalReceipt.getByText(/已实收：12 米/).waitFor();
      expect((await h.db.query("SELECT resource_id,version FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt'",[[sourceId,productionOrderId]])).rows).toEqual([{resource_id:sourceId,version:1}]);
      await formalReceipt.getByRole('textbox',{name:'本次数量（米）',exact:true}).fill('8');
-     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(new Date(Date.now()+8*3600000).toISOString().slice(0,19));
+     const receiptTime=nativeWarehouseReceiptTime(Date.now());
+     await formalReceipt.getByLabel('实际收料时间（北京时间）',{exact:true}).fill(receiptTime.local);
      await formalReceipt.getByRole('textbox',{name:'本次收料说明 / 订正原因',exact:true}).fill('TEST formal order receives the remaining quantity');
      await formalReceipt.getByRole('button',{name:'保存实际收料',exact:true}).click();
      await formalReceipt.getByText(/已实收：20 米/).waitFor();
@@ -350,6 +381,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      expect((await h.db.query("SELECT resource_id,version,state FROM digital_preparation_material_versions WHERE resource_id=ANY($1::uuid[]) AND kind='fabric_receipt' ORDER BY version",[[sourceId,productionOrderId]])).rows).toEqual([
       {resource_id:sourceId,version:1,state:'partial'},{resource_id:sourceId,version:2,state:'partial'},
      ]);
+     const lastReceipt=(await h.db.query<{occurred_at:Date}>("SELECT occurred_at FROM digital_preparation_material_versions WHERE resource_id=$1 AND kind='fabric_receipt' AND version=2",[sourceId])).rows[0];
+     expect(lastReceipt?.occurred_at.toISOString()).toBe(receiptTime.occurredAt);
     }finally{await inherited.close();}
    }catch(error){
     const body=tab.page.locator('body');
@@ -428,7 +461,20 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64'),
     });
     await page.getByRole('button',{name:'主款图（1）',exact:true}).waitFor();
-    await wizardNext(page);await wizardNext(page);
+    await wizardNext(page);
+    await page.getByLabel('建单步骤').getByRole('heading',{name:'开发需求',exact:true}).waitFor();
+    const sewing=page.getByRole('table',{name:'颜色尺码与制作件数',exact:true});
+    if(await sewing.isVisible()){
+     await page.getByRole('button',{name:'添加颜色尺码行',exact:true}).click();
+     await sewing.getByRole('textbox',{name:'第 1 行 颜色',exact:true}).fill('黑');
+     await sewing.getByRole('textbox',{name:'第 1 行 尺码',exact:true}).fill('M');
+     await sewing.getByRole('spinbutton',{name:'第 1 行 件数',exact:true}).fill('2');
+    }
+    const category=page.locator('.development-pattern-preparation [aria-haspopup="listbox"]').filter({visible:true});
+    await category.click();
+    await page.getByRole('listbox').getByRole('option').first().click();
+    await page.getByText(/^执行单价：/).waitFor();
+    await wizardNext(page);
     await page.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill('TEST-G2-FORMAL-PO');
     await page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('黑');
     await page.getByRole('textbox',{name:'尺码列 1',exact:true}).fill('M');
@@ -574,6 +620,250 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
  });
 });
 
+(url?describe:describe.skip)('UI-02 effective development record can be corrected without inventing a clerk task',()=>{
+ it('uses actual craft stations and one sewing input, retaining a saved two-by-two form',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-craft-stations-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true,workbenchNumberedCreation:true});
+  try{
+   await prepareRewashSettings(h.f);
+   const actor=h.f.people['sample-designer']!,tab=await h.open(actor.actorId,1280,{},'/ui/digital-production?workspace=designer&section=create');
+   try{
+    const {page}=tab;await openNewWizard(page,'纯开发','裤子');
+    await page.getByRole('combobox',{name:/^板类/}).click();
+    expect(await page.getByRole('option',{name:'复版',exact:true}).count()).toBe(0);
+    await page.getByRole('option',{name:'头版',exact:true}).click();
+    await wizardNext(page);
+    await page.getByLabel('建单步骤').getByRole('heading',{name:'开发需求',exact:true}).waitFor();
+    await page.getByRole('checkbox',{name:'印花',exact:true}).check();
+    await page.getByRole('checkbox',{name:'绣花',exact:true}).check();
+    const station1=page.getByRole('combobox',{name:/^第 1 站工艺/}),station2=page.getByRole('combobox',{name:/^第 2 站工艺/});
+    expect(await station1.innerText()).toContain('请选择');expect(await station2.innerText()).toContain('请选择');
+    const making=page.getByRole('table',{name:'颜色尺码与制作件数',exact:true});
+    await page.getByRole('button',{name:'添加颜色尺码行',exact:true}).click();
+    await making.getByRole('textbox',{name:'第 1 行 颜色',exact:true}).fill('黑');
+    await making.getByRole('textbox',{name:'第 1 行 尺码',exact:true}).fill('M');
+    await making.getByRole('spinbutton',{name:'第 1 行 件数',exact:true}).fill('4');
+    expect(await page.getByLabel('本轮打板总数量',{exact:true}).textContent()).toBe('4');
+    expect(await page.getByRole('textbox',{name:'本轮打板数量',exact:true}).count()).toBe(0);
+    const crop=page.locator('.development-making-grid > section');
+    const positions=await crop.evaluateAll(cards=>cards.map(card=>{const box=card.getBoundingClientRect();return [box.x,box.y,box.width];}));
+    expect(positions).toHaveLength(4);
+    expect(positions[0]![0]).toBeLessThan(positions[1]![0]!);expect(positions[0]![1]).toBe(positions[1]![1]);
+    expect(positions[2]![1]).toBe(positions[3]![1]);expect(positions[2]![1]).toBeGreaterThan(positions[0]![1]!);
+    await station1.click();await page.getByRole('option',{name:'印花',exact:true}).click();
+    await station2.click();await page.getByRole('option',{name:'绣花',exact:true}).click();
+    const saving=page.waitForResponse(r=>r.request().method()==='PUT'&&/\/sources\/[a-f0-9-]+\/development$/.test(new URL(r.url()).pathname));
+    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+    const response=await saving;expect(response.status(),await response.text()).toBe(200);
+    expect(await response.json()).toMatchObject({status:'draft',document:{craftOrderConfirmed:true,
+     craftSteps:[{craftKind:'printing',sequence:1},{craftKind:'embroidery',sequence:2}],workbenchSheet:{sewingRows:[{color:'黑',size:'M',quantity:4}]}}});
+    await page.getByText(/^开发资料与订购草稿已保存/).waitFor();
+    await page.reload();await station1.waitFor();
+    expect(await station1.innerText()).toContain('印花');expect(await station2.innerText()).toContain('绣花');
+    expect(await making.getByRole('spinbutton',{name:'第 1 行 件数',exact:true}).inputValue()).toBe('4');
+    await page.screenshot({path:join(h.evidence,'ui02-actual-craft-and-sewing.png'),fullPage:true});
+   }catch(error){await writeFile(join(h.evidence,'ui02-craft-stations-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ it('fills missing procurement quantity from the original customer-order confirmation before submitting',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-original-conversion-')),{fullApp:true,workbenchNumberedCreation:true});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+   const style='TEST-UI02-CONVERT-'+randomUUID(),{sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,
+    temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const doc=initialDevelopmentDocument(),materialId=randomUUID();
+   Object.assign(doc,{templateConfirmed:true,sizeTableInitialized:true,quantity:2,documentFormatVersion:2,sizes:['M'],sizeQuantities:[2],measurements:[],
+    workbenchSheet:{version:1,styleName:'TEST 开发品名',brand:'TEST 原品牌',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',
+     sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:2}]},files:[{attachmentId:await h.f.image(designer),kind:'款图'}]});
+   doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉'}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
+   const published=await forms.publish(designer,sourceId,saved.version,randomUUID());
+   await forms.saveWorkbenchBasics(designer,sourceId,{roundNumber:1,documentVersion:published.version,expectedRevision:0,brand:'TEST 原品牌',referenceNote:'TEST 原参考说明'},randomUUID());
+   const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
+   try{
+    const {page}=tab;
+    await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
+    const form=page.getByRole('region',{name:'客户意见',exact:true}),submit=form.getByRole('button',{name:'确认下单',exact:true});
+    const correction=form.getByRole('group',{name:'转正前补齐原开发资料',exact:true});
+    await correction.waitFor();expect(await submit.isDisabled()).toBe(true);
+    await correction.getByRole('textbox',{name:/TEST 原主料 备料数量/}).fill('500');
+    await correction.getByRole('textbox',{name:/本次订正理由/}).fill('TEST 同一原材料补齐真实数量');
+    const updated=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/designer-correction'));
+    await correction.getByRole('button',{name:'保存本轮资料订正',exact:true}).click();
+    const response=await updated;expect(response.status(),await response.text()).toBe(200);
+    expect(response.request().postDataJSON()).toMatchObject({expectedDocumentVersion:published.version,materialQuantities:[{materialId,quantity:'500',quantityUnit:'米'}]});
+    await correction.waitFor({state:'hidden'});
+    await form.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill(style+'-PO');
+    await form.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('黑');
+    await form.getByRole('textbox',{name:'尺码列 1',exact:true}).fill('M');
+    await form.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('2');
+    await form.locator('#development-po-date-1').fill('2027-04-30');
+    await form.getByLabel('辅料是否需要对色',{exact:true}).selectOption('no');
+    if(await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).isVisible()){
+     await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).selectOption('known');
+     await form.getByRole('combobox',{name:'大货是否预缩',exact:true}).selectOption('no');
+    }
+    const confirmation=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/confirm`));
+    await submit.click();
+    const confirmed=await confirmation;expect(confirmed.status(),await confirmed.text()).toBe(200);
+    expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
+    const exact=await forms.publishedVersion(designer,sourceId,1,published.version);
+    expect(exact.document).toEqual(published.document);
+    const current=await forms.read(designer,sourceId);
+    expect(current).toMatchObject({roundNumber:1,version:published.version+1,document:{workbenchSheet:{referenceNote:'TEST 原参考说明'},
+     materials:[{materialId,quantity:'500',quantityUnit:'米'}]}});
+   }catch(error){await writeFile(join(h.evidence,'ui02-original-conversion-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ async function seedPriorUi02Publication(h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,designer:Awaited<ReturnType<typeof supplychainSettingsBrowser>>['f']['root'],sourceId:string,version:number){
+   // Isolated historical input: pre-UI-02 allowed an empty brand in this exact
+   // shape. Seed the one prior publication from a draft without changing a
+   // published row or asking today's new-publication guard to allow it.
+   const client=await h.db.connect();
+   try{
+    await client.query('BEGIN');
+    const {taskId}=await new DigitalProductionTaskService(h.db).createWithClient(client,designer,{resource:{kind:'source',id:sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:h.f.people['development-clerk']!.actorId});
+    expect((await client.query(`UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$3,
+     document=jsonb_set(document,'{workbenchSheet,brand}',to_jsonb(''::text)),version=version+1
+     WHERE source_id=$1 AND version=$2 AND status='draft'`,[sourceId,version,taskId])).rowCount).toBe(1);
+    await client.query('COMMIT');
+   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+ }
+ it.each([true,false])('confirms the original legacy sheet with numbered creation=%s and the matching effective basics policy',async(enabled)=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-review-confirmation-')),{fullApp:true,workbenchNumberedCreation:enabled});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+   const style='TEST-UI02-EFFECTIVE-'+randomUUID(),{sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,
+    temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const doc=initialDevelopmentDocument(),materialId=randomUUID();
+   Object.assign(doc,{templateConfirmed:true,sizeTableInitialized:true,quantity:2,documentFormatVersion:2,sizes:['M'],sizeQuantities:[2],measurements:[],
+    workbenchSheet:{version:1,styleName:'TEST 原品名',brand:'TEST 当前发布夹具前置',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',
+     sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:2}]},files:[{attachmentId:await h.f.image(designer),kind:'款图'}]});
+   doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉',
+    ...(enabled?{quantity:'500',quantityUnit:'米'}:{})}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
+   await seedPriorUi02Publication(h,designer,sourceId,saved.version);
+   const published=await forms.read(designer,sourceId);expect(published.document?.workbenchSheet?.brand).toBe('');
+   const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?workspace=designer&section=workspace&development=${sourceId}`);
+   try{
+    const {page}=tab;
+    const original=new URL(`/api/digital-production/sources/${sourceId}/development`,page.url()).href;
+    const notes=await page.request.put(original+'/workbench-basics',{headers:{'idempotency-key':randomUUID()},
+     data:{roundNumber:1,documentVersion:published.version,expectedRevision:0,brand:'TEST 已有效登记的品牌',referenceNote:'TEST 此版原登记说明'}});
+    expect(notes.status(),await notes.text()).toBe(enabled?200:404);
+    if(enabled){
+     const read=await (await page.request.get(original)).json();
+     expect(read).toMatchObject({version:published.version,workbenchBasics:{brand:'TEST 已有效登记的品牌'},document:{workbenchSheet:{brand:''}}});
+     await page.reload();
+    }
+    await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
+    const form=page.getByRole('region',{name:'客户意见',exact:true});
+    await form.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill(style+'-PO');
+    await form.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('黑');
+    await form.getByRole('textbox',{name:'尺码列 1',exact:true}).fill('M');
+    await form.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('2');
+    await form.locator('#development-po-date-1').fill('2027-04-30');
+    await form.getByLabel('辅料是否需要对色',{exact:true}).selectOption('no');
+    if(await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).isVisible()){
+     await form.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).selectOption('known');
+     await form.getByRole('combobox',{name:'大货是否预缩',exact:true}).selectOption('no');
+    }
+    expect(await form.getByRole('group',{name:'转正前补齐原开发资料',exact:true}).count()).toBe(0);
+    const confirmed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/confirm`));
+    await form.getByRole('button',{name:'确认下单',exact:true}).click();
+    const response=await confirmed;expect(response.status(),await response.text()).toBe(200);
+    expect((await forms.read(designer,sourceId)).version).toBe(published.version);
+    expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
+    expect((await h.db.query('SELECT 1 FROM digital_development_amendments WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
+   }catch(error){await writeFile(join(h.evidence,'original-review-confirmation-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ it('corrects required original data through the published resume-confirmation page before creating the same order',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-review-resume-')),{fullApp:true,workbenchNumberedCreation:true});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+   const style='TEST-UI02-RESUME-'+randomUUID(),{sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const doc=initialDevelopmentDocument(),materialId=randomUUID();
+   Object.assign(doc,{templateConfirmed:true,sizeTableInitialized:true,quantity:2,documentFormatVersion:2,sizes:['M'],sizeQuantities:[2],measurements:[],
+    workbenchSheet:{version:1,styleName:'TEST 原续办品名',brand:'',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',
+     sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:2}]},files:[{attachmentId:await h.f.image(designer),kind:'款图'}],
+    customerOrderDraft:{withOrder:true,stage:'formal',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,
+     orderDate:'2026-11-25',temporaryStyleNo:null,contractDeliveryDate:null,lines:[{formalPoNo:style+'-PO',color:'黑',deliveryDate:null,
+      customerWarehouseArrivalDate:'2027-04-30',sizes:[{size:'M',quantity:'2'}]}]})}});
+   doc.materials=[{...doc.materials[0]!,materialId,name:'TEST 原续办主料',specification:'40支',supplier:'原供应商',width:'150',composition:'棉'}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:doc},randomUUID());
+   await seedPriorUi02Publication(h,designer,sourceId,saved.version);
+   const original=await forms.read(designer,sourceId);
+   expect(original).toMatchObject({version:saved.version+1,status:'published',document:{customerOrderDraft:{withOrder:true},workbenchSheet:{brand:''}}});
+   const tab=await h.open(designer.actorId,1165,{},`/ui/digital-production?development=${sourceId}`);
+   try{
+    const {page}=tab;page.setDefaultTimeout(12000);
+    await page.getByRole('button',{name:'查看已发布资料、版本与办理',exact:true}).waitFor();
+    const submit=page.getByRole('button',{name:'确认客户订单',exact:true}),editor=page.getByRole('group',{name:'转正前补齐原开发资料',exact:true});
+    await editor.waitFor();expect(await submit.isDisabled()).toBe(true);
+    await editor.getByRole('textbox',{name:/^品牌/}).fill('TEST 旧单原入口补齐品牌');
+    await editor.getByRole('textbox',{name:/TEST 原续办主料 备料数量/}).fill('500');
+    await editor.getByRole('textbox',{name:/本次订正理由/}).fill('TEST 由原续办入口补齐旧资料');
+    const changed=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/development/designer-correction`));
+    await editor.getByRole('button',{name:'保存本轮资料订正',exact:true}).click();
+    const corrected=await changed;expect(corrected.status(),await corrected.text()).toBe(200);
+    expect(corrected.request().postDataJSON()).toMatchObject({roundNumber:1,expectedDocumentVersion:original.version,brand:'TEST 旧单原入口补齐品牌',materialQuantities:[{materialId,quantity:'500',quantityUnit:'米'}]});
+    await editor.waitFor({state:'hidden'});
+    const color=page.getByLabel('辅料是否需要对色',{exact:true});if(await color.count()&&!await color.isDisabled())await color.selectOption('no');
+    const confirmed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith(`/sources/${sourceId}/confirm`));
+    await submit.click();const response=await confirmed;expect(response.status(),await response.text()).toBe(200);
+    expect((await h.db.query('SELECT count(*)::int AS n FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.n).toBe(1);
+    expect((await forms.publishedVersion(designer,sourceId,1,original.version)).document).toEqual(original.document);
+   }catch(error){await writeFile(join(h.evidence,'original-resume-confirmation-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+   finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+ it('uses the signed original development routes for precise same-round correction and retained old versions',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui02-native-correction-')),{fullApp:true,workbenchNumberedCreation:true});
+  try{
+   const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true);
+   const forms=new DigitalDevelopmentService(h.db,true),style='TEST-UI02-ORIGINAL-'+randomUUID();
+   const {sourceId}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+   const original=initialDevelopmentDocument(),materialId=randomUUID();
+   original.quantity=1;original.files=[{attachmentId:await h.f.image(designer),kind:'款图'}];
+   original.materials=[{...original.materials[0]!,materialId,name:'TEST 原主料',specification:'40支',supplier:'原供应商'}];
+   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document:original},randomUUID());
+   const published=await forms.publish(designer,sourceId,saved.version,randomUUID());
+   const taskCount=async()=>(await h.db.query('SELECT count(*)::int AS count FROM digital_production_task_access WHERE source_id=$1',[sourceId])).rows[0]!.count;
+   const taskBefore=await taskCount(),tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=workspace&development='+sourceId);
+   try{
+    const base=h.base+`/api/digital-production/sources/${sourceId}/development`,path=base+'/designer-correction';
+    const args={roundNumber:1,expectedDocumentVersion:published.version,styleName:'TEST 新品名',brand:'TEST 真实品牌',
+     materialQuantities:[{materialId,quantity:'500.25',quantityUnit:'米'}],reason:'TEST 原位补齐真实备料资料'};
+    const other=await h.open((await h.dedicated('sample_designer')).id,1165);
+    try{expect([403,404]).toContain((await other.page.request.put(path,{data:args,headers:{'idempotency-key':randomUUID()}})).status());}
+    finally{await other.close();}
+    const key=randomUUID(),request=async(data= args,operation=key)=>tab.page.request.put(path,{data,headers:{'idempotency-key':operation}});
+    const exact=await request();expect(exact.status(),await exact.text()).toBe(200);
+    const reply=await exact.json();expect(reply).toEqual({sourceId,roundNumber:1,version:published.version+1});
+    expect(await (await request()).json()).toEqual(reply);
+    expect((await request({...args,brand:'TEST 冲突变更'},randomUUID())).status()).toBe(409);
+    const current=await tab.page.request.get(base+'?round=1');
+    expect(current.status(),await current.text()).toBe(200);
+    expect(await current.json()).toMatchObject({status:'published',version:reply.version,document:{workbenchSheet:{styleName:args.styleName,brand:args.brand},
+     materials:[{materialId,quantity:'500.25',quantityUnit:'米'}]}});
+    const history=await tab.page.request.get(base+'/versions/'+published.version+'?round=1');
+    expect(history.status(),await history.text()).toBe(200);
+    expect((await history.json()).document).toEqual(published.document);
+    const revised=await tab.page.request.get(base+'/versions/'+reply.version+'?round=1');
+    expect(revised.status(),await revised.text()).toBe(200);
+    expect((await revised.json()).document.workbenchSheet.brand).toBe(args.brand);
+    expect((await h.db.query(`SELECT amendment_kind,task_id,draft_version,base_document_version,document_version,published_by FROM digital_development_amendments
+     WHERE source_id=$1`,[sourceId])).rows).toEqual([{amendment_kind:'designer_correction',task_id:null,draft_version:null,
+     base_document_version:published.version,document_version:reply.version,published_by:designer.actorId}]);
+    expect(await taskCount()).toBe(taskBefore);
+   }finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
+});
+
 (url?describe.sequential:describe.skip)('original designer workspace parent and pure child draft across actual browser reload',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-pure-create-reload-')),{fullApp:true,orderTimeFlow:true,orderTimeModel:true});await prepareRewashSettings(h.f);});
@@ -632,7 +922,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(disabled.native).toMatchObject({disabled:'true',focused:false});
    await writeFile(join(h.evidence,'ui01-astryx-disabled-control.json'),JSON.stringify(disabled,null,2));
    await types.getByRole('combobox',{name:/^衣类/}).click();
-   await page.getByRole('option',{name:'裤子',exact:true}).click();
+   await page.getByRole('option',{name:'下装',exact:true}).click();
    expect(await types.getByRole('button',{name:'进入建单',exact:true}).isDisabled()).toBe(true);
    expect(await page.getByRole('textbox',{name:'设计款号',exact:true}).count()).toBe(0);
    await types.getByRole('button',{name:'取消',exact:true}).click();
@@ -661,7 +951,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   try{
    await openNewWizard(page,'预下单');
    await code.fill(first);
-   const material=page.locator('.development-preorder-materials');
+   const material=page.locator('#development-materials .development-materials-inline');
    const images=page.locator('#development-images');
    const label=page.locator('#development-create-style');
    const check=page.getByRole('button',{name:'检查业务ID',exact:true});
@@ -771,7 +1061,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await table.getByRole('textbox',{name:'自定义袖口 MT',exact:true}).fill('17.3');
    await page.getByRole('button',{name:'上一步',exact:true}).click();
    await changeGarment(page,'裤子',false);
-   expect(await page.getByRole('combobox',{name:/^衣类/}).innerText()).toContain('上衣');
+   expect(await page.getByRole('combobox',{name:/^衣类/}).innerText()).toContain('上装');
    await changeGarment(page,'裤子',true);
    await wizardNext(page);
    table=await openSizes(page);
@@ -891,7 +1181,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    if(mode==='preorder'){
     expect(await page.getByLabel('尺寸模板',{exact:true}).count()).toBe(0);
     expect(await page.getByLabel('PO 1 颜色',{exact:true}).count()).toBe(0);
-    await page.getByLabel('主布 数量与单位',{exact:true}).fill('7.5米');
+    await page.locator('#development-materials .development-material-inline-row').first().locator('input[id$="-quantity"]').fill('7.5米');
    }else{
     expect(await step.innerText()).toContain('版单');
     expect(await page.locator('#development-sizes').count()).toBe(0);
@@ -925,7 +1215,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     await step.waitFor();expect(await step.innerText()).toContain('开发需求');
     expect(await page.getByRole('textbox',{name:'尺寸项目 1',exact:true}).getAttribute('id')).toBe(rowId);
     await page.getByRole('button',{name:'上一步',exact:true}).click();
-   }else expect(await page.getByLabel('主布 数量与单位',{exact:true}).inputValue()).toBe('7.5米');
+   }else expect(await page.locator('#development-materials .development-material-inline-row').first().locator('input[id$="-quantity"]').inputValue()).toBe('7.5米');
    await style.waitFor();expect(await style.inputValue()).toBe(raw);expect(await instructions.inputValue()).toBe(text);
    // Two original debounce periods must not turn hydration, quotes or other
    // readonly option refreshes into source/save/publish/confirm commands.
@@ -1110,8 +1400,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const draft=await response.json();
    sourceId=draft.sourceId;
    expect(draft).toMatchObject({status:'draft',publishedAt:null,productionOrderId:null,version:1,document:{
-    template:'裤子',templateConfirmed:true,sizeTableInitialized:true,rush:true,sizes:[],
-    measurements:DEVELOPMENT_MEASUREMENTS.裤子.map(name=>({name,values:[]})),
+    template:'裤子',templateConfirmed:true,sizeTableInitialized:true,rush:true,sizes:['M'],
+    measurements:DEVELOPMENT_MEASUREMENTS.裤子.map(name=>({name,values:['']})),
     customerOrderDraft:{withOrder:true,stage:'formal',wizardStep:3,order:{lines:[expect.objectContaining({color:'TEST 蓝'})]}},
    }});
   }finally{await start.context.close();}
@@ -1159,8 +1449,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    color:'米白',garmentColor:'藏青',part:'前幅',quantity:'20',quantityUnit:'米',
   }));
   const bad=materials[fabricCount-1]!,sizes=template==='上衣'?['M','L','XL','2XL']:['S','M','L','XL','2XL'];
-  const making=sizes.map((_,i)=>i<2?1:0);
-  const sewingRows=(template==='上衣'?['藏青']:['藏青','米白','灰']).map((color,i)=>({rowId:randomUUID(),color,size:sizes[i]!,quantity:null}));
+  const sewingRows=(template==='上衣'?['藏青','黄']:['藏青','米白','灰']).map((color,i)=>({rowId:randomUUID(),color,size:sizes[i]!,quantity:1}));
+  const making=sizes.map((_,i)=>i<sewingRows.length?1:0);
   const files=await Promise.all(Array.from({length:6},async(_,index)=>({
    attachmentId:await h.f.image(actor),kind:index===0?'款图' as const:'局部图' as const,
   })));
@@ -1170,7 +1460,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     {formalPoNo:style+'-2',color:'米白',deliveryDate:null,customerWarehouseArrivalDate:'2027-03-22',sizes:[{size:'XL',quantity:'3'}]}],
   });
   const before=await forms.save(actor,sourceId,{expectedVersion:0,document:{
-   ...garment,template,quantity:2,sizes,sizeQuantities:making,
+   ...garment,template,quantity:sewingRows.length,sizes,sizeQuantities:making,
    measurements:DEVELOPMENT_MEASUREMENTS[template].map((name,index)=>({name,values:sizes.map((_,column)=>String((index+1)*10+column))})),
    materials,files,interlining:'朴料',placketInterlining:'门筒朴',sewingThread:'车缝线',buttonholeThread:'纽门线',stitchDensity:'12针',
    washing:'内洗',washingMethod:'原洗水要求',ironing:'整烫',packaging:'包装',mainLabel:true,mainLabelMethod:'主唛车法',sizeLabel:true,careLabel:true,
@@ -1188,37 +1478,34 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await changeGarment(page,template,true);
    const designCode=page.getByRole('textbox',{name:'设计款号',exact:true});
    const quantity=page.getByRole('spinbutton',{name:'第 1 行 件数',exact:true});
-   const materialsTable=page.locator('#development-materials .development-technical-table').first();
+   const materials=page.locator('#development-materials .development-material-inline-row');
    for(const [width,height] of [[1165,747],[1440,900]] as const){
     await page.setViewportSize({width,height});
     expect(await designCode.evaluate(input=>[getComputedStyle(input).borderTopWidth,getComputedStyle(input.parentElement!).borderTopWidth])).toEqual(['0px','1px']);
-    expect(await quantity.evaluate((input:HTMLInputElement)=>{
-     const field=input.getBoundingClientRect(),cell=input.closest('td')!.getBoundingClientRect();
-     return {frame:getComputedStyle(input).borderTopWidth,inside:field.left>=cell.left&&field.right<=cell.right+1,min:input.min,max:input.max};
-    })).toEqual({frame:'1px',inside:true,min:'1',max:'100000'});
-    expect(await materialsTable.evaluate((table:HTMLTableElement)=>table.tBodies[0]!.rows[1]!.cells[0]!.colSpan)).toBe(await materialsTable.locator('thead th').count());
+    expect(await materials.count()).toBe(fabricCount+accessoryCount);
+    expect(await materials.last().getByRole('textbox',{name:/品名/}).isVisible()).toBe(true);
     await page.screenshot({path:join(h.evidence,`c1-order-sheet-${template}-${width}.png`),fullPage:true});
    }
    await page.setViewportSize({width:1165,height:747});
-   expect(await page.getByLabel('针距',{exact:true}).count()).toBe(0);
+   expect(await quantity.count()).toBe(0);
    const firstRow=page.locator('#development-'+bad.materialId+'-supplier');
-   expect(await firstRow.count()).toBe(0);
+   expect(await firstRow.count()).toBe(1);
    const next=page.getByRole('button',{name:'下一步',exact:true});
    await next.click();
    const validation=page.getByRole('dialog',{name:'下一步',exact:true});
    await validation.getByRole('button',{name:/^去填写 .*供应方/}).click();
-   const dialog=page.getByRole('dialog',{name:'全部面辅料'});
-   await dialog.waitFor();
+   await validation.waitFor({state:'hidden'});
    await expect.poll(()=>firstRow.evaluate(el=>document.activeElement===el)).toBe(true);
    await firstRow.fill('补齐供应商');
-   await firstRow.locator('xpath=ancestor::tr/following-sibling::tr[1]').getByText('技术详情',{exact:true}).click();
-   const sample=dialog.getByRole('combobox',{name:bad.label+' 实样图片',exact:true});
+   const sample=page.getByRole('combobox',{name:bad.label+' 实样图片',exact:true});
    await sample.press('Enter');
    await page.getByRole('option',{name:/^局部图 1(?: · |$)/}).click();
-   await dialog.getByRole('button',{name:'返回版单',exact:true}).click();
-   await dialog.waitFor({state:'hidden'});
    await wizardNext(page);
-   expect(await page.getByLabel('针距',{exact:true}).inputValue()).toBe('12针');
+   expect(await quantity.evaluate((input:HTMLInputElement)=>{
+    const field=input.getBoundingClientRect(),cell=input.closest('td')!.getBoundingClientRect();
+    return {frame:getComputedStyle(input).borderTopWidth,inside:field.left>=cell.left&&field.right<=cell.right+1,min:input.min,max:input.max};
+   })).toEqual({frame:'1px',inside:true,min:'1',max:'100000'});
+   expect(await page.getByRole('textbox',{name:/^针距/}).inputValue()).toBe('12针');
    await wizardNext(page);
    expect(await page.getByLabel('尺码列 1',{exact:true}).inputValue()).toBe('M');
    expect(await page.getByLabel('PO 2 尺码 1',{exact:true}).inputValue()).toBe('XL');
@@ -1249,7 +1536,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   const file={attachmentId:await h.f.image(actor),kind:'工艺开发板' as const};
   await forms.save(actor,sourceId,{expectedVersion:0,document:{
    ...initialDevelopmentDocument(),quantity:1,patternCategoryId:category.price_id,files:[file],
-   workbenchSheet:{version:1,styleName:'工艺定位',brand:'',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',sewingRows:[]},
+   workbenchSheet:{version:1,styleName:'工艺定位',brand:'TEST 原品牌',gender:'男装',boardType:'头版',processingSelected:true,referenceNote:'',sewingRows:[{rowId:randomUUID(),color:'黑',size:'M',quantity:1}]},
   }},randomUUID());
   const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
@@ -1343,7 +1630,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
      formalPoNo:`TEST-${index}-PO${line+1}`,color:['黑','白','灰'][line],deliveryDate:null,sizes:[{size:'M',quantity:String(line+1)}]
     }))});
    await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),templateConfirmed:true,sizeTableInitialized:true,instructions:`TEST independent ${index}`,
-    customerOrderDraft:{withOrder:true,stage:'formal',order},files:index===0?attachments.map(attachmentId=>({attachmentId,kind:'款图' as const})):[]}},randomUUID());
+    customerOrderDraft:{withOrder:true,stage:'formal',order,wizardStep:3},files:index===0?attachments.map(attachmentId=>({attachmentId,kind:'款图' as const})):[]}},randomUUID());
   }
   const initialTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   await initialTab.context.close();
@@ -1353,7 +1640,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    for(const index of [0,1,0]){
     await page.getByRole('button',{name:styles[index]!,exact:true}).click();
     expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(styles[index]);
-    await wizardNext(page,{fillRequirements:false});await wizardNext(page,{fillRequirements:false});
+    await page.getByLabel('建单步骤').getByRole('heading',{name:'客户与交货',exact:true}).waitFor();
     const po=page.getByRole('textbox',{name:/^PO \d+ 正式款号 \/ PO$/});
     expect(await po.count()).toBe(index===0?3:1);
     for(let line=0;line<await po.count();line++)expect(await po.nth(line).inputValue()).toBe(`TEST-${index}-PO${line+1}`);
@@ -1748,7 +2035,12 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     sessionStorage.setItem(key,JSON.stringify(draft));
    },{sheet,categoryId:category.price_id,priceVersion:price.version,order});
    await page.reload();await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();await wizardNext(page);
-   if(operation==='publish')await page.getByText(/^执行单价：/).waitFor();else await wizardNext(page);
+   if(operation==='publish'){
+    await page.getByText(/^执行单价：/).waitFor();
+    await fillRequiredCraft(page);
+    const making=page.getByRole('table',{name:'颜色尺码与制作件数',exact:true});
+    expect(await making.count()).toBe(0);
+   }else await wizardNext(page);
    const path=`/api/digital-production/sources/${source.sourceId}/${operation==='publish'?'development/publish':'confirm'}`,attempts:Array<{key:string|undefined;body:string|null}>=[];
    await page.route('**'+path,async route=>{attempts.push({key:route.request().headers()['idempotency-key'],body:route.request().postData()});const result=await route.fetch();expect(result.status(),await result.text()).toBe(200);await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_NATIVE_PUBLISH_ACK_LOST',message:'TEST 原发布已提交但回执丢失'}})});});
    await page.getByRole('button',{name:operation==='publish'?'提交开发单':'提交并确认订单',exact:true}).click();await page.getByRole('region',{name:'原提交结果待核对',exact:true}).waitFor();expect(attempts).toHaveLength(1);

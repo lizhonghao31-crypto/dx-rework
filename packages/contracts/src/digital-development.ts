@@ -53,6 +53,18 @@ export const DevelopmentWorkbenchBasicsSchema=DevelopmentWorkbenchBasicFieldsSch
 export type DevelopmentWorkbenchBasics=z.infer<typeof DevelopmentWorkbenchBasicsSchema>;
 export type SaveDevelopmentWorkbenchBasics=z.infer<typeof SaveDevelopmentWorkbenchBasicsSchema>;
 
+export const SaveDevelopmentDesignerCorrectionSchema=z.object({
+ roundNumber:z.number().int().positive(),expectedDocumentVersion:z.number().int().positive(),
+ reason:z.string().trim().min(1,'请输入资料订正理由').max(1000),
+ styleName:short.optional(),brand:short.optional(),referenceNote:short.optional(),
+ materialQuantities:z.array(z.object({materialId:z.uuid(),quantity:short.optional(),quantityUnit:short.optional()}).strict()).max(100).optional(),
+}).strict().superRefine((value,ctx)=>{
+ const ids=value.materialQuantities?.map(row=>row.materialId)??[];
+ if(new Set(ids).size!==ids.length)ctx.addIssue({code:'custom',path:['materialQuantities'],message:'同一材料只可订正一次'});
+});
+export type SaveDevelopmentDesignerCorrection=z.infer<typeof SaveDevelopmentDesignerCorrectionSchema>;
+
+
 
 export const DevelopmentMaterialSupplierOptionSchema=z.object({
   supplierId:z.uuid(),code:short,name:z.string().min(1).max(200),version:z.number().int().positive(),
@@ -134,6 +146,7 @@ export const DevelopmentDocumentSchema = z.object({
   sizeLabel: z.boolean(), careLabel: z.boolean(), instructions: text,
   craft: z.enum(["无", "印花", "绣花", "印绣花", "特殊工艺"]), washing: z.enum(["免洗", "内洗", "外洗"]),
   craftSteps: CraftStepChoicesSchema.optional(),
+  craftOrderConfirmed: z.literal(true).optional(),
   craftRequirements: DevelopmentCraftRequirementSchema.array().max(64).optional(),
   materials: z.array(DevelopmentMaterialSchema).max(100),
   files: z.array(z.object({ attachmentId: z.string().uuid(), kind: z.enum(["款图", "局部图", "菲林", "工艺开发板"]) }).strict()).max(30),
@@ -244,11 +257,11 @@ export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSc
 /** Empty template slots are not a declaration that a material is unused. */
 export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boolean {
   return (!item.auxiliaryKind||item.auxiliaryKind==="普通辅料")&&["","主布","配布","辅料","主布A","配布B","配布C"].includes(item.label.replace(/\s/g,""))&&
-    ![item.name,item.supplier,item.supplierReference,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate,item.garmentColor,item.part,item.quantityUnit,item.sampleAttachmentId].some(Boolean)&&!item.available;
+    ![item.name,item.supplier,item.supplierReference,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate,item.garmentColor,item.part,(item.category==='辅料'||item.quantityUnit!=='米')?item.quantityUnit:null,item.sampleAttachmentId].some(Boolean)&&!item.available;
 }
 /** Price input makes the row part of the document, independently of physical readiness. */
 export function hasDevelopmentMaterialPricing(item:DevelopmentMaterial):boolean {
- return Boolean(item.unitPrice?.trim()||item.pricingUnit?.trim());
+ return Boolean(item.unitPrice?.trim()||(item.category==='辅料'||item.pricingUnit?.trim()!=='米')&&item.pricingUnit?.trim());
 }
 export function developmentMaterialPriceIdentityIssue(item:DevelopmentMaterial):string|null {
  return hasDevelopmentMaterialPricing(item)&&!item.name.trim()
@@ -368,6 +381,68 @@ export function developmentWorkbenchPublishIssues(sheet:WorkbenchDevelopmentShee
   return (Object.entries(workbenchRequiredFields) as Array<[keyof typeof workbenchRequiredFields,string]>)
     .filter(([field])=>!sheet[field]&&!(field==='styleName'&&options.styleNameOptional))
     .map(([field,label])=>({field,label,message:`请填写或选择${label}`}));
+}
+
+export const DEVELOPMENT_AUXILIARY_QUANTITY_UNITS=['个','米','条','箱'] as const;
+
+/** New submission only. An immutable original can still lack these two fields. */
+export function developmentCreationBasicsIssues(document:Pick<DevelopmentDocument,'workbenchSheet'>,effectiveBasics?:Pick<DevelopmentWorkbenchBasics,'brand'>){
+ const labels={styleName:'款式（品名）',brand:'品牌'} as const;
+ const values={styleName:document.workbenchSheet?.styleName,brand:effectiveBasics?.brand??document.workbenchSheet?.brand};
+ return (['styleName','brand'] as const).filter(field=>!values[field]?.trim())
+  .map(field=>({field,label:labels[field],message:`请填写${labels[field]}`}));
+}
+
+type SewingIssue={rowId:string|null;field:'color'|'size'|'quantity';message:string};
+type SewingProjection={issues:SewingIssue[];document?:DevelopmentDocument};
+/** The one creation input. Only names of missing production sizes are appended. */
+export function projectDevelopmentSewingRows(document:DevelopmentDocument):SewingProjection{
+ const rows=document.workbenchSheet?.sewingRows??[],issues:SewingIssue[]=[];
+ const selected=new Set<string>(),bySize=new Map<string,number>();
+ if(!rows.length)issues.push({rowId:null,field:'quantity',message:'请在打板信息添加样板颜色、开发尺码和制作件数'});
+ for(const row of rows){
+  const color=row.color.trim(),size=row.size.trim(),quantity=row.quantity;
+  if(!color)issues.push({rowId:row.rowId,field:'color',message:'请填写样板颜色'});
+  if(!size)issues.push({rowId:row.rowId,field:'size',message:'请填写开发尺码'});
+  if(quantity===null||!Number.isSafeInteger(quantity)||quantity<1||quantity>100000)issues.push({rowId:row.rowId,field:'quantity',message:'制作件数须为 1 至 100000 的整数'});
+  if(!color||!size||quantity===null)continue;
+  const normalized=JSON.stringify([color.toLowerCase(),size]);
+  if(selected.has(normalized))issues.push({rowId:row.rowId,field:'size',message:'该颜色和尺码已有一条制作行'});
+  selected.add(normalized);
+  bySize.set(size,(bySize.get(size)??0)+quantity);
+ }
+ if(issues.length)return {issues};
+ const total=[...bySize.values()].reduce((sum,value)=>sum+value,0);
+ if(total>100000)return {issues:[{rowId:null,field:'quantity',message:'本轮合计不得超过 100000 件'}]};
+ const sizes=[...document.sizes],measurements=document.measurements.map(row=>({...row,values:[...row.values]}));
+ for(const size of bySize.keys())if(!sizes.includes(size)){
+  sizes.push(size);
+  for(const row of measurements)row.values.push('');
+ }
+ if(sizes.length>20)return {issues:[{rowId:null,field:'size',message:'制作尺码与现有尺寸表合计超过 20 列，请核对'}]};
+ return {issues,document:{...document,documentFormatVersion:2,sizes,measurements,quantity:total,sizeQuantities:sizes.map(size=>bySize.get(size)??0)}};
+}
+
+type PreparationMaterialField='name'|'quantity'|'quantityUnit';
+/** A physical procurement quantity is not a usage-per-piece or warehouse receipt. */
+export function developmentPreparationQuantityIssues(document:Pick<DevelopmentDocument,'materials'>,required:boolean){
+ const issues:Array<{materialId:string;field:PreparationMaterialField;message:string}>=[];
+ for(const row of document.materials){
+  if(isDevelopmentMaterialPlaceholder(row)&&!hasDevelopmentMaterialPricing(row)&&!row.auxiliaryCatalog)continue;
+  const label=row.label||row.name||row.category;
+  const add=(field:PreparationMaterialField,message:string)=>issues.push({materialId:row.materialId,field,message:`${label}${message}`});
+  if(row.category==='辅料'&&!row.name.trim())add('name','须填写辅料品名');
+  const quantity=row.quantity.trim(),unit=row.quantityUnit?.trim()??'';
+  if(!quantity){if(required)add('quantity','须填写本次备料数量');continue;}
+  // Older inputs may contain an explicitly written physical unit, such as “520 米”.
+  // Do not take a numeric prefix or infer a unit from the material or supplier name.
+  const parts=/^([0-9]+(?:\.[0-9]+)?)\s*([^0-9.\s]*)$/.exec(quantity);
+  if(!parts||!Number.isFinite(Number(parts[1]))||Number(parts[1])<=0){add('quantity','备料数量须为正数');continue;}
+  const writtenUnit=parts[2]??'',physicalUnit=unit||writtenUnit;
+  const valid=row.category==='辅料'?(DEVELOPMENT_AUXILIARY_QUANTITY_UNITS as readonly string[]).includes(physicalUnit):physicalUnit===''||physicalUnit==='米';
+  if(!valid||(unit&&writtenUnit&&unit!==writtenUnit))add('quantityUnit',row.category==='辅料'?'请选择有效数量单位（个、米、条、箱），并核对原单位':'面料数量单位为米，请核对原单位');
+ }
+ return issues;
 }
 
 type DevelopmentMaterialPublishField = "name"|"specification"|"expectedDate"|"composition"|"width"|"supplier";

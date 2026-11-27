@@ -34,9 +34,9 @@ function initialQuery(page:boolean){
  const parsed=AuxiliaryQuerySchema.safeParse({q:params.get('q')??'',page:params.get('page')??1,includeInactive:params.get('includeInactive')??'false'});
  return parsed.success?parsed.data:AuxiliaryQuerySchema.parse({});
 }
-export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presentation='dialog',selectionOnly=false}:{onSelect?:((item:AuxiliaryItem)=>void|boolean|Promise<boolean>)|undefined;onClose():void;disabled?:boolean;presentation?:'dialog'|'page';selectionOnly?:boolean}){
+export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presentation='dialog',selectionOnly=false,embeddedPage=false}:{onSelect?:((item:AuxiliaryItem)=>void|boolean|Promise<boolean>)|undefined;onClose():void;disabled?:boolean;presentation?:'dialog'|'page';selectionOnly?:boolean;embeddedPage?:boolean}){
  const pageView=presentation==='page',ActionButton=pageView?PageButton:Button;
- const initial=useRef(initialQuery(pageView));
+ const initial=useRef(initialQuery(pageView&&!embeddedPage));
  const [search,setSearch]=useState(initial.current.q),q=useDebouncedValue(search.trim(),250),[page,setPage]=useState(initial.current.page),[includeInactive,setIncludeInactive]=useState(initial.current.includeInactive),[refresh,setRefresh]=useState(0);
  const [result,setResult]=useState<ReturnType<typeof AuxiliaryPageSchema.parse>|null>(null),[readError,setReadError]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [resultKey,setResultKey]=useState<string|null>(null);
@@ -56,10 +56,10 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  useDigitalDetailNavigationGuard(unknown||dirty,busy,writing,unknown?'共享辅料操作结果仍未确认，离开不会撤销提交并会丢失本页重试标识。仍要离开？':'共享辅料资料尚未保存，仍要离开？');
  useEffect(()=>{if(!pageView)input.current?.focus();},[pageView]);
  useEffect(()=>{
-  if(!pageView)return;
+  if(!pageView||embeddedPage)return;
   const url=new URL(location.href);url.searchParams.set('q',search);url.searchParams.set('page',String(page));url.searchParams.set('includeInactive',String(includeInactive));
   history.replaceState(history.state,'',url);
- },[pageView,search,page,includeInactive]);
+ },[pageView,embeddedPage,search,page,includeInactive]);
  useEffect(()=>{
   if(!applied){setReading(true);return;}
   const abort=new AbortController(),finish=quietRead.current?()=>{}:beginForegroundWait();
@@ -121,6 +121,8 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  const close=async()=>{if(busy||disabled||!await canDiscard()||writing.current)return;onClose();};
  const choose=async(item:AuxiliaryItem)=>{if(locked||!await canDiscard()||writing.current)return;if(await onSelect?.(item)!==false)onClose();};
  const actions=(item:AuxiliaryItem)=>pageView?<div className="auxiliary-catalog-row-actions">
+  {onSelect&&<div><PageButton type="button" size="sm" variant="primary" disabled={locked||!item.active||Boolean(item.mergedInto)}
+    onClick={()=>void choose(item)}>选择此辅料</PageButton></div>}
   <div>{canManage&&!item.mergedInto&&<PageButton type="button" size="sm" disabled={locked} onClick={()=>void edit('rename',item)}>改名</PageButton>}</div>
   <div>{canManage&&!item.mergedInto&&item.active&&canReadReferencePricing&&<PageButton type="button" size="sm" disabled={locked} onClick={()=>void edit('reference-pricing',item)}>修改参考价</PageButton>}</div>
   <div>{canManage&&!item.mergedInto&&item.active&&<PageButton type="button" size="sm" variant="destructive" disabled={locked} onClick={()=>void edit('disable',item)}>停用</PageButton>}</div>
@@ -169,7 +171,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
  </form>;
  const content=<section className={pageView?'dx-designer-astryx auxiliary-catalog-page':'auxiliary-catalog-dialog'}>
   {pageView&&<style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style>}
-  <header>{pageView?<h1>共享辅料目录</h1>:<h2>{onSelect?'选择共享辅料':'共享辅料目录'}</h2>}{onSelect&&<p>选择只填入本行资料；本轮是否使用仍由文员核料确认。</p>}</header>
+  <header>{pageView?<h1>{embeddedPage?'辅料':'共享辅料目录'}</h1>:<h2>{onSelect?'选择共享辅料':'共享辅料目录'}</h2>}{onSelect&&<p>选择只填入本行资料；本轮是否使用仍由文员核料确认。</p>}</header>
   <div className="auxiliary-catalog-search">
    {pageView?<CatalogField page label="搜索品名或规格" value={search} maxLength={100} disabled={busy} onChange={value=>{setSearch(value);setPage(1);}}/>:<label>搜索品名或规格<input ref={input} value={search} maxLength={100} disabled={busy} onChange={event=>{setSearch(event.target.value);setPage(1);}}/></label>}
    <label><input type="checkbox" checked={includeInactive} disabled={busy} onChange={event=>{setIncludeInactive(event.target.checked);setPage(1);}}/>显示停用及已合并记录</label>
@@ -178,7 +180,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
   {notice&&<p role="status">{notice}</p>}
   {readError&&<p role="alert">{readError}<ActionButton type="button" disabled={busy||reading} onClick={()=>{if(!pendingRead.current)setRefresh(value=>value+1);}}>重新读取目录</ActionButton></p>}
   {!result&&!readError&&<p role="status">正在读取共享辅料…</p>}
-  {pageView?<div className="auxiliary-catalog-table" aria-busy={reading||!currentResult}><div className="auxiliary-catalog-table-canvas"><Table data={result?.items??[]} idKey="id" columns={columns} density="balanced" textOverflow="wrap" aria-label="共享辅料目录" rowIndexStart={(page-1)*(result?.pageSize??15)+1}/></div></div>:<div className="auxiliary-catalog-results">{result?.items.map(item=><article key={item.id}>
+  {pageView?<div className="auxiliary-catalog-table" aria-busy={reading||!currentResult}><div className="auxiliary-catalog-table-canvas"><Table data={result?.items??[]} idKey="id" columns={columns} density="balanced" textOverflow="wrap" aria-label={embeddedPage?"辅料目录":"共享辅料目录"} rowIndexStart={(page-1)*(result?.pageSize??15)+1}/></div></div>:<div className="auxiliary-catalog-results">{result?.items.map(item=><article key={item.id}>
    <div><strong>{item.name}</strong><span>{item.auxiliaryKind} · 规格：{item.specification||'未填写'} · v{item.version}</span>{canReadReferencePricing&&<small>参考价：{priceText(item.referencePricing)}</small>}{!item.active&&<small>{item.mergedInto?'已合并，保留原引用':'已停用，旧订单快照保留'}</small>}</div>{actions(item)}
   </article>)}</div>}
   {result&&!reading&&currentResult&&!result.items.length&&<p>没有匹配的辅料。{selectionOnly?'可换关键词。':'可换关键词，或由有权岗位直接新增。'}</p>}
@@ -189,7 +191,9 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false,presenta
    {editor}
   </Dialog>:editor}
   {historyItem&&<AuxiliaryCatalogHistory key={historyItem.id} item={historyItem} onClose={()=>setHistoryItem(null)}/>}
-  {!pageView&&<footer><ActionButton type="button" disabled={busy||disabled} onClick={()=>void close()}>关闭辅料选择</ActionButton></footer>}
+  {(!pageView||embeddedPage)&&<footer><ActionButton type="button" disabled={busy||disabled} onClick={()=>void close()}>关闭辅料选择</ActionButton></footer>}
  </section>;
+ if(embeddedPage)return <Dialog isOpen onOpenChange={open=>{if(!open)void close();}} aria-label="辅料选择"
+   className="dx-designer-astryx auxiliary-catalog-full-selection" width="100vw">{content}</Dialog>;
  return pageView?content:createPortal(<PatternDialog title="共享辅料" busy={busy||disabled} onClose={()=>void close()}>{content}</PatternDialog>,document.body);
 }

@@ -317,7 +317,7 @@ function DigitalDesignerWorkspaceContent() {
             <AstryxButton label={label} variant={kind===newType?"primary":"secondary"} aria-pressed={kind===newType} isDisabled={creationBusy} onClick={()=>setNewType(kind)}/>
             <p>{description}</p>
           </div>)}
-          <Selector label="衣类" placeholder="请选择衣类" isRequired value={newGarment??""} options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value}))}
+          <Selector label="衣类" placeholder="请选择衣类" isRequired value={newGarment??""} options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value==='上衣'?'上装':'下装'}))}
             isDisabled={creationBusy||!newType} onChange={value=>{if(value==="上衣"||value==="裤子")setNewGarment(value);}}/>
           <Selector label="急单" placeholder="请选择急单" isRequired value={newRush===null?"":newRush?"yes":"no"} options={[{value:"yes",label:"是"},{value:"no",label:"否"}]}
             isDisabled={creationBusy||!newGarment} onChange={value=>{if(value==="yes"||value==="no")setNewRush(value==="yes");}}/>

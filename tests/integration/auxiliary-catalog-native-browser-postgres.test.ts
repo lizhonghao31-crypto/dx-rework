@@ -56,18 +56,21 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
    const supplier=await joined.f.access.createSupplier(joined.f.root,CreateSupplierSchema.parse({supplierCode,supplierName,supplierType:'fabric',changeReason:'TEST 从原供应商目录选择'}));
    const tab=await joined.open(designer.actorId,1165,{},'/ui/auxiliary-catalog');
    try{
-    const {page}=tab,entry=await createFromPage(page,'TEST-C3-独立供应商-'+randomUUID(),{amount:'2.35',unit:'枚'});
+    const {page}=tab,entry=await createFromPage(page,'TEST-C3-独立供应商-'+randomUUID(),{amount:'2.35',unit:'个'});
     expect(entry).not.toHaveProperty('supplier');
     await page.goto(new URL('/ui/digital-production?workspace=designer&section=create',page.url()).href);
     await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
     await chooseDevelopmentCreation(page,'纯开发');
-    const all=()=>page.getByRole('button',{name:'查看全部 / 继续添加面辅料',exact:true}).click();
-    await all();
-    const materials=page.getByRole('dialog',{name:'全部面辅料',exact:true});
+    const materials=page.locator('#development-materials');
     await materials.getByRole('button',{name:/添加辅料/}).click();
-    const shared=materials.getByRole('button',{name:'选择共享辅料 4',exact:true}),row=shared.locator('xpath=ancestor::tr');
+    const shared=materials.getByRole('button',{name:'选择辅料 4',exact:true}),row=materials.getByRole('region',{name:'辅料 4',exact:true});
+    await shared.scrollIntoViewIfNeeded();
+    const originalUrl=page.url();
     await shared.click();
-    const picker=page.getByRole('dialog',{name:'共享辅料',exact:true});
+    const picker=page.getByRole('dialog',{name:'辅料选择',exact:true});
+    await picker.getByRole('table',{name:'辅料目录',exact:true}).waitFor();
+    const full=await picker.boundingBox();expect(full!.width).toBeGreaterThan(1050);
+    expect(page.url()).toBe(originalUrl);
     await picker.getByRole('textbox',{name:'搜索品名或规格',exact:true}).fill(entry.name);
     await picker.getByText(entry.name,{exact:true}).waitFor();
     await picker.getByRole('button',{name:'选择此辅料',exact:true}).click();await picker.waitFor({state:'hidden'});
@@ -77,9 +80,14 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     const suppliers=page.getByRole('dialog',{name:'选择面辅料供应商',exact:true});
     await suppliers.getByRole('textbox',{name:'搜索面辅料供应商',exact:true}).fill(supplierName);
     await suppliers.getByRole('button',{name:`${supplierName} · ${supplierCode}`,exact:true}).click();await suppliers.waitFor({state:'hidden'});
-    const price=row.getByRole('textbox',{name:'辅料材料单价',exact:true});
-    expect(await price.inputValue()).toBe('2.35');await price.fill('3.5');
-    await materials.getByRole('button',{name:'返回版单',exact:true}).click();await materials.waitFor({state:'hidden'});
+    expect(page.url()).toBe(originalUrl);
+    const amount=row.getByRole('textbox',{name:/辅料 数量$/});
+    await amount.fill('12');
+    await row.getByRole('combobox',{name:/辅料 数量单位/}).click();
+    await page.getByRole('option',{name:'个',exact:true}).click();
+    const price=row.getByRole('textbox',{name:/辅料 单价/});
+    expect(await price.inputValue()).toBe('2.35');await price.fill('0.8');
+    await row.getByText('9.6 元',{exact:true}).waitFor();
     const reserved=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/sources/numbered-drafts'));
     const saved=page.waitForResponse(r=>r.request().method()==='PUT'&&/\/sources\/[a-f0-9-]+\/development$/.test(new URL(r.url()).pathname));
     await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
@@ -87,13 +95,13 @@ async function createFromPage(page:Page,name:string,price?:{amount:string;unit:s
     const {sourceId,orderNumber}=await reservation.json();expect(orderNumber).toBeNull();
     const response=await saved;expect(response.status(),await response.text()).toBe(200);
     const draft=await response.json(),expected={name:entry.name,specification:entry.specification,supplier:supplierName,
-     supplierReference:supplier,auxiliaryCatalog:{id:entry.id,version:entry.version,referencePricing:entry.referencePricing},unitPrice:'3.5',pricingUnit:'枚'};
+     supplierReference:supplier,auxiliaryCatalog:{id:entry.id,version:entry.version,referencePricing:entry.referencePricing},unitPrice:'0.8',quantity:'12',quantityUnit:'个',pricingUnit:'个'};
     expect(draft).toMatchObject({sourceId,status:'draft',document:{materialSupplierCatalog:true}});
     expect(draft.document.materials[3]).toMatchObject(expected);
     await page.getByText(/^开发资料与订购草稿已保存/).waitFor();
-    await page.reload();await all();
-    expect(await row.getByRole('textbox',{name:'辅料品名（材料资料）',exact:true}).inputValue()).toBe(entry.name);
-    expect(await supplierButton.innerText()).toBe(supplierName);expect(await price.inputValue()).toBe('3.5');
+    await page.reload();await row.waitFor();
+    expect(await row.getByRole('textbox',{name:/辅料 品名/}).inputValue()).toBe(entry.name);
+    expect(await supplierButton.innerText()).toBe(supplierName);expect(await price.inputValue()).toBe('0.8');
     const invalid=await page.evaluate(async({sourceId,version,document})=>{
      document.materials[3].supplier='TEST 不在供应商库';delete document.materials[3].supplierReference;
      const response=await fetch(`/api/digital-production/sources/${sourceId}/development`,{method:'PUT',headers:{'content-type':'application/json','idempotency-key':crypto.randomUUID()},body:JSON.stringify({expectedVersion:version,document})});

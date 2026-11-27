@@ -1,3 +1,4 @@
+import {DevelopmentWorkbenchBasicsSchema,type DevelopmentWorkbenchBasics} from '@dx-rework/contracts/digital-development';
 import {developmentReadTables} from "./development-amendment-repository.js";
 import type {Pool,PoolClient} from 'pg';
 type DB=Pick<Pool|PoolClient,'query'>;
@@ -12,7 +13,7 @@ export async function developmentDocumentRow(db:DB,sourceId:string,roundNumber?:
  const selected=roundNumber??latest;
  const withAmendment=async(row:typeof original)=>{
   if(!tables.amended)return row;
-  const amended=(await db.query("SELECT amendment_id,published_at,published_by FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 ORDER BY document_version DESC LIMIT 1",[sourceId,selected])).rows[0];
+  const amended=(await db.query("SELECT amendment_id,published_at,published_by FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 AND document_version=$3",[sourceId,selected,row.version])).rows[0];
   return amended?{...row,revision:{...(row.revision??row),published_at:amended.published_at,published_by:amended.published_by,updated_at:amended.published_at,updated_by:amended.published_by}}:row;
  };
  if(selected===1)return withAmendment({...original,round_number:1,latest_round_number:latest});
@@ -20,4 +21,13 @@ export async function developmentDocumentRow(db:DB,sourceId:string,roundNumber?:
  if(!round)return undefined;
  const first=(await db.query('SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 ORDER BY t.created_at,t.task_id LIMIT 1',[sourceId,selected])).rows[0];
  return withAmendment({...original,document:round.document,version:round.document_version,published_at:round.published_at,task_id:first?.task_id??null,round_number:selected,latest_round_number:latest,revision:round});
+}
+
+export async function readDevelopmentWorkbenchBasics(db:DB,sourceId:string,roundNumber:number,documentVersion:number):Promise<DevelopmentWorkbenchBasics|undefined>{
+  const row=(await db.query<{value:unknown}>(`SELECT after_state->'basics' AS value FROM audit_events
+    WHERE entity_type='digital_development' AND entity_id=$1 AND action='development_workbench_basics_saved'
+      AND after_state->>'roundNumber'=$2 AND after_state->>'documentVersion'=$3
+    ORDER BY ((after_state->'basics')->>'revision')::integer DESC LIMIT 1`,
+  [sourceId,String(roundNumber),String(documentVersion)])).rows[0];
+  return row?DevelopmentWorkbenchBasicsSchema.parse(row.value):undefined;
 }

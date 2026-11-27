@@ -1327,6 +1327,10 @@
     {
       "version": "0317_development_draft_discard_ownership",
       "checksum": "efa65d62b825972ac82f9db2c4ef4aac4c15b47f3c2ff6e29dabfb54b4730a87"
+    },
+    {
+      "version": "0318_development_designer_corrections",
+      "checksum": "2977a62217d56de4731444a16e4db32535b3e590d833fc913ee668680411e44d"
     }
   ]
 }

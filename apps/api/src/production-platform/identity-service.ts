@@ -1,3 +1,4 @@
+import {developmentCreationBasicsIssues,developmentPreparationQuantityIssues} from '@dx-rework/contracts/digital-development';
 import {developmentSourceLifecycle,effectiveDevelopmentSourceSql,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
@@ -16,7 +17,7 @@ import {acceptanceBusinessContext,observedBusinessTime,registerAcceptanceCreated
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { DigitalOrderCreateSchema, formalCommitmentFacts, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, initialCustomerOrderIsReady, digitalFormalPoNo, digitalPoKey, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
-import {developmentDocumentRow} from "./development-round-repository.js";
+import {developmentDocumentRow,readDevelopmentWorkbenchBasics} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection, InitialCustomerOrderDraft } from "@dx-rework/contracts/digital-production";
 import { isRootActor } from "../access/business-authority.js";
@@ -346,7 +347,7 @@ export class DigitalProductionIdentityService {
     const result = await client.query("SELECT * FROM digital_production_customers WHERE code=$1 AND enabled AND ($2::text IS NULL OR $2=ANY(product_groups))", [code, group ?? null]);
     if (!result.rows[0]) fail("客户或产品分组不可用", 400);
   }
-  async createOrder(actor: TrustedActorContext, input: DigitalOrderInput, key: string, sourceId: string | null = null): Promise<DigitalOrder> {
+  async createOrder(actor: TrustedActorContext, input: DigitalOrderInput, key: string, sourceId: string | null = null,workbenchNumberedCreation=false): Promise<DigitalOrder> {
     this.assertCreation();
     const approved=this.transactionClient?(sourceId?await approvedOrderTimeSource(this.transactionClient,actor,sourceId):await approvedOrderTimeCreation(this.transactionClient,actor)):false;
     if(!approved)assertCreator(actor);
@@ -377,6 +378,12 @@ export class DigitalProductionIdentityService {
         const published=await developmentDocumentRow(client,sourceId);
         preorder=Boolean(source.workbench_generated_number&&await workbenchPreorderPublication(client,sourceId));
         if(published?.status!=="published"&&!preorder)fail("请先发布开发单，再正式确认客户订单");
+        const selected=published?.document;
+        if(workbenchNumberedCreation&&selected&&(source.workbench_generated_number||selected.templateConfirmed&&selected.workbenchSheet)){
+          const notes=selected.workbenchSheet?await readDevelopmentWorkbenchBasics(client,sourceId,published.round_number??1,published.version):undefined;
+          const issues=[...developmentCreationBasicsIssues(selected,notes),...developmentPreparationQuantityIssues(selected,true)];
+          if(issues.length)fail(issues.map(issue=>issue.message).join('；'),400);
+        }
         if(published?.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
         if(preorder){
           await assertWholeOrderActive(client,'source',sourceId);

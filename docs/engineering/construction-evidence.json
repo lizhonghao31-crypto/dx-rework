@@ -1,136 +1,524 @@
 {
   "version": 1,
-  "base": "aa0b48a0489fdf49c838ec427d3e504a34d12847",
+  "base": "5625fc00a7e3a40d2c72d95a30faa2e3fc09d522",
   "risk": "full",
-  "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
+  "sourceFingerprint": "78af8275282dc3d1bffcad302aa29662e2ab0583736cc4e9e839b6ffc70b0912",
   "rules": [
     {
-      "rule": "由授权报价读取统一生成当前报价状态及适用进度，既有确认前置与部分可见角色不变，设计区对同一报价来源展示价格负责人、真实缺项和原依据。",
-      "source": "已批准《本轮 UI 与业务体验定点整改施工方案（三项复审补订定稿）》第5节 T22、T23，沿现有商业状态及 R6 原依据。",
-      "initialization": "不新增数据库状态、不新增任务、不更改历史版本。当前状态使用同一 Repeatable Read 快照。未装合并后的 UI-03 外壳之前不冒称折叠联验。",
-      "dateAndPermission": "现有角色、报价版本、技术成果及工艺审批继续作权威依据；具部分可见性的技术及 IE 入口不会收到全单内部报价字段。",
+      "rule": "创建步骤沿现行三种业务路径与原身份，只登记一份真实样板制作数量；面料米数及辅料单位仍为原备料依据。原一次操作未确认时保留原键。",
+      "source": "已批准《本轮 UI 与业务体验定点整改施工方案（三项复审补订定稿）》第3节 T07–T11，原建单、版房品类与独立工艺站规定。",
+      "initialization": "已保存普通旧草稿继续按原版格式和合法发布条件办理。新建或现行版单沿实际四态控件；恢复仍使用同源同版，不补造身份、数量或日期。 #1129 771b2315 Full 45942476536 的仓库 12 米首次单例在整分钟被浏览器规范化为不含秒，Playwright 的 fill 比较失败；不改应用、权限或任何收料约束。",
+      "dateAndPermission": "使用原签名样衣设计师、正式编号、实际物理投料范围和真实发布回执；独立站只录实际选中工艺，不自动采用制单路线。",
       "writes": [
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/quotation-workbench.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts"
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/development-pattern-link.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/digital-development.css",
+        "apps/web/src/independent-craft-field.css",
+        "apps/web/src/independent-craft-field.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/workbench-creation-data.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/api/migrations/0300_workbench_quotation_review.sql"
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/api/src/production-platform/development-service.ts"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/unit/workbench-material-amount.test.ts"
       ],
-      "expectation": "同一真实报价中用量不符的主料缺资料，已采用同版技术的辅料继续显示已填有效，并精确计入已完成。现有资料、价格或审批的真实正式门槛仍为整单。原授权范围和技术角色不变。",
+      "expectation": "原页面三类创建保存、发布及确认保留同一来源及编号；P 预下单原收货 20／12／8 留在原材料和原批次范围；双独立站、唯一数量输入和 2×2 四格按实际资料存取。 新材料行保持原错误提示和键盘可操作；固定时效旧入口按明确两站保存后重入，顺序与时间不改。 北京时间原收料标签支持整分钟和带秒形式；规范为浏览器的本地字符串时不改变原实收时间。",
       "checks": [
-        "ui04-native",
-        "ui04-protocol",
-        "ui04-postgres"
+        "ui02-release-native",
+        "ui02-units",
+        "ui02-fixed-timeline",
+        "ui02-web-typecheck"
       ]
     },
     {
-      "rule": "原报价确认证据仍显示确认时采用的成本、倍率及客户单价，历史现价互不替换，保原报价精度及 R6 一次 IE 采用链。",
-      "source": "已批准 UI-04 第5节 T23–T25；同源 calculateQuotationPricing 与 workbench_pricing 的确认快照，不新增计算。",
-      "initialization": "历史真实缺失标未登记，已确认零成本直接客户价保留零值和客户价，倍率依批准规则留空。原金额及客户整单口径不变，未确认测算不是正式客户确认。",
-      "dateAndPermission": "历史按确认版本授权且不对未授权岗位公开，R6 预算/外发继续采用同一正式 IE 报价。",
+      "rule": "原辅料目录按真实版本选取，采购来源与本单的辅料供应分开；同时保留原实样图和详细物料资料。",
+      "source": "已批准 UI-02 第3节原辅料、生产要求及实际供应商 T08–T11，复用仓库既有共享辅料目录。",
+      "initialization": "原目录已保存的版本快照继续可读，不用最新目录回写旧材料；目录关闭后回同一材料行。",
+      "dateAndPermission": "沿用原授权目录和有效供应商；仅采用实际选择的原目录与独立供应。没有新管理权限或替换旧附件。",
       "writes": [
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/web/src/quotation-workbench-pricing.tsx",
-        "packages/contracts/src/digital-quotation.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "apps/web/src/auxiliary-catalog-dialog.css",
+        "apps/web/src/auxiliary-catalog-dialog.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-ie-budget-basis.ts",
-        "apps/api/src/production-platform/budget-service.ts"
+        "apps/api/src/production-platform/development-material-suppliers.ts",
+        "apps/web/src/development-material-supplier-picker.tsx"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
-        "tests/integration/customer-quotation-postgres.test.ts"
+        "tests/integration/auxiliary-catalog-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "expectation": "真实确认两条原报价版本。常规版本保持40/105%/42；成本0且客户价7.5的确认在当前及指定历史版仍显示0/不可计算倍率/7.5，不误读为无记录。原R6实际报价至预算和选厂，不生成第二IE任务。外洗真实现地观察另记。",
+      "expectation": "全页目录使用原入口，从合法原编号及原版本回写同一行；另一实际供应商选择真实有效。本单数量 12 件乘 0.8 对应的原行 9.6 以及原快照可在刷新后读回。 旧按钮保持原 Astryx 界面键盘添加焦点，空白品名带价格仍提示原原因并拒绝不合法保存，改规格清除旧价格。",
       "checks": [
-        "ui04-native",
-        "ui04-postgres"
+        "ui02-release-native",
+        "ui02-units",
+        "ui02-original-investment",
+        "ui02-web-typecheck"
+      ]
+    },
+    {
+      "rule": "正式确认前可按原来源补齐缺少的必要基础或原备料资料。普通设计师只在所建当前发布对象上追加同轮版本，不伪造文员任务或重复订单。",
+      "source": "已批准 UI-02 第3.7节与 T12、UI-03 共用契约；同一签名正常建单及原转正入口。",
+      "initialization": "0318 引用原来源、同轮、基版和同事务原人员审计，保护旧文员任务绑定。登记既有 0248 同一视图创建和 0318 的必要所有权，确保原起点低权限升级不宽放。旧发布历史、金额、收料和投料原事实不变。",
+      "dateAndPermission": "原授权设计师、Root及实际日期沿原生命周期。错误来源、他人帐号、旧版及已正式确认后的备料输入保持拒绝。仅从正常配置开关启用新门槛及补齐入口；正式确认仅采用同源同版已有效登记的品牌。",
+      "writes": [
+        "apps/api/migrations/0318_development_designer_corrections.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/order-time-native-commands.ts",
+        "apps/api/src/server.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "apps/web/src/development-designer-correction.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "packages/contracts/src/digital-development.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-document-snapshot.ts",
+        "apps/api/src/production-platform/development-service.ts#publishedVersions",
+        "apps/api/migrations/0248_development_document_amendments.sql"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+      ],
+      "expectation": "等价现有正式前资料漏备料数量时，原确认页填写同一行 500 米后生成该轮修订，不覆盖旧快照或原收料、不生成文员任务或第二母单；精确原签名路径复测旧页、其他设计师、重复键。开关打开时采用同一轮发布已保存的有效品牌而不须伪造修改，关闭时已有旧单仍可走原正式入口。同一已发布原单从旧恢复确认入口以当前轮版补齐品牌和原材料数量，不解锁冻结订购草稿，也不改历史。实际低权限预检拒绝错误视图归属，归属恢复后 0318 升级成功。",
+      "checks": [
+        "ui02-release-native",
+        "ui02-migration",
+        "ui02-owner-upgrade",
+        "ui02-protocol"
+      ]
+    },
+    {
+      "rule": "老回归继续从合法的当前编号原入口构造新单，既有实购、验布、正式转正、技术和时效断言完整保留。",
+      "source": "#1129 b29261b7 PostgreSQL 定点原链复现与批准 UI-02 T07–T12。R5 原验布 467／468 米边界和 R4 生命周期未修改。 #1129 aeffcb48 的 Full 45936516750 有 3 条真实浏览器入口失败；实际基线 5625fc00 同三例为 2 通过、旧转正入口 1 失败。",
+      "initialization": "原测试此前用空品名和品牌新发编号；只给真实测试新单填写用户入口已要求的基础资料和同一件样板行。不填正式订单里不存在的资料或改历史夹具。 有原交接和实购的历史预下单仍不能删除。通过现有“审批与原档案核对”查看并从原版单恢复转正。独立工艺选择现为按站，不选用已取消的预设顺序。",
+      "dateAndPermission": "保持既有实际夹具身份、原日期、追溯批次及原供应商。已有原时效和正式发布条件均照旧。",
+      "writes": [
+        "tests/helpers/numbered-development-document-fixture.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-service.ts#publishPreorder",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+      ],
+      "expectation": "继续以合法原收货验证应收 520m、实际 467m 拦验布、468m 可验布且 52m 欠收，失败仍阻正式发布，原批准单独解除质量门槛。X2 四种颜色和原投料确认组合、R2 有无实物的原前置、真实原投料页及技术外洗仍可办。 旧未编号暂存保 75 米、实际投料、原所有权及无时效；旧正式转正保原真实采购、原附件、原时间，仍只建同源一单。",
+      "checks": [
+        "ui02-known-pg",
+        "ui02-original-investment",
+        "ui02-technical-washing",
+        "ui02-fixed-timeline"
       ]
     }
   ],
   "checks": [
     {
-      "id": "ui04-native",
+      "id": "ui02-release-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts -t 'edits original source prices|explains a current published unit mismatch|Acceptance R6 carries|opens exact saved quotation|keeps jointly enabled R4 row reviews|enforces the joint R4/R6' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-release-aligned/ui04-native.json",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release4/ui02-release-native.json tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/auxiliary-catalog-native-browser-postgres.test.ts -t 'resumes an unnumbered draft|numbers new pure and confirmed|uses actual craft stations|fills missing procurement quantity|confirms the original legacy sheet|corrects required original data through the published resume-confirmation page|uses the signed original development routes|saves the numbered C2 draft'",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
-      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
-      "context": "Actual aa0b48a0 release merged into reviewed quotation candidate. Each prior reviewing finding and original R6/authorized version tested on real Chromium and PostgreSQL.",
-      "startedAt": "2026-11-27T02:52:07.158444+00:00",
-      "endedAt": "2026-11-27T02:53:04.934936+00:00",
-      "log": "/workspace/scratch/ui04-release-aligned/ui04-native.log",
-      "logSha256": "f5354c903eb8d5704fe6ce44f3417d34101b717e0c7afbea0f95fce84e1679bf",
-      "passed": 6,
+      "testedHead": "771b2315420d9eddbee90e70520bd4b7d165bb86",
+      "sourceFingerprint": "78af8275282dc3d1bffcad302aa29662e2ab0583736cc4e9e839b6ffc70b0912",
+      "context": "当前准确表单及老单确认保持，真实已编号三类创建、原恢复确认、产前采购资料和共享目录",
+      "startedAt": "2026-11-27T05:25:13.672722+00:00",
+      "endedAt": "2026-11-27T05:27:14.672128+00:00",
+      "log": "/workspace/scratch/ui02-current/release4/ui02-release-native.log",
+      "logSha256": "636b5d613dacc35d06f7d5978fa6a293aa8b2a1ab597c22f3453837763ae07ad",
+      "passed": 9,
       "failed": 0,
-      "skipped": 7,
+      "skipped": 29,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "91fa3dd6f2d76690c123a0499cfe4facc2461f0b817015454ab7de8eb8b2e3ed"
+          "sha256": "c9ea91b7781eca286f5a274cff94c24acd65c450e66493ccae7d6889c8c22c5f"
         }
       ]
     },
     {
-      "id": "ui04-protocol",
+      "id": "ui02-units",
       "kind": "tests",
-      "command": "node --test '--test-name-pattern=cheap CI preflight includes|keeps the reviewed responsibility' scripts/ci/pr-gate-controller.test.mjs",
+      "command": "node_modules/.bin/vitest run --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-units.json tests/unit/workbench-creation-data.test.ts tests/unit/workbench-material-amount.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
-      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
-      "context": "Combined actual release UI01 and UI04 time-site inventory and original two protocol assertions.",
-      "startedAt": "2026-11-27T02:52:07.169182+00:00",
-      "endedAt": "2026-11-27T02:52:08.344902+00:00",
-      "log": "/workspace/scratch/ui04-release-aligned/ui04-protocol.log",
-      "logSha256": "2f90328fd5cf12d2051e504a20973973c648a645d4672c073b64ee54dbf50636",
-      "passed": 2,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "基础资料与备料单位共享校验、原单位和计算原逻辑",
+      "startedAt": "2026-11-27T03:40:06.247512+00:00",
+      "endedAt": "2026-11-27T03:40:08.248025+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-units.log",
+      "logSha256": "8270cdffaa3220d4bbabb410b4f39b8c2c9c920c6419b94eda3dde1adffb030c",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "473623d596016b5535e5f7b64ffdf954b66815e086c377ba50d0158ff22e51d8"
+        }
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
+    },
+    {
+      "id": "ui02-migration",
+      "kind": "command",
+      "command": "npm run db:migrate:lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "精确 0318 及原迁移清单的缺项完整性",
+      "startedAt": "2026-11-27T03:40:08.620564+00:00",
+      "endedAt": "2026-11-27T03:40:08.859655+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-migration.log",
+      "logSha256": "53c6871aef7b61ce788ccecb0d23b2c60c7f740babe68c3975d65e59dede9d6c",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
+    },
+    {
+      "id": "ui02-owner-upgrade",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-owner-upgrade.json tests/integration/acceptance-maintenance-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "独立低权限库从原版本增量迁移并保留所有权预检",
+      "startedAt": "2026-11-27T03:40:09.203258+00:00",
+      "endedAt": "2026-11-27T03:40:21.194062+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-owner-upgrade.log",
+      "logSha256": "686a03056621eb70185326fd151d3f47fe131af468ded663f0cf2e698660e3b2",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "cd589f325e604b8d782791839635eb81149aabed0520a6424c52f9e7f933412b"
+        }
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
+    },
+    {
+      "id": "ui02-known-pg",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-known-pg.json tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts -t 'X3 |Acceptance R5 saves|X2 original preorder|R4 native preorder|Acceptance R2 |keeps the original approved development|ordered original development'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "新编号真实输入修正，产前/R4/R5/技术/R2 原测试逻辑及原断言不放宽",
+      "startedAt": "2026-11-27T03:40:06.244562+00:00",
+      "endedAt": "2026-11-27T03:41:18.640057+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-known-pg.log",
+      "logSha256": "dc6516cfb128a2537ce82dfae8ae91d6db1ab14c3be41c035766438e23defe4d",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 135,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d8a4599db49104370cda9c6310aec9d256bc3b5bfd0c939d6b13dfeb15e0a899"
+        }
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
+    },
+    {
+      "id": "ui02-original-investment",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release3/ui02-original-investment.json tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "aeffcb48000d4cbbe5266e36bffa1eedb1b24eeb",
+      "sourceFingerprint": "69f637c03f93eeabe05a1c2b5b65ef270e39fac02279c9ccefbea13d5a62791e",
+      "context": "原备料页照现行资料格式保存，实际跟单在原入口投料；旧档案沿审批与核对进原转正，保交接、附件、版号及时效",
+      "startedAt": "2026-11-27T04:50:07.332923+00:00",
+      "endedAt": "2026-11-27T04:51:06.561763+00:00",
+      "log": "/workspace/scratch/ui02-current/release3/ui02-original-investment.log",
+      "logSha256": "929bf1b8208f10e22b923bf78fd278aac92da57f3c833ae46e6149332db57ae2",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9224d54e2c846aae6fe8a4305209af4392e5b2de301a9006eec858441cf58d86"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+      ],
+      "inputFingerprint": "66d76534dffe758fb066ba061e1e004dce91c22837a2eb7e68f341468206fc84"
+    },
+    {
+      "id": "ui02-technical-washing",
+      "kind": "tests",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release2/ui02-technical-washing.json tests/integration/development-technical-postgres.test.ts -t 'keeps the original technical artifact and pre-wash route on a numbered preorder'",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "真实原预下单技术成果及外洗路线；仍未采纳生产时效",
+      "startedAt": "2026-11-27T03:40:27.646426+00:00",
+      "endedAt": "2026-11-27T03:40:42.793195+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-technical-washing.log",
+      "logSha256": "de26f831204cb7f2ec34adb17fcc89359b1116a2e74645eac754b9512488c36b",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 44,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9977dcee407ad689c0a09df5d6d9d5d16110296db11587cc3dad464d68507c5b"
+        }
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
+    },
+    {
+      "id": "ui02-protocol",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "b29261b7dc7c11badb8505bbfe89f7877d8d8e78",
+      "sourceFingerprint": "c4ddd134a0a3145c59c58c6c26a7cc8e898cd0527e8a2251b604588659a5da7b",
+      "context": "原实际发布迁移兼容协议，保留初始 Light 断言",
+      "startedAt": "2026-11-27T03:40:21.678159+00:00",
+      "endedAt": "2026-11-27T03:40:22.118968+00:00",
+      "log": "/workspace/scratch/ui02-current/release2/ui02-protocol.log",
+      "logSha256": "5ae143fb547c4bea4337c82e890a18404cdbd176f331bbe15eff1b2844ff3393",
+      "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "2f90328fd5cf12d2051e504a20973973c648a645d4672c073b64ee54dbf50636"
+          "sha256": "5ae143fb547c4bea4337c82e890a18404cdbd176f331bbe15eff1b2844ff3393"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/helpers",
+        "tests/unit/workbench-creation-data.test.ts",
+        "tests/unit/workbench-material-amount.test.ts",
+        "apps/web/src/workbench-material-amount.ts",
+        "apps/web/src/digital-development-editing.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/acceptance-maintenance-postgres.test.ts",
+        "tests/acceptance/acceptance-pm2-postgres.mjs",
+        "AGENTS.md"
+      ],
+      "inputFingerprint": "02a8c264afc0571c1264ad0c4652725b1cb92b56f1ab2bfacad7ce5e819ea070"
     },
     {
-      "id": "ui04-postgres",
+      "id": "ui02-fixed-timeline",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-release-aligned/ui04-postgres.json",
+      "command": "node_modules/.bin/vitest run --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=/workspace/scratch/ui02-current/release3/ui02-fixed-timeline.json tests/integration/fixed-timeline-native-browser-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
-      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
-      "context": "Exact actual base plus canonical quotation fixture, production schema and quote readers after UI01 merge.",
-      "startedAt": "2026-11-27T02:52:07.194969+00:00",
-      "endedAt": "2026-11-27T02:52:12.841779+00:00",
-      "log": "/workspace/scratch/ui04-release-aligned/ui04-postgres.log",
-      "logSha256": "c49fa00966d5856cb680cea70885843b41bf4002adbf864fe0e4b39f845aa868",
-      "passed": 17,
+      "testedHead": "aeffcb48000d4cbbe5266e36bffa1eedb1b24eeb",
+      "sourceFingerprint": "69f637c03f93eeabe05a1c2b5b65ef270e39fac02279c9ccefbea13d5a62791e",
+      "context": "原固定时效开启时逐站明确工艺顺序，保存草稿再打开；原工艺发出回收入口不改变",
+      "startedAt": "2026-11-27T04:51:06.777759+00:00",
+      "endedAt": "2026-11-27T04:51:35.757897+00:00",
+      "log": "/workspace/scratch/ui02-current/release3/ui02-fixed-timeline.log",
+      "logSha256": "707e023f1aa4904ac321393092e8c7e93d3ae73428fcdd143f49d6704d89e6da",
+      "passed": 2,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c5ff2d358735b430d90630ab00c0d1360fa29e334eab59bc3f67d4b7130b96ec"
+          "sha256": "c97a73f06bc5a5503072b04b87020e49b23bb847f642fd6486b7528e0c0e30d8"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/acceptance",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
+      ],
+      "inputFingerprint": "66d76534dffe758fb066ba061e1e004dce91c22837a2eb7e68f341468206fc84"
+    },
+    {
+      "id": "ui02-web-typecheck",
+      "kind": "command",
+      "command": "npm run typecheck --workspace @dx-rework/web",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "aeffcb48000d4cbbe5266e36bffa1eedb1b24eeb",
+      "sourceFingerprint": "549dee0508f5dce9f7d41c18cece5ecfed30663b5f834846949eb5732dec5cea",
+      "context": "最新材料行金额状态和自有 Astryx 输入组件的原 Web 类型检查",
+      "startedAt": "2026-11-27T04:45:36.239953+00:00",
+      "endedAt": "2026-11-27T04:45:57.967926+00:00",
+      "log": "/workspace/scratch/ui02-current/release3/ui02-web-typecheck.log",
+      "logSha256": "146744e03abb37696a2f8a2e16af79de20c515cadf82a282f02645837b1348db",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "ceffce63111a2cf61b823ffbb452014439fa92ec90e843a61c52b243241c8a22"
     }
   ]
 }
