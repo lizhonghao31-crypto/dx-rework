@@ -80,6 +80,58 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
 }
 
 (url?describe:describe.skip)('C2 G2 numbered preorder native entry',()=>{
+ it('keeps a lost numbered reservation out of ordinary deletion and recovers the same source by the original key',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-ui01-numbered-lost-')),{fullApp:true,workbenchNumberedCreation:true,orderTimeFlow:true,orderTimeModel:true});
+  try{
+   await prepareRewashSettings(h.f);
+   const actor=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true);
+   const style='TEST-UNRELATED-'+randomUUID(),temporary='TEST-LOST-'+randomUUID();
+   await identity.createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:null},randomUUID(),true);
+   const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+   try{
+    const page=tab.page,path='/api/digital-production/sources/numbered-drafts',target='**'+path;
+    await openNewWizard(page,'预下单');
+    await page.getByRole('textbox',{name:'代用款号（选填）',exact:true}).fill(temporary);
+    let created='',key='';
+    await page.route(target,async route=>{
+     const request=route.request();if(request.method()!=='POST'){await route.continue();return;}
+     key=request.headers()['idempotency-key']!;
+     const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);
+     created=(await response.json()).sourceId;
+     await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_UI01_LOST_NUMBER_ACK',message:'TEST 已预留，回执丢失'}})});
+    });
+    await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'未收到可确认的提交结果'}).waitFor();
+    await page.reload();
+    await page.getByRole('heading',{name:'原创建提交结果待核对',exact:true}).waitFor();
+    expect(created).toBeTruthy();expect(key).toBeTruthy();
+    await page.unroute(target);
+    const receiptTarget='**'+path+'/receipt';
+    await page.route(receiptTarget,route=>route.abort('failed'));
+    await page.getByRole('button',{name:'返回列表并保留资料',exact:true}).click();
+    const box=page.getByRole('region',{name:'开发草稿箱',exact:true});
+    await box.getByRole('button',{name:`删除草稿 ${style}`,exact:true}).waitFor();
+    expect(await box.getByRole('button',{name:`删除草稿 ${temporary}`,exact:true}).count()).toBe(0);
+    const server=await page.request.get(h.base+'/api/digital-production/sources/drafts');
+    expect(await server.json()).toMatchObject({items:expect.arrayContaining([expect.objectContaining({sourceId:created,temporaryStyleNo:temporary,numbered:true,ownedByRequester:true})])});
+    await page.unroute(receiptTarget);
+    const background=page.waitForResponse(r=>r.url().endsWith(path+'/receipt')&&r.ok());
+    await page.reload();
+    expect(await (await background).json()).toMatchObject({sourceId:created});
+    await box.getByRole('button',{name:`删除草稿 ${style}`,exact:true}).waitFor();
+    expect(await box.getByRole('button',{name:`删除草稿 ${temporary}`,exact:true}).count()).toBe(0);
+    await page.getByRole('region',{name:'原提交结果待核对',exact:true}).getByRole('button',{name:'核对原创建提交结果',exact:true}).click();
+    const receipt=page.waitForResponse(r=>r.url().endsWith(path+'/receipt')&&r.ok());
+    await page.getByRole('button',{name:'只读核对原提交结果',exact:true}).click();
+    expect(await (await receipt).json()).toMatchObject({sourceId:created});
+    const alternate=page.getByRole('textbox',{name:'代用款号（选填）',exact:true});
+    await alternate.waitFor();expect(await alternate.inputValue()).toBe(temporary);
+    const actual=h.requests.filter(row=>row.session===tab.session&&row.path===path&&row.method==='POST');
+    expect(actual).toHaveLength(1);expect(actual[0]?.key).toBe(key);
+    expect((await h.db.query('SELECT 1 FROM digital_development_draft_discards WHERE source_id=$1',[created])).rowCount).toBe(0);
+   }catch(error){await writeFile(join(h.evidence,'ui01-lost-number-browser.txt'),await tab.page.locator('body').innerText());throw error;}finally{await tab.close();}
+  }finally{await h.writeEvidence();await h.dispose();}
+ });
  it('resumes an unnumbered draft, recovers preorder publication and formally confirms the same numbered source',async()=>{
   const evidence=await mkdtemp(join(tmpdir(),'dx-c2-numbered-preorder-'));
   const h=await supplychainSettingsBrowser(url!,evidence,{fullApp:true,orderTimeFlow:true,orderTimeModel:true,workbenchNumberedCreation:true});
@@ -1309,7 +1361,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   });
   const publication='2026-11-19T06:07:08.456Z';
   await h.f.advance(scene,publication);
-  const saved=await h.f.runtime.run(scene,actor,async()=>{
+  const returnedBasis=await h.f.runtime.run(scene,actor,async()=>{
    const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
    const price=await new PatternRoomPriceService(h.db).quote(actor,'category',category.price_id);
    const sheet=await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
@@ -1327,6 +1379,23 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(returned.state).toBe('returned');
    expect((await identity.developmentDrafts(actor,1,designStyleNo)).items).toEqual([]);
    expect((await identity.developmentDrafts(actor,1,designStyleNo,false,'followup')).items[0]).toMatchObject({sourceId,approvalState:'returned',canDiscard:false});
+   return {sheet,category,price};
+  });
+  h.setCollectionScene(scene);
+   const returnedTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
+   try{
+    await returnedTab.page.getByText('审批与原档案核对',{exact:true}).click();
+    const row=returnedTab.page.getByRole('listitem').filter({hasText:designStyleNo});
+    await row.getByText('时效申请已退回',{exact:false}).waitFor();
+    await row.getByRole('link',{name:'查看原时效申请',exact:true}).waitFor();
+    expect(await row.getByRole('button',{name:/删除/}).count()).toBe(0);
+    await row.getByRole('button',{name:'编辑原开发草稿',exact:true}).click();
+    const field=returnedTab.page.getByRole('textbox',{name:'设计款号',exact:true});
+    await field.waitFor();expect(await field.inputValue()).toBe(designStyleNo);
+    expect(await returnedTab.page.getByRole('button',{name:'保存开发资料草稿',exact:true}).count()).toBe(1);
+   }finally{await returnedTab.close();h.setCollectionScene(undefined);}
+  const saved=await h.f.runtime.run(scene,actor,async()=>{
+   const {sheet,category,price}=returnedBasis;
    await expect(forms.publish(actor,sourceId,sheet.version,randomUUID(),{categoryId:category.price_id,priceVersion:price.version+1000})).rejects.toMatchObject({code:'PRICE_CHANGED'});
    expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
    expect(await new OrderTimePlanRepository(h.db).current({kind:'source',id:sourceId})).toBeNull();

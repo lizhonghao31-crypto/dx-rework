@@ -295,6 +295,7 @@ export class DigitalProductionIdentityService {
     if(countOnly)return {items:[],page,total,hasNext:page*15<total};
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
+      coalesce(s.workbench_generated_number,false) AS "numbered",s.created_by=$2 AS "ownedByRequester",
       coalesce(d.version,0)::int AS version,coalesce(d.updated_at,s.created_at) AS "updatedAt",approval.state AS "approvalState",approval.request_id AS "approvalRequestId",
       ${bucket==='drafts'?'true':'false'} AS "canDiscard",
       CASE WHEN d.document->'customerOrderDraft'->>'withOrder'='false' THEN 'development'

@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
   "risk": "full",
-  "sourceFingerprint": "7cabddd8eb8cdbc1bfbef3ee26445aba8fb0e4472a8d5b3c4e80c70f3da58d5a",
+  "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
   "rules": [
     {
       "rule": "创建首页把真实可删草稿箱与新建入口并排，保留搜索、分页、原请求恢复及本页已确认的草稿数据。",
@@ -27,7 +27,7 @@
         "tests/unit/development-creation-draft.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "expectation": "原入口宽窄视口、官方控件 CSS、原结果恢复、标签页草稿与不同版本不丢失；真实 Chromium 原输入已脱离旧内框。",
+      "expectation": "签名正常入口核自动编号回执损失、原请求仅查询不重发、未归属编号不误删及无关草稿仍能使用；退回审批可从原审批与草稿核对区进入原资料继续填。保留样式来源与搜索、分页及输入。",
       "checks": [
         "ui01-native",
         "ui01-unit"
@@ -54,7 +54,7 @@
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "expectation": "最终候选真实 7 项定点浏览器测试含 0316→0317、同源列表与删除资格、审计元组、角色、事务竞态和历史不覆盖；仅 SQL 尾空行在之前完整 25 项通过后清理。现场实际旧草稿分类统一验收后核。",
+      "expectation": "最终候选 9 项定点浏览器含 0316→0317、同源列表/删除，Root/非本人原权限、审计及发布竞态；现场真实历史草稿逐条分类继续留共同版验收。",
       "checks": [
         "ui01-native",
         "ui01-migration"
@@ -65,46 +65,46 @@
     {
       "id": "ui01-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'recovers only the original eligible shell|keeps one creation draft panel|keeps explicit creation types|discards ordinary drafts|reuses the acknowledged source|retains an acknowledged-server|restores native original publish' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-final/ui01-native.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'keeps a lost numbered reservation|recovers only the original eligible shell|keeps one creation draft panel|keeps explicit creation types|discards ordinary drafts|reuses the acknowledged source|starts one effective clock|retains an acknowledged-server|restores native original publish' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2e5b6a20723b53d079ad55c1c3425727d901186",
-      "sourceFingerprint": "7cabddd8eb8cdbc1bfbef3ee26445aba8fb0e4472a8d5b3c4e80c70f3da58d5a",
-      "context": "Release b2e5b6a2 local candidate; isolated PG, Root/designer from real App and Chromium; final migration whitespace checksum and targeted creation, search, old shell, receipt, role, concurrency",
-      "startedAt": "2026-11-27T01:18:01.041943+00:00",
-      "endedAt": "2026-11-27T01:19:09.799770+00:00",
-      "log": "/workspace/scratch/ui01-final/ui01-native.log",
-      "logSha256": "f51174da9dd29736ad3d12c0e1a945c6dab60d9697dbd62ce4bae996b4b9c94e",
-      "passed": 7,
+      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
+      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
+      "context": "Current prior-Light and Review candidate, exact original browser and PostgreSQL; original numbered receipt loss and returned time request fresh tab, plus creation CSS/legacy data/roles and concurrency",
+      "startedAt": "2026-11-27T01:34:22.265799+00:00",
+      "endedAt": "2026-11-27T01:36:07.592370+00:00",
+      "log": "/workspace/scratch/ui01-review-final/ui01-native.log",
+      "logSha256": "3400a128bc1562648c9d59f407c5d09039046385377e33e3ed24ed33c598ddb2",
+      "passed": 9,
       "failed": 0,
-      "skipped": 18,
+      "skipped": 17,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ec320da81219d3d3c140385f7c4e82685ddf96bc1a262d180bee063d87de6af9"
+          "sha256": "ae4fbb1e2600dfecaa28f0d350a329145ccd33ad1af167b9b67478760c9b1410"
         }
       ]
     },
     {
       "id": "ui01-unit",
       "kind": "tests",
-      "command": "npx vitest run tests/unit/development-creation-draft.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-final/ui01-unit.json",
+      "command": "npx vitest run tests/unit/development-creation-draft.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2e5b6a20723b53d079ad55c1c3425727d901186",
-      "sourceFingerprint": "7cabddd8eb8cdbc1bfbef3ee26445aba8fb0e4472a8d5b3c4e80c70f3da58d5a",
-      "context": "Release b2e5b6a2 frozen UI-01; draft state and repository risk contract regression",
-      "startedAt": "2026-11-27T01:18:17.758815+00:00",
-      "endedAt": "2026-11-27T01:18:19.014547+00:00",
-      "log": "/workspace/scratch/ui01-final/ui01-unit.log",
-      "logSha256": "1fd5ff05ef2218af23968ceb223b2e8b179df413e945523c6bf3a82787718a03",
+      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
+      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
+      "context": "Review-corrected draft recovery and repository risk configuration for exact candidate",
+      "startedAt": "2026-11-27T01:36:48.847299+00:00",
+      "endedAt": "2026-11-27T01:36:49.842818+00:00",
+      "log": "/workspace/scratch/ui01-review-final/ui01-unit.log",
+      "logSha256": "d912392067396de75cbf597fdb8a4cafffdec97182dcdc00824f09c6abf08bc6",
       "passed": 151,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c815f1733a9a82899ade9dff20688b6b666edaac2b392b678caf497b04751246"
+          "sha256": "6e85ad6692466643e523a2de9d76ba0391e2c9a495d27f9170b8c371ee73c0aa"
         }
       ]
     },
@@ -114,12 +114,12 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2e5b6a20723b53d079ad55c1c3425727d901186",
-      "sourceFingerprint": "7cabddd8eb8cdbc1bfbef3ee26445aba8fb0e4472a8d5b3c4e80c70f3da58d5a",
-      "context": "Release b2e5b6a2 frozen UI-01 migration lint with exact package checksums",
-      "startedAt": "2026-11-27T01:18:17.758530+00:00",
-      "endedAt": "2026-11-27T01:18:17.931833+00:00",
-      "log": "/workspace/scratch/ui01-final/ui01-migration.log",
+      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
+      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
+      "context": "Exact local bundle migration inventory checksum and readiness validation",
+      "startedAt": "2026-11-27T01:36:48.854292+00:00",
+      "endedAt": "2026-11-27T01:36:49.019346+00:00",
+      "log": "/workspace/scratch/ui01-review-final/ui01-migration.log",
       "logSha256": "f62e9557ae5e3db99ada81e4b1a735bbfaad3d553b1def0bf54020567bbd2b53"
     }
   ]
