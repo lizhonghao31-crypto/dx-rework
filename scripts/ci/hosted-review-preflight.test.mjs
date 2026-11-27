@@ -48,18 +48,19 @@ function fixture(){
       throw Error('Unexpected fixture pages '+path);
     }
   };
-  const compare=async(a,b)=>{assert.equal(b,head);state.comparisons.push(a);if(state.diverged===a)throw Error('non-ancestor');
-    return state.before;};
+  const compare=async(a,b)=>{assert.ok(b===head||b===second);state.comparisons.push([a,b]);if(state.diverged===a)throw Error('non-ancestor');
+    return b===second?(state.earlierBefore??state.before):state.before;};
   return {state,api,authorize:(map=registry(),paths=[create])=>readHostedReview(api,plan,map,paths,compare)};
 }
 
 test('second Review findings can close on a real descendant without a third Review or updated bot summary',async()=>{
   const f=fixture(), verified=await f.authorize();
   assert.deepEqual(f.state.reviewCalls,[null,'next']);
-  assert.deepEqual(f.state.comparisons,[second,first]);
+  assert.deepEqual(f.state.comparisons,[[second,head],[first,second]]);
   assert.equal(f.state.requestReads,2);
   assert.equal(verified.reviewedHead,second);
-  assert.deepEqual(verified.findings.map(v=>[v.id,...v.cases]),[[23,'original-fixed-timeline-creation'],[24,'original-preorder-conversion']]);
+  assert.deepEqual(verified.findings.map(v=>[v.id,...v.cases]),[[23],[24,'original-preorder-conversion']]);
+  assert.equal(verified.findings[0].independentlyReviewedAt,second);
   const selected=affectedEntryPlan(registry(),[create]),run={id:1001,run_attempt:2};
   const raw=JSON.stringify(hostedPlan(plan,run,verified,selected));
   const bound=readPlannedReview(raw,sha(raw),plan,run,selected);
@@ -76,6 +77,13 @@ test('second Review findings can close on a real descendant without a third Revi
   assert.throws(()=>requireAffectedCases(selected,actual.map(x=>x.id==='original-preorder-conversion'?{...x,status:'skipped'}:x)),/original-preorder-conversion/);
 });
 
+test('a genuinely reviewed fix from the first round does not require the last-round mapping',async()=>{
+  const f=fixture();f.state.findings=[firstFinding];
+  const reviewed=await f.authorize(null,[unrelated]);
+  assert.equal(reviewed.findings[0].independentlyReviewedAt,second);
+  f.state.earlierBefore=[unrelated];
+  await assert.rejects(f.authorize(null,[unrelated]),/REVIEW_CASE_MAPPING_MISSING: finding 23/);
+});
 test('missing, running, or self-reported Review cannot authorize preparation',async()=>{
   for(const comments of [[],[summary(second,'running')],[summary(second,'completed',{login:'author'})]]){
     const f=fixture();f.state.comments=comments;

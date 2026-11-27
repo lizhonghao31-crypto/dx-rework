@@ -104,11 +104,12 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare){
   const review=trustedReview(comments);
   if(review?.status!=='completed'||!Number.isSafeInteger(review.commentId)||review.commentId<=0)throw Error('Independent Review has no completed code conclusion');
   const comparisons=new Map();
-  const after=async head=>{
+  const after=async (head,descendant=plan.head)=>{
     requireSha(head);
-    if(head===plan.head)return [];
-    if(!comparisons.has(head))comparisons.set(head,compare(head,plan.head));
-    return comparisons.get(head);
+    if(head===descendant)return [];
+    const key=head+':'+descendant;
+    if(!comparisons.has(key))comparisons.set(key,compare(head,descendant));
+    return comparisons.get(key);
   };
   await after(review.commit_sha);
   const policy=bindings(registry);
@@ -121,6 +122,17 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare){
     const submission=reviews.find(r=>r.id===item.pull_request_review_id&&r.user?.login===REVIEW_BOT);
     if(!submission||submission.commit_id!==(item.original_commit_id??item.commit_id)||submission.state==='PENDING')throw Error('Review finding original submission cannot be confirmed: '+item.id);
     const digest=findingDigest(item);
+    // A previous-round finding may already have had its changed source
+    // independently reviewed. A resolved flag or an unrelated newer review
+    // cannot provide that evidence, and never waives the latest findings.
+    if(submission.commit_id!==review.commit_sha){
+      const subsequentlyReviewed=await after(submission.commit_id,review.commit_sha);
+      if(subsequentlyReviewed.includes(item.path)){
+        findings.push({id:item.id,path:item.path,digest,reviewedHead:submission.commit_id,
+          independentlyReviewedAt:review.commit_sha,cases:[]});
+        continue;
+      }
+    }
     const binding=policy.get(item.path+'\0'+digest);
     if(!binding)throw Error('REVIEW_CASE_MAPPING_MISSING: finding '+item.id+' '+item.path+' sha256='+digest);
     const actual=new Set(await after(submission.commit_id));

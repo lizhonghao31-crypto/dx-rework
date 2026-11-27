@@ -43,7 +43,10 @@ Full 的同一个预检 job 在安装、浏览器及 PostgreSQL 准备前，用�
 允许第二轮后修复的提交保留原 Review 结论，不需要第三轮，也不把该提交说成已审。
 GitHub 的 resolved 只证明线程已解决，不证明修改及实际测试已过。
 
-逐条发现以真实 bot 原评论及其提交为准。冻结目标 Base 中
+逐条发现以真实 bot 原评论及其提交为准。前一轮报告的文件确实在之后的已审
+提交中发生变化，且后续独立 Review 已完成时，可复用后续 Review。仅 resolved、
+不同谱系或没有重新审到原问题文件都不是修复证据。最后一轮发现必须核命名用例。
+冻结目标 Base 中
 `affected-entry-map.json` 可由已授权维护者登记 `reviewBindings`，
 每条含 `path`（GitHub 发现文件）、`findingSha256`（正文 CRLF 规范成 LF 后
 去除首尾空白的 SHA-256）、`repairPaths`（同一语义的修复范围）和
@@ -55,5 +58,4 @@ GitHub 的 resolved 只证明线程已解决，不证明修改及实际测试已
 预检只执行原本已选择的精确命名用例一次，验证并保存原始结果，记录真实
 run/attempt/Head/Base、Review 核验内容及报告摘要，Full 必须等这一 job 成功。
 合并核证使用 GitHub 同次实际成功 job、留存步骤和回执，并独立复核冻结范围、
-Review 和发现映射。初次采用时旧 Baseline 也不允许用候选自带的登记为自己
-已报告的发现放行。缺可信映射要补可信源，不开重复 Full 或第三轮 Review。
+Review 和发现映射。初次采用时，旧 Base 也不允许候选给自己的最后一轮发现登记映射后自行放行。缺可信映射要补可信源，不开重复 Full 或第三轮 Review。
