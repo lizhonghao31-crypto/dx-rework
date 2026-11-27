@@ -47,7 +47,7 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
  const original=(request:FastifyRequest)=>({version:parse(z.coerce.number().int().positive(),(request.params as {version:string}).version),...parse(z.object({quoteId:z.string().uuid()}).strict(),request.query)});
  app.get(originalBase,async(request,reply)=>{const ref=original(request);reply.header('cache-control','private, no-store');return service.originalVersion(await actor(request),resource(request),ref.quoteId,ref.version);});
 
- app.get(base,async request=>{const q=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),resource(request),undefined,q.version);});
+ app.get(base,async(request,reply)=>{const q=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);reply.header('cache-control','private, no-store');return service.readSnapshot(await actor(request),resource(request),q.version);});
  app.get(`${base}/workbench-pricing`,async request=>{
   parse(z.object({}).strict(),request.query);
   return service.workbenchPreview(await actor(request),resource(request));

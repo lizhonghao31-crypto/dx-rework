@@ -1,127 +1,136 @@
 {
   "version": 1,
-  "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
+  "base": "aa0b48a0489fdf49c838ec427d3e504a34d12847",
   "risk": "full",
-  "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
+  "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
   "rules": [
     {
-      "rule": "创建首页把真实可删草稿箱与新建入口并排，保留搜索、分页、原请求恢复及本页已确认的草稿数据。",
-      "source": "已批准《本轮 UI 与业务体验定点整改施工方案（三项复审补订定稿）》第2节 T01–T04，Astryx 主规范。",
-      "initialization": "默认用现有创建类型与已保存草稿；不迁移浏览器输入，不将不确定提交混入普通可删草稿。",
-      "dateAndPermission": "原标签页及服务器授权按当前登录权限重新核对；其他角色和历史入口不改变。",
+      "rule": "由授权报价读取统一生成当前报价状态及适用进度，既有确认前置与部分可见角色不变，设计区对同一报价来源展示价格负责人、真实缺项和原依据。",
+      "source": "已批准《本轮 UI 与业务体验定点整改施工方案（三项复审补订定稿）》第5节 T22、T23，沿现有商业状态及 R6 原依据。",
+      "initialization": "不新增数据库状态、不新增任务、不更改历史版本。当前状态使用同一 Repeatable Read 快照。未装合并后的 UI-03 外壳之前不冒称折叠联验。",
+      "dateAndPermission": "现有角色、报价版本、技术成果及工艺审批继续作权威依据；具部分可见性的技术及 IE 入口不会收到全单内部报价字段。",
       "writes": [
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/development-draft-list.ts",
-        "apps/web/src/development-entry-controls.tsx",
-        "apps/web/src/digital-development-workspace.css",
-        "apps/web/src/document-editor.css",
-        "packages/ui/src/production.css",
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "apps/web/src/digital-development-create-form.tsx"
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/quotation-workbench.ts",
+        "packages/contracts/src/digital-quotation.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/use-development-creation-draft.ts",
-        "docs/ui/ASTRYX_UI_SPEC.md"
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/api/migrations/0300_workbench_quotation_review.sql"
       ],
       "oldTests": [
-        "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
-      "expectation": "签名正常入口核自动编号回执损失、原请求仅查询不重发、未归属编号不误删及无关草稿仍能使用；退回审批可从原审批与草稿核对区进入原资料继续填。保留样式来源与搜索、分页及输入。 原表单的无效 PO 件数由 Astryx 官方错误状态渲染，内部 input 不再匹配旧错误描边和旧焦点描边。禁用急单选控件和改错后原订单确认均用真实浏览器。",
+      "expectation": "同一真实报价中用量不符的主料缺资料，已采用同版技术的辅料继续显示已填有效，并精确计入已完成。现有资料、价格或审批的真实正式门槛仍为整单。原授权范围和技术角色不变。",
       "checks": [
-        "ui01-native",
-        "ui01-unit"
+        "ui04-native",
+        "ui04-protocol",
+        "ui04-postgres"
       ]
     },
     {
-      "rule": "用同一数据库谓词和快照列出、删除真正草稿，Root 代删区别真实操作者与所有人，旧纯初始化证据精确兼容。",
-      "source": "已批准 UI-01 第2.2节 T02–T04，原权限和原 0304 不可变删除记录。",
-      "initialization": "0316 到 0317 前向升级，不修改原历史行、编号和附件；只有精确创建审计绑定的空壳方可恢复资格。",
-      "dateAndPermission": "本人/真实数据库 Root 锁内核验，其他设计师、撤权、真实业务、过期版本和并发发布不得被删除。",
+      "rule": "原报价确认证据仍显示确认时采用的成本、倍率及客户单价，历史现价互不替换，保原报价精度及 R6 一次 IE 采用链。",
+      "source": "已批准 UI-04 第5节 T23–T25；同源 calculateQuotationPricing 与 workbench_pricing 的确认快照，不新增计算。",
+      "initialization": "历史真实缺失标未登记，已确认零成本直接客户价保留零值和客户价，倍率依批准规则留空。原金额及客户整单口径不变，未确认测算不是正式客户确认。",
+      "dateAndPermission": "历史按确认版本授权且不对未授权岗位公开，R6 预算/外发继续采用同一正式 IE 报价。",
       "writes": [
-        "apps/api/migrations/0317_development_draft_discard_ownership.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/web/src/quotation-workbench-pricing.tsx",
+        "packages/contracts/src/digital-quotation.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-source-lifecycle.ts",
-        "apps/api/migrations/0304_development_draft_discard.sql",
-        "apps/web/src/digital-designer-workspace.tsx"
+        "apps/api/src/production-platform/quotation-ie-budget-basis.ts",
+        "apps/api/src/production-platform/budget-service.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
+        "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts"
       ],
-      "expectation": "最终候选 9 项定点浏览器含 0316→0317、同源列表/删除，Root/非本人原权限、审计及发布竞态；现场真实历史草稿逐条分类继续留共同版验收。",
+      "expectation": "真实确认两条原报价版本。常规版本保持40/105%/42；成本0且客户价7.5的确认在当前及指定历史版仍显示0/不可计算倍率/7.5，不误读为无记录。原R6实际报价至预算和选厂，不生成第二IE任务。外洗真实现地观察另记。",
       "checks": [
-        "ui01-native",
-        "ui01-migration"
+        "ui04-native",
+        "ui04-postgres"
       ]
     }
   ],
   "checks": [
     {
-      "id": "ui01-native",
+      "id": "ui04-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'keeps one creation draft panel|keeps a lost numbered reservation|keeps explicit creation types|starts one effective clock|recovers only the original eligible shell|discards ordinary drafts|numbers new pure and confirmed|restores native original' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-native.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts -t 'edits original source prices|explains a current published unit mismatch|Acceptance R6 carries|opens exact saved quotation|keeps jointly enabled R4 row reviews|enforces the joint R4/R6' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-release-aligned/ui04-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
-      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
-      "context": "Original designer/Root Chromium/PostgreSQL on exact bytes. Captures Astryx disabled and error controls and keeps old and new draft lifecycle checks.",
-      "startedAt": "2026-11-27T02:03:57.145606+00:00",
-      "endedAt": "2026-11-27T02:05:59.488592+00:00",
-      "log": "/workspace/scratch/ui01-review-final/ui01-native.log",
-      "logSha256": "fa7ed8db4d98f6f7d9ef09aa79a2b34fecd9f11c40135b1ef5e044f375491cc0",
-      "passed": 9,
+      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
+      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
+      "context": "Actual aa0b48a0 release merged into reviewed quotation candidate. Each prior reviewing finding and original R6/authorized version tested on real Chromium and PostgreSQL.",
+      "startedAt": "2026-11-27T02:52:07.158444+00:00",
+      "endedAt": "2026-11-27T02:53:04.934936+00:00",
+      "log": "/workspace/scratch/ui04-release-aligned/ui04-native.log",
+      "logSha256": "f5354c903eb8d5704fe6ce44f3417d34101b717e0c7afbea0f95fce84e1679bf",
+      "passed": 6,
       "failed": 0,
-      "skipped": 17,
+      "skipped": 7,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ff571156caf8f73d4c9b02da1487846beadce558d07aa9847058d49944544ab8"
+          "sha256": "91fa3dd6f2d76690c123a0499cfe4facc2461f0b817015454ab7de8eb8b2e3ed"
         }
       ]
     },
     {
-      "id": "ui01-unit",
+      "id": "ui04-protocol",
       "kind": "tests",
-      "command": "npx vitest run tests/unit/development-creation-draft.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-unit.json",
+      "command": "node --test '--test-name-pattern=cheap CI preflight includes|keeps the reviewed responsibility' scripts/ci/pr-gate-controller.test.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
-      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
-      "context": "Draft commands, protected inputs and Full gate path classification on final UI-01 source.",
-      "startedAt": "2026-11-27T02:03:57.140113+00:00",
-      "endedAt": "2026-11-27T02:03:59.091286+00:00",
-      "log": "/workspace/scratch/ui01-review-final/ui01-unit.log",
-      "logSha256": "67ab99902aff8845b35f0d9d383b926b0fdc1f6ddddafba1212893c5fc31e80c",
-      "passed": 151,
+      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
+      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
+      "context": "Combined actual release UI01 and UI04 time-site inventory and original two protocol assertions.",
+      "startedAt": "2026-11-27T02:52:07.169182+00:00",
+      "endedAt": "2026-11-27T02:52:08.344902+00:00",
+      "log": "/workspace/scratch/ui04-release-aligned/ui04-protocol.log",
+      "logSha256": "2f90328fd5cf12d2051e504a20973973c648a645d4672c073b64ee54dbf50636",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "2f90328fd5cf12d2051e504a20973973c648a645d4672c073b64ee54dbf50636"
+        }
+      ]
+    },
+    {
+      "id": "ui04-postgres",
+      "kind": "tests",
+      "command": "npx vitest run --config vitest.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-release-aligned/ui04-postgres.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "91f9f94ede7b9ce0fd34300db40e4e86acf98d24",
+      "sourceFingerprint": "5e0eaeef287f4984eb85116b63692987792285802519863e7e65c3aec4f1894a",
+      "context": "Exact actual base plus canonical quotation fixture, production schema and quote readers after UI01 merge.",
+      "startedAt": "2026-11-27T02:52:07.194969+00:00",
+      "endedAt": "2026-11-27T02:52:12.841779+00:00",
+      "log": "/workspace/scratch/ui04-release-aligned/ui04-postgres.log",
+      "logSha256": "c49fa00966d5856cb680cea70885843b41bf4002adbf864fe0e4b39f845aa868",
+      "passed": 17,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8be5a2111a3c9c06c3994c5dca45ba7cbabea100eb3ac4582147a7c66351acb8"
+          "sha256": "c5ff2d358735b430d90630ab00c0d1360fa29e334eab59bc3f67d4b7130b96ec"
         }
       ]
-    },
-    {
-      "id": "ui01-migration",
-      "kind": "command",
-      "command": "npm run db:migrate:lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
-      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
-      "context": "Canonical migration manifest lint for the staged UI-01 delivery.",
-      "startedAt": "2026-11-27T02:03:59.458950+00:00",
-      "endedAt": "2026-11-27T02:03:59.671978+00:00",
-      "log": "/workspace/scratch/ui01-review-final/ui01-migration.log",
-      "logSha256": "f62e9557ae5e3db99ada81e4b1a735bbfaad3d553b1def0bf54020567bbd2b53"
     }
   ]
 }

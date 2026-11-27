@@ -25,15 +25,15 @@ function previewDecimal(value:string){
   return display==='0'&&/[1-9]/.test(value)?'<0.1':display;
 }
 
-function multiplierPreview({numerator,denominator}:NonNullable<ReturnType<typeof calculateQuotationPricing>['exactMultiplierPercent']>){
+export function quotationPercentageFraction({numerator,denominator}:NonNullable<ReturnType<typeof calculateQuotationPricing>['exactMultiplierPercent']>){
   const dividend=BigInt(numerator),divisor=BigInt(denominator);
   const tenths=(dividend*10n+divisor/2n)/divisor;
   if(tenths===0n&&dividend>0n)return '<0.1';
   return previewDecimal(`${tenths/10n}.${tenths%10n}`);
 }
 
-export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled,rowNames,onAdopt}:{
-  path:string;quoteId:string;version:number;refresh:number;disabled:boolean;rowNames:ReadonlyMap<string,string>;
+export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled,rowNames,onAdopt,internalStatus=true}:{
+  path:string;quoteId:string;version:number;refresh:number;disabled:boolean;internalStatus?:boolean;rowNames:ReadonlyMap<string,string>;
   onAdopt:(input:QuotationPricingInput,price:string)=>void;
 }){
   const [editing,setEditing]=useState<{input:QuotationPricingInput;costAtEdit:string|null}|null>(null);
@@ -68,7 +68,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     // exposes the underlying number without making it the user's last input.
     if(!value||(focused?.field===field&&focused.element.ownerDocument.activeElement===focused.element)||(authored&&!validDraft))return value;
     const exactRate=field==='multiplier'&&!authored?result?.exactMultiplierPercent:null;
-    return field==='customerUnitPrice'?quotationAmountDisplay(value):exactRate?multiplierPreview(exactRate):previewDecimal(value);
+    return field==='customerUnitPrice'?quotationAmountDisplay(value):exactRate?quotationPercentageFraction(exactRate):previewDecimal(value);
   };
   const edit=(field:QuotationPricingInput['field'],value:string)=>setEditing({input:{field,value},costAtEdit:current.unitCost});
   const costChanged=editing?editing.costAtEdit!==current.unitCost:
@@ -99,9 +99,9 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     });
   };
   return <div id="quote-cost-reference" className="quotation-workbench-pricing" aria-label="本单报价测算">
-    <p>成本合计 {current.unitCost===null?'待补齐':
+    <p>{internalStatus?'成本合计':'原成本价'} {current.unitCost===null?'待补齐':
       <span title={`精确成本 ${current.unitCost} 元/件`}>{quotationAmountDisplay(current.unitCost)} 元/件</span>}</p>
-    <p>报价状态 {current.readiness?.canConfirm?'报价资料已齐，待客户确认':current.readiness?.reasons.length?current.readiness.reasons.join('、'):current.status==='awaiting_customer_confirmation'?'待核对确认条件':statusLabels[current.status]}</p>
+    {internalStatus&&<p>报价状态 {current.readiness?.canConfirm?'报价资料已齐，待客户确认':current.readiness?.reasons.length?current.readiness.reasons.join('、'):current.status==='awaiting_customer_confirmation'?'待核对确认条件':statusLabels[current.status]}</p>}
     {(current.counts.returned+current.counts.resubmitted+current.counts.incomplete+current.counts.pendingCraftApproval)>0&&
       <p>待修改 {current.counts.returned} 项 · 待复核 {current.counts.resubmitted} 项 · 待补齐 {current.counts.incomplete} 项 · 待工艺审批 {current.counts.pendingCraftApproval} 项</p>}
     {current.reviews.length>0&&<ul aria-label="本报价退回明细">{current.reviews.map(review=>
@@ -114,7 +114,7 @@ export function QuotationWorkbenchPricing({path,quoteId,version,refresh,disabled
     <div className="budget-heading quotation-workbench-price-fields" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
       <TextInput label="报价倍率（%）" value={fieldValue('multiplier',result?.multiplierPercent)} isDisabled={unavailable}
         onFocus={event=>setFocused({field:'multiplier',element:event.currentTarget})} onBlur={()=>setFocused(null)} onChange={value=>edit('multiplier',value)}/>
-      <TextInput label="客户单件报价（元/件）" value={fieldValue('customerUnitPrice',result?.customerUnitPrice)} isDisabled={unavailable}
+      <TextInput label={internalStatus?"客户单件报价（元/件）":"对客户单价（元/件）"} value={fieldValue('customerUnitPrice',result?.customerUnitPrice)} isDisabled={unavailable}
         onFocus={event=>setFocused({field:'customerUnitPrice',element:event.currentTarget})} onBlur={()=>setFocused(null)} onChange={value=>edit('customerUnitPrice',value)}/>
     </div>
     {costChanged&&<p>成本版本已更新，已按原输入重新测算。</p>}
