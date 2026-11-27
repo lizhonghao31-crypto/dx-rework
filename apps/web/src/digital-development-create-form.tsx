@@ -771,7 +771,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
                 </div>
                 <div className="development-quantity-field development-size-control"><span>数量</span>
                   {guided?<DevelopmentEntryText label={quantityLabel} inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity}
-                    aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={changeQuantity}/>
+                    {...(quantityError?{status:{type:'error' as const}}:{})} aria-describedby={quantityError?errorId:undefined} onChange={changeQuantity}/>
                     :<input aria-label={quantityLabel} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity}
                       aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={event=>changeQuantity(event.target.value)}/>}
                 </div>
