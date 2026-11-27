@@ -1,6 +1,6 @@
 import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
-import {mkdtemp} from 'node:fs/promises';
+import {mkdtemp,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
@@ -114,22 +114,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
    await chooseDevelopmentCreation(page,'预下单');
    await page.getByRole('textbox',{name:'设计款号',exact:true}).fill(style);
-   await page.getByLabel('主布 面料名称',{exact:true}).fill('TEST 预下单棉布');
-   await page.getByLabel('主布 数量与单位',{exact:true}).fill('75米');
-   await page.getByLabel('主布 供应商',{exact:true}).fill('TEST 供应商');
-   const fabric=page.getByLabel('主布 面料名称',{exact:true}).locator('xpath=ancestor::tr');
-   const materialPrice=fabric.getByRole('textbox',{name:/材料单价$/});
-   const pricingUnit=fabric.getByRole('textbox',{name:/计价单位$/});
+   const fabric=page.locator('.development-material-inline-row').filter({has:page.getByRole('textbox',{name:/^主布(?: A)? 品名/})});
+   await fabric.getByRole('textbox',{name:/ 品名/}).fill('TEST 预下单棉布');
+   await fabric.getByRole('textbox',{name:/ 数量/}).fill('75');
+   await fabric.getByRole('textbox',{name:/ 供应商/}).fill('TEST 供应商');
+   const materialPrice=fabric.getByRole('textbox',{name:/ 单价（元\/米）/});
    expect(await materialPrice.inputValue()).toBe('');
-   expect(await pricingUnit.inputValue()).toBe('');
-   await materialPrice.fill('12.75');await pricingUnit.fill('米');
+   expect(await fabric.locator('[id$="-quantityUnit"]').textContent()).toBe('米');
+   await materialPrice.fill('12.75');
+   const total=fabric.locator('[data-material-total]');
+   await total.filter({hasText:'956.3 元'}).waitFor();expect(await total.getAttribute('title')).toBe('956.25');
    for(const category of ['主布','配布']){
     const control=page.getByRole('button',{name:`＋ 添加${category}`,exact:true});
     expect(await control.evaluate(button=>button.closest('.dx-designer-astryx')!==null&&!button.classList.contains('dx-button'))).toBe(true);
     await control.focus();await control.press('Enter');
-    const added=page.getByLabel(`${category} 面料名称`,{exact:true}).last();
+    const added=page.getByRole('textbox',{name:new RegExp(`^${category} 品名`)}).last();
     await expect.poll(()=>added.evaluate(input=>input===document.activeElement)).toBe(true);
-    await added.locator('xpath=ancestor::tr').getByRole('button',{name:'删除面料',exact:true}).click();
+    await page.locator('.development-material-inline-row').filter({has:page.getByRole('textbox',{name:new RegExp(`^${category} 品名`)})})
+     .last().getByRole('button',{name:'删除',exact:true}).click();
     await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    }
    expect(await page.getByLabel('PO 1 颜色',{exact:true}).count()).toBe(0);
@@ -141,12 +143,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const draft=await response.json();
    expect(draft).toMatchObject({status:'draft',productionOrderId:null,publishedAt:null,document:{customerOrderDraft:{withOrder:true,stage:'preorder'}}});
    const material=draft.document.materials.find((row:{name:string})=>row.name==='TEST 预下单棉布');
-   expect(material).toMatchObject({quantity:'75米',supplier:'TEST 供应商',unitPrice:'12.75',pricingUnit:'米'});
+   expect(material).toMatchObject({quantity:'75',quantityUnit:'米',supplier:'TEST 供应商',unitPrice:'12.75',pricingUnit:'米'});
    await page.getByRole('button',{name:'＋ 添加配布',exact:true}).click();
-   const spareName=page.getByLabel('配布 面料名称',{exact:true}).last();
-   const unnamed=spareName.locator('xpath=ancestor::tr');
-   const sparePrice=unnamed.getByRole('textbox',{name:/材料单价$/}),spareUnit=unnamed.getByRole('textbox',{name:/计价单位$/});
-   await sparePrice.fill('0');await spareUnit.fill('米');
+   const spareName=page.getByRole('textbox',{name:/^配布 品名/}).last();
+   const unnamed=page.locator('.development-material-inline-row').filter({has:page.getByRole('textbox',{name:/^配布 品名/})}).last();
+   const sparePrice=unnamed.getByRole('textbox',{name:/ 单价（元\/米）/});
+   await sparePrice.fill('0');
    await unnamed.getByRole('status').filter({hasText:'请先填写材料名称'}).waitFor();
    const rejected=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/sources/${draft.sourceId}/development`)&&r.request().method()==='PUT');
    await page.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();
@@ -159,11 +161,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await validation.getByRole('button',{name:'关闭',exact:true}).click();
    await spareName.pressSequentially('TEST spare fabric');
    expect(await sparePrice.inputValue()).toBe('0');
-   expect(await spareUnit.inputValue()).toBe('米');
+   expect(await unnamed.locator('[id$="-quantityUnit"]').textContent()).toBe('米');
    await unnamed.getByRole('textbox',{name:'配布 规格',exact:true}).fill('TEST changed specification');
    expect(await sparePrice.inputValue()).toBe('');
-   expect(await spareUnit.inputValue()).toBe('');
-   await unnamed.getByRole('button',{name:'删除面料',exact:true}).click();
+   await unnamed.locator('[data-material-total]').filter({hasText:'待核'}).waitFor();
+   await unnamed.getByRole('button',{name:'删除',exact:true}).click();
    await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
    await materialPrice.fill('13.25');
    const retrySave=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(`/sources/${draft.sourceId}/development`)&&r.request().method()==='PUT');
@@ -199,7 +201,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    })])});
    await page.getByText('已保存原业务记录',{exact:true}).waitFor();
    expect(await orderTimeCreated(h.db,{kind:'source',id:diagnosis.sourceId})).toBeNull();
-  }finally{await creation.context.close();}
+  }catch(error){await writeFile(join(h.evidence,'legacy-preorder-create-failure.txt'),await creation.page.locator('body').innerText());throw error;}
+  finally{await creation.context.close();}
   const newPath=`/ui/digital-production?workspace=merchandiser&kind=preparation&search=${encodeURIComponent(style)}`;
   const work=await h.open(merch.actorId,1165,{},newPath);
   try{
@@ -323,17 +326,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page,base='/api/digital-production/sources/'+original.sourceId;
-   await page.getByRole('button',{name:style,exact:true}).click();
+   // An original draft with live handover/procurement cannot be discarded.
+   // UI-01 locates it under follow-up, not in the ordinary draft box.
+   await page.getByRole('textbox',{name:'搜索草稿款号',exact:true}).fill(style);
+   await page.getByText('审批与原档案核对',{exact:true}).click();
+   const history=page.getByRole('listitem').filter({hasText:style});
+   const archived=history.getByRole('link',{name:'查看原开发档案',exact:true});
+   expect(await history.getByRole('button',{name:/^删除草稿/}).count()).toBe(0);
+   await archived.click();
+   expect(new URL(page.url()).searchParams.get('development')).toBe(original.sourceId);
    await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
    await page.getByRole('button',{name:'确认',exact:true}).click();
    expect(await page.getByLabel('设计款号',{exact:true}).inputValue()).toBe(style);
+   const chapters=page.getByRole('navigation',{name:'单据章节',exact:true});
+   await chapters.getByRole('button',{name:'面辅料',exact:true}).click();
    expect(await page.locator('#development-'+original.fabric.materialId+'-name').inputValue()).toBe(original.fabric.name);
    await page.getByRole('combobox',{name:/^衣类/}).click();
-   await page.getByRole('option',{name:'上衣',exact:true}).click();
+   await page.getByRole('option',{name:'上装',exact:true}).click();
    const garment=page.getByRole('alertdialog',{name:'更正衣类'});
    await garment.getByRole('button',{name:'确认更正',exact:true}).click();
    await garment.waitFor({state:'hidden'});
-   for(let i=0;i<2;i++)await page.getByRole('button',{name:'下一步',exact:true}).click();
+   await page.getByRole('button',{name:'下一步',exact:true}).click();
+   await chapters.getByRole('button',{name:'打板信息',exact:true}).click();
+   await page.getByRole('button',{name:'下一步',exact:true}).click();
    expect(await page.getByLabel('PO 1 颜色',{exact:true}).inputValue()).toBe('黑');
    const intermediate=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname===base+'/development');
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
@@ -345,6 +360,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.reload();
    await page.getByRole('heading',{name:'客户与交货',exact:true}).waitFor();
    expect(await page.getByLabel('PO 1 颜色',{exact:true}).inputValue()).toBe('黑');
+   // The resumed document retains the category, not a browser-local price
+   // receipt. Open the original chapter and wait for its current quote.
+   await page.getByRole('button',{name:'上一步',exact:true}).click();
+   await page.getByLabel('建单步骤').getByRole('heading',{name:'开发需求',exact:true}).waitFor();
+   await chapters.getByRole('button',{name:'打板信息',exact:true}).click();
+   await page.locator('#development-pattern-preparation').getByText(/^执行单价：.*元/).waitFor();
+   await page.getByRole('button',{name:'下一步',exact:true}).click();
    const checkFor=(kind:'development_publish'|'confirm_order')=>page.waitForResponse(r=>
     r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/order-time/check')&&
     r.request().postDataJSON()?.operation?.kind===kind);
@@ -386,7 +408,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(sheet.document?.files).toEqual([{attachmentId:picture,kind:'款图'}]);
    expect(h.requests.filter(request=>request.session===tab.session&&request.method==='POST'&&request.path==='/api/digital-production/sources/drafts')).toEqual([]);
    expect((await formal()).rowCount).toBe(1);
-  }finally{try{await tab.close();}finally{h.setCollectionScene(undefined);}}
+  }catch(error){await writeFile(join(h.evidence,'legacy-preorder-conversion-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+  finally{try{await tab.close();}finally{h.setCollectionScene(undefined);}}
  });
  it('renews an instruction-backed handover from the original signed panel after linking a historical source',async()=>{
   const {root}=h.f,designer=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,style='TEST-ORDER-HANDOVER-'+randomUUID();

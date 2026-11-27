@@ -272,6 +272,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       const id=(name:string)=>`development-${item.materialId}-${name}`;
       const rawUnit=item.quantityUnit?.trim()||'',unit=auxiliary?rawUnit:'米';
       const amount=workbenchMaterialAmount(item);
+      const priceIdentityIssue=readonly?null:developmentMaterialPriceIdentityIssue(item);
       const input=(key:'name'|'specification'|'quantity'|'width'|'weight'|'composition'|'color'|'garmentColor'|'part'|'consumption'|'label'|'unitPrice',name:string,marker='（选填）')=>{
         const message=issue(id(key));
         return <DevelopmentEntryText id={id(key)} label={`${label} ${name}`} visibleLabel
@@ -302,6 +303,7 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
             }}/> :<><span>数量单位</span><output id={id('quantityUnit')}>米</output></>}
             {issue(id('quantityUnit'))&&<small role="alert">{issue(id('quantityUnit'))}</small>}</div>
           <div>{input('unitPrice',`单价（元${unit?'/'+unit:''}）`)}
+            {priceIdentityIssue&&<small role="status">{priceIdentityIssue}</small>}
             {(item.pricingUnit&&unit&&item.pricingUnit!==unit||!auxiliary&&rawUnit&&rawUnit!=='米')&&<small role="status">原单位与当前物理单位不同，请核对后明确采用。
               {!readonly&&<DevelopmentEntryAction type="button" disabled={busy} onClick={async()=>{
                 if(await confirmInApp(`确认本行数量与价格使用${unit}？不换算原数值。`)&&!writing.current)
@@ -327,9 +329,10 @@ export function DevelopmentDocumentFields({fixedCraft=false,materialFactsReadonl
       </section>;
     })}
     {!readonly&&<div className="development-actions">
-      {(onlyAuxiliary?['辅料'] as const:onlyFabric?['主布','配布'] as const:['主布','配布','辅料'] as const).map(category=><DocumentAddRow key={category} label={`添加${category}`}
-        disabled={busy||document.materials.length>=100} onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});
-        requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());}}/>)}
+      {(onlyAuxiliary?['辅料'] as const:onlyFabric?['主布','配布'] as const:['主布','配布','辅料'] as const).map(category=><DevelopmentEntryAction
+        key={category} type="button" className="dx-doc-add-row budget-controls" disabled={busy||document.materials.length>=100}
+        onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});
+        requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-name`)?.focus());}}>{`＋ 添加${category}`}</DevelopmentEntryAction>)}
     </div>}
   </div>;
   const compactSection=(title:string,summary:string,children:ReactNode)=>compact
