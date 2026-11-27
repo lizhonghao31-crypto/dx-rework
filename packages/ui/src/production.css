@@ -15,7 +15,7 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-stage dl > div { display: flex; gap: 10px; margin-top: 8px; font-size: 12px; }
 .dx-production-stage dt { color: var(--production-muted); }
 .dx-production-stage dd { margin: 0; }
-.dx-production-ui :focus-visible { outline: 3px solid #66a5ff; outline-offset: 2px; }
+.dx-production-ui :focus-visible:where(:not(.dx-designer-astryx .dx-development-astryx-control input, .dx-designer-astryx .astryx-selector-search input)) { outline: 3px solid #66a5ff; outline-offset: 2px; }
 .dx-production-ui { min-height: 100dvh; min-width: 0; }
 .dx-production-ui .production-command-main,
 .dx-production-ui .digital-analysis { padding: 0; }

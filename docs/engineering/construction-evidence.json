@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
   "risk": "full",
-  "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
+  "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
   "rules": [
     {
       "rule": "创建首页把真实可删草稿箱与新建入口并排，保留搜索、分页、原请求恢复及本页已确认的草稿数据。",
@@ -17,7 +17,8 @@
         "apps/web/src/document-editor.css",
         "packages/ui/src/production.css",
         "tests/unit/development-creation-draft.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "apps/web/src/digital-development-create-form.tsx"
       ],
       "reads": [
         "apps/web/src/use-development-creation-draft.ts",
@@ -27,7 +28,7 @@
         "tests/unit/development-creation-draft.test.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
-      "expectation": "签名正常入口核自动编号回执损失、原请求仅查询不重发、未归属编号不误删及无关草稿仍能使用；退回审批可从原审批与草稿核对区进入原资料继续填。保留样式来源与搜索、分页及输入。",
+      "expectation": "签名正常入口核自动编号回执损失、原请求仅查询不重发、未归属编号不误删及无关草稿仍能使用；退回审批可从原审批与草稿核对区进入原资料继续填。保留样式来源与搜索、分页及输入。 原表单的无效 PO 件数由 Astryx 官方错误状态渲染，内部 input 不再匹配旧错误描边和旧焦点描边。禁用急单选控件和改错后原订单确认均用真实浏览器。",
       "checks": [
         "ui01-native",
         "ui01-unit"
@@ -65,23 +66,23 @@
     {
       "id": "ui01-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'keeps a lost numbered reservation|recovers only the original eligible shell|keeps one creation draft panel|keeps explicit creation types|discards ordinary drafts|reuses the acknowledged source|starts one effective clock|retains an acknowledged-server|restores native original publish' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-native.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t 'keeps one creation draft panel|keeps a lost numbered reservation|keeps explicit creation types|starts one effective clock|recovers only the original eligible shell|discards ordinary drafts|numbers new pure and confirmed|restores native original' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
-      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
-      "context": "Current prior-Light and Review candidate, exact original browser and PostgreSQL; original numbered receipt loss and returned time request fresh tab, plus creation CSS/legacy data/roles and concurrency",
-      "startedAt": "2026-11-27T01:34:22.265799+00:00",
-      "endedAt": "2026-11-27T01:36:07.592370+00:00",
+      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
+      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
+      "context": "Original designer/Root Chromium/PostgreSQL on exact bytes. Captures Astryx disabled and error controls and keeps old and new draft lifecycle checks.",
+      "startedAt": "2026-11-27T02:03:57.145606+00:00",
+      "endedAt": "2026-11-27T02:05:59.488592+00:00",
       "log": "/workspace/scratch/ui01-review-final/ui01-native.log",
-      "logSha256": "3400a128bc1562648c9d59f407c5d09039046385377e33e3ed24ed33c598ddb2",
+      "logSha256": "fa7ed8db4d98f6f7d9ef09aa79a2b34fecd9f11c40135b1ef5e044f375491cc0",
       "passed": 9,
       "failed": 0,
       "skipped": 17,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ae4fbb1e2600dfecaa28f0d350a329145ccd33ad1af167b9b67478760c9b1410"
+          "sha256": "ff571156caf8f73d4c9b02da1487846beadce558d07aa9847058d49944544ab8"
         }
       ]
     },
@@ -91,20 +92,20 @@
       "command": "npx vitest run tests/unit/development-creation-draft.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui01-review-final/ui01-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
-      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
-      "context": "Review-corrected draft recovery and repository risk configuration for exact candidate",
-      "startedAt": "2026-11-27T01:36:48.847299+00:00",
-      "endedAt": "2026-11-27T01:36:49.842818+00:00",
+      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
+      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
+      "context": "Draft commands, protected inputs and Full gate path classification on final UI-01 source.",
+      "startedAt": "2026-11-27T02:03:57.140113+00:00",
+      "endedAt": "2026-11-27T02:03:59.091286+00:00",
       "log": "/workspace/scratch/ui01-review-final/ui01-unit.log",
-      "logSha256": "d912392067396de75cbf597fdb8a4cafffdec97182dcdc00824f09c6abf08bc6",
+      "logSha256": "67ab99902aff8845b35f0d9d383b926b0fdc1f6ddddafba1212893c5fc31e80c",
       "passed": 151,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6e85ad6692466643e523a2de9d76ba0391e2c9a495d27f9170b8c371ee73c0aa"
+          "sha256": "8be5a2111a3c9c06c3994c5dca45ba7cbabea100eb3ac4582147a7c66351acb8"
         }
       ]
     },
@@ -114,11 +115,11 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0cdb8cb549ebff4acfe2b296a9995427193cbef8",
-      "sourceFingerprint": "81f2b4d298bd4d114a859e48eb8382b6cb4acc9a3d00c2dcca65d4efcd7e072f",
-      "context": "Exact local bundle migration inventory checksum and readiness validation",
-      "startedAt": "2026-11-27T01:36:48.854292+00:00",
-      "endedAt": "2026-11-27T01:36:49.019346+00:00",
+      "testedHead": "ebec7fb7d600454d7914431e4bc439d7aafd250c",
+      "sourceFingerprint": "56020c76675ee49fa9f81c532ede27805b49bcbd8d3af09d902d343f6ba0aa88",
+      "context": "Canonical migration manifest lint for the staged UI-01 delivery.",
+      "startedAt": "2026-11-27T02:03:59.458950+00:00",
+      "endedAt": "2026-11-27T02:03:59.671978+00:00",
       "log": "/workspace/scratch/ui01-review-final/ui01-migration.log",
       "logSha256": "f62e9557ae5e3db99ada81e4b1a735bbfaad3d553b1def0bf54020567bbd2b53"
     }

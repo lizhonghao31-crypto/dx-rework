@@ -25,6 +25,23 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+async function inspectCreationControl(page:Page,selector:string){
+ const session=await page.context().newCDPSession(page);
+ try{
+  await session.send('DOM.enable');await session.send('CSS.enable');
+  const {root}=await session.send('DOM.getDocument');
+  const {nodeId}=await session.send('DOM.querySelector',{nodeId:root.nodeId,selector});
+  const [actual,values]=await Promise.all([session.send('CSS.getMatchedStylesForNode',{nodeId}),session.send('CSS.getComputedStyleForNode',{nodeId})]);
+  const matched=actual.matchedCSSRules?.flatMap(rule=>rule.matchingSelectors.map(index=>rule.rule.selectorList.selectors[index]?.text))??[];
+  expect(matched.some(text=>text?.includes('dx-production-refined')&&text.includes('.development-create-wizard'))).toBe(false);
+  expect(matched.some(text=>text?.includes('.dx-doc-instruction')&&text.includes('[aria-invalid=true]'))).toBe(false);
+  const computed=Object.fromEntries(values.computedStyle.filter(row=>['border-top-width','outline-style','box-shadow','opacity','cursor'].includes(row.name)).map(row=>[row.name,row.value]));
+  const native=await page.locator(selector).evaluate(node=>({disabled:node.getAttribute('aria-disabled')??(node.hasAttribute('disabled')?'true':null),invalid:node.getAttribute('aria-invalid'),
+   focused:document.activeElement===node,astryx:Boolean(node.closest('.dx-development-astryx-control,.astryx-selector'))}));
+  expect(native.astryx).toBe(true);
+  return {matched,computed,native};
+ }finally{await session.detach();}
+}
 async function openNewWizard(page:Page,label:'纯开发'|'已确认订单'|'预下单'='纯开发',garment:'上衣'|'裤子'='上衣',rush=false){
  await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
  await chooseDevelopmentCreation(page,label,garment,rush);
@@ -415,7 +432,15 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     await page.getByRole('textbox',{name:'PO 1 正式款号 / PO',exact:true}).fill('TEST-G2-FORMAL-PO');
     await page.getByRole('textbox',{name:'PO 1 颜色',exact:true}).fill('黑');
     await page.getByRole('textbox',{name:'尺码列 1',exact:true}).fill('M');
-    await page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true}).fill('2');
+    const quantity=page.getByRole('textbox',{name:'PO 1 订购数量 1',exact:true});
+    await quantity.fill('1.5');
+    await page.locator('#development-quantity-error-0-0').waitFor();
+    const invalid=await inspectCreationControl(page,'.development-quantity-field input[aria-invalid="true"]');
+    expect(invalid.native).toMatchObject({invalid:'true',focused:true});
+    expect(invalid.computed['border-top-width']).toBe('0px');
+    expect(invalid.computed['outline-style']).toBe('none');
+    await writeFile(join(evidence,'ui01-astryx-invalid-control.json'),JSON.stringify(invalid,null,2));
+    await quantity.fill('2');
     await page.locator('#development-po-date-1').fill('2027-04-30');
     await page.getByRole('combobox',{name:'大货工艺是否确定',exact:true}).selectOption('known');
     await page.getByRole('combobox',{name:'大货是否预缩',exact:true}).selectOption('no');
@@ -601,7 +626,11 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(await types.getByRole('button',{name:/^(纯开发|已确认订单|预下单)$/}).allTextContents()).toEqual(['纯开发','已确认订单','预下单']);
    expect(await types.getByRole('button',{name:'进入建单',exact:true}).isDisabled()).toBe(true);
    await types.getByRole('button',{name:'纯开发',exact:true}).click();
-   expect(await types.getByRole('combobox',{name:/^急单/}).isDisabled()).toBe(true);
+   const disabledRush=types.getByRole('combobox',{name:/^急单/});
+   expect(await disabledRush.isDisabled()).toBe(true);
+   const disabled=await inspectCreationControl(page,`[id=${JSON.stringify(await disabledRush.getAttribute('id'))}]`);
+   expect(disabled.native).toMatchObject({disabled:'true',focused:false});
+   await writeFile(join(h.evidence,'ui01-astryx-disabled-control.json'),JSON.stringify(disabled,null,2));
    await types.getByRole('combobox',{name:/^衣类/}).click();
    await page.getByRole('option',{name:'裤子',exact:true}).click();
    expect(await types.getByRole('button',{name:'进入建单',exact:true}).isDisabled()).toBe(true);

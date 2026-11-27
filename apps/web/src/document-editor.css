@@ -25,7 +25,7 @@
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-errors{padding:12px 16px;border:1px solid #e5484d;border-radius:8px;margin:0 0 16px;background:#fff7f7;color:#a92830}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-errors button{background:transparent;border:0;color:inherit;text-align:left;text-decoration:underline;cursor:pointer;font:inherit}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field-error{display:block;color:#a92830;font-size:12px;line-height:18px;margin-top:4px}
- :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) [aria-invalid=true]{border-color:#e5484d}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) [aria-invalid=true]:where(:not(.dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input), .dx-designer-astryx :is(.dx-development-astryx-control,.astryx-text-input,.astryx-date-input,.astryx-selector,.astryx-selector-search,.astryx-file-input) *)){border-color:#e5484d}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-add-row{color:#0066ff;background:#fff;border:0;padding-left:0}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-scroll{overflow-x:auto;max-width:100%}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-viewport>table>thead{position:relative;z-index:4;transform:translateY(var(--dx-doc-header-offset,0px))}
