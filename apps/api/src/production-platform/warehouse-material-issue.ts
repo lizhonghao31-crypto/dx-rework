@@ -48,7 +48,11 @@ export function materialIssuesOnScope(history:readonly MaterialIssueEvent[],inst
 export function ledgerForMaterialIssue(item:WarehouseReceiptWorkItem,history:readonly PreparationMaterialFact[],issues:readonly WarehouseLotIssue[]|null,
  usableFabricLots?:readonly BulkFabricBatchRef[]){
  if(!item.received&&!usableFabricLots)return null;
- const ledger=projectWarehouseIssueAllocation(item.basis.unit,warehouseReceiptMovements(history,item.basis),issues);
+ const movements=warehouseReceiptMovements(history,item.basis);
+ const legacy=item.reconciliation?.activeBatches.filter(row=>row.quantityRowKey).map(row=>({
+  basis:item.basis,original:row.ref,quantity:row.quantity,occurredAt:row.occurredAt,valid:true,
+ }))??[];
+ const ledger=projectWarehouseIssueAllocation(item.basis.unit,[...movements,...legacy],issues);
  return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots.filter(lot=>lot.materialId===item.materialId).map(lot=>lot.receipt)):ledger;
 }
 
@@ -75,7 +79,14 @@ export async function readMaterialIssueDestination(db:PreparationDB,orderId:stri
  * make stock ready. Fabrics require the separate, original quality evidence. */
 export function materialIssueOptions(state:ProductionReadinessState,active:ActiveWarehouseInstructionDemand,history:readonly MaterialIssueEvent[],asOf:string,
  destination:(lineId:string|null)=>boolean,poLabels?:ReadonlyMap<string,string>,usableFabricLots?:readonly BulkFabricBatchRef[]){
- const view=deriveWarehouseReceiptWork(state,asOf,active);
+ const view=deriveWarehouseReceiptWork(state,asOf,active).map(item=>{
+  if(item.kind!=='fabric_receipt'||!state.warehouseReceiptCutover)return item;
+  const projected=state.warehouseReceiptFacts?.find(row=>row.kind==='fabric_receipt'&&row.materialId===item.materialId&&
+   row.lineId===item.lineId&&row.scopeRef===item.scopeRef&&row.basis.unit===item.basis.unit&&row.basis.supplierId===item.basis.supplierId&&
+   row.basis.adoptedRef===item.basis.adoptedRef&&row.basis.resource.id===item.basis.resource.id);
+  if(!projected?.reconciliation)return {...item,received:null};
+  return {...item,reconciliation:projected.reconciliation,received:projected.reconciliation.received};
+ });
  const result=new Map<string,{item:WarehouseReceiptWorkItem;ledger:NonNullable<ReturnType<typeof ledgerForMaterialIssue>>;
   option:NonNullable<BulkMaterialsView['items'][number]['issueOptions']>[number]}[]>();
  for(const row of active.demand.rows){

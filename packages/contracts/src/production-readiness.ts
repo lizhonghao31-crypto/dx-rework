@@ -50,6 +50,9 @@ export const WarehouseReceiptBatchSchema=z.object({
  investment:WarehouseReceiptRefSchema,materialFingerprint:z.string().regex(/^[a-f0-9]{64}$/),
  expectedReceiptVersion:z.number().int().nonnegative(),
  replaces:WarehouseReceiptRefSchema.optional(),
+ receiptEvidenceLine:z.object({attachmentId:z.uuid(),documentNumber:z.string().trim().min(1).max(120),line:z.string().trim().min(1).max(120)}).strict().optional(),
+ continuesReceipt:z.object({resource:z.object({kind:z.enum(['source','order']),id:z.uuid()}).strict(),
+  key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict().optional(),
  quantity:z.string().regex(/^(?:0|[1-9][0-9]{0,7})(?:\.[0-9]{1,6})?$/).refine(value=>Number(value)<=10000000,'实收数量超出允许范围'),
  occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),
  evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
@@ -95,7 +98,7 @@ export type WarehouseReceiptPageQuery=z.infer<typeof WarehouseReceiptPageQuerySc
 export type WarehouseNativeTaskQuery=z.infer<typeof WarehouseNativeTaskQuerySchema>;
 export type WarehouseReceiptBatch=z.infer<typeof WarehouseReceiptBatchSchema>;
 export type WarehouseReceiptBatchEvidence=Pick<WarehouseReceiptBatch,'kind'|'scopeRef'|'materialId'|'lineId'|'supplierId'|'unit'|'investment'|
- 'materialFingerprint'|'replaces'|'quantity'>;
+ 'materialFingerprint'|'replaces'|'quantity'|'receiptEvidenceLine'>;
 type WarehouseQuantity={quantity:string;unit:string};
 type WarehouseReceiptRef=z.infer<typeof WarehouseReceiptRefSchema>;
 type ReconciledWarehouseBatch={ref:WarehouseReceiptRef;quantityRowKey?:string;quantity:WarehouseQuantity;occurredAt:string};
@@ -108,7 +111,11 @@ export type WarehouseReceiptReconciliationProjection={
  nativeNeedsReview:boolean;activeBatches:ReconciledWarehouseBatch[];firstArrival:ReconciledWarehouseBatch|null;
  procurementRemaining:string|null;eligibleForInspection:boolean;
 };
+export type WarehouseReceiptContinuation={resource:PreparationResource;key:string;input:PreparationMaterialRecord};
+export type WarehouseReceiptMode={generation:number;mode:'active'|'safe_read'};
 export type WarehouseReceiptWorkItem={
+ cutover?:WarehouseReceiptMode;
+ pendingReceipts?:WarehouseReceiptContinuation[];
  kind:WarehouseReceiptBatch['kind'];materialId:string;name:string;scopeRef:string;lineId:string|null;supplier:string|null;
  basis:{resource:PreparationResource;kind:WarehouseReceiptBatch['kind'];scopeRef:string;materialId:string;lineId:string|null;adoptedRef:string;supplierId:string|null;unit:string};
  purchase:{invested:WarehouseQuantity;investedAt:string;original:WarehouseReceiptRef;handover:WarehouseReceiptRef};
@@ -119,7 +126,7 @@ export type WarehouseReceiptWorkItem={
  receiptVersion:number;
  activeBatches:{ref:WarehouseReceiptRef;quantity:WarehouseQuantity;occurredAt:string;evidenceIds?:string[]}[];
 };
-export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
+export type WarehouseReceiptListItem=Pick<WarehouseReceiptWorkItem,'cutover'|'kind'|'materialId'|'name'|'lineId'|'scopeRef'|'supplier'|'received'|'productionRequired'|'balance'> & {
  reconciliation?:Pick<WarehouseReceiptReconciliationProjection,'basisRevision'|'verified'|'received'|'procurementRemaining'|'nativeNeedsReview'> & {pendingCount:number};
  id:string;resource:PreparationResource;orderNumber:string|null;issuedOrderNumber?:string|null;customerCode:string|null;orderRush?:true;
  poNumber:string|null; assigneeName:string|null; invested:WarehouseQuantity; investedAt:string;
@@ -155,6 +162,9 @@ export type MaterialInvestmentReminder={
  closed:{actorId:string;at:string;reason:string}|null;termination:{at:string|null;kind:'cancelled'|'special_closure'}|null;
 };
 export type ProductionReadinessState={
+ warehouseReceiptCutover?:WarehouseReceiptMode;
+ warehouseReceiptFacts?:WarehouseReceiptWorkItem[];
+ warehouseReceiptPending?:{resource:PreparationResource;key:string};
  materialInvestmentReminder?:MaterialInvestmentReminder&{canClose:boolean};
  preorderApplicabilityCandidates?:PreorderMaterialApplicabilityCandidate[];
  sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;orderInstructionVersion?:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;

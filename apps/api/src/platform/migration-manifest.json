@@ -1335,6 +1335,10 @@
     {
       "version": "0319_warehouse_receipt_reconciliation",
       "checksum": "ba29fc32cf8cc11f524488b0e369c2c92d0f52b1fd5d41860943ff89327eca5d"
+    },
+    {
+      "version": "0320_warehouse_receipt_cutover",
+      "checksum": "426a59c94a9f7a6619c5e8626330ee245b12284e83d158a093a87e8a616803f3"
     }
   ]
 }

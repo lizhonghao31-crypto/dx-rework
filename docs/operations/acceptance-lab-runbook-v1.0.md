@@ -390,3 +390,9 @@ Acceptance 更新仍通过固定 root launcher、生产只读健康/锁、实际
 部署者在所有实例、schema、核心新单/多PO/双工艺及原有界队列核验完成后，才可一次切换新采用为fixed_v2。现存v2对象继续按自己的timelineSchemaVersion/routeSchemaVersion读写；关闭新采用只使后续新对象不再采用，不能把已有stepRef/B0/Bk解释回legacy。新数据已写后不得盲退到不认识v2的旧二进制，不通过回退配置删除事实、审计、附件或已冻结标准。普通GET仍不全库重建；共享派生更新未完成时保留原pending/failed语义。
 
 现场更新及真实业务验收仍由用户执行，本节不是已部署或现场通过的回执。既有生产锁、权限/备份/恢复和固定版本流程不变。
+
+### 仓库收布按采购范围切换
+
+安装获准的固定工具 SHA 并用原 `dx-acceptance update <SHA>` 安装同一候选后，发布运维人用 `dx-acceptance warehouse-receipt status <SHA> <scope-file>` 查看原采购及批次。只读预览文件可为 `{"resource":{"kind":"order","id":"<母单 UUID>"}}`。输出含原来源、代次、准确采购组键、投料原版及依据摘要、已核/待核和原草稿行。不要把款号或物料名当范围。
+
+取得批准后，以完整原组填写 `resource`、`sourceId`（没有来源则为 null）、`expectedGeneration`、唯一 `requestId`、`reason` 和 `scopes`。每条 scope 仅填预览的 `key`、`investment`（原记录 ID 及版）和 `basisRevision`。文件须为 root 拥有且非链接、非组或其他用户可写。用同入口的 `activate` 在原锁下原子切换，或用 `safe-read` 切回同 SHA 的安全读。成功后核新代次；过期批准须刷新原范围重核，不能重录原实收。重复的相同请求 ID 不再执行。安全读不回旧二进制或数据库，不重启服务；若原范围实质变化，按最新预览重新审批后再启用。H1 未核证据不计为零，也不能作为别的采购组的阻挡条件。

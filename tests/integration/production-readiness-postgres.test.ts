@@ -1,3 +1,6 @@
+import type {BulkPreparationSheet} from '@dx-rework/contracts/bulk-preparation';
+import type {WarehouseReceiptWorkItem} from '@dx-rework/contracts/production-readiness';
+import {warehouseReceiptCutover} from '../../apps/api/src/production-platform/warehouse-receipt-cutover-service.js';
 import {readWarehouseReceiptReconciliations} from '../../apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.js';
 import {numberedDevelopmentSheetFixture} from '../helpers/numbered-development-document-fixture.js';
 import {assignedWarehousePreparationResources} from '../../apps/api/src/production-platform/warehouse-assigned-resources.js';
@@ -1948,6 +1951,140 @@ async function originalWarehouseReadiness(db:Pool){
   });
   return {h,designer,merch,root,style,started,scene,requests,orderId};
  };
+ it('WH-02 uses the real 104m PO receipt, fabric report and draft clock at their own business times',async()=>{
+  const first='2027-04-24T17:05:00.000Z',second='2027-04-24T17:08:00.000Z',sha='f'.repeat(40);
+  const {h,merch,root,scene,orderId}=await directMaterialOrder(1,f,first);
+  const resource={kind:'order' as const,id:orderId},warehouse=h.f.people.warehouse!;
+  const readiness=new ProductionReadinessService(h.db),instructions=new ProductionInstructionService(h.db,true);
+  const bulk=new BulkPreparationService(h.db),app=Fastify(),materialId=randomUUID();
+  const principals={warehouse,merch,root};
+  const deps={service:new DigitalProductionIdentityService(h.db,true),creationEnabled:true,workbenchNumberedCreation:true,
+   root:new RootAuthority(h.db,'anchor-test','uat-root'),authenticate:async(token:string|undefined)=>{
+    const who=principals[token as keyof typeof principals];
+    if(!who)throw new ApplicationError('UNAUTHORIZED','TEST subject required',401);
+    return {id:who.actorId,displayName:'TEST active role',businessRoles:who.actorRoles,capabilities:['digital_production:view']};
+   }};
+  app.setErrorHandler((error,_request,reply)=>reply.code((error as ApplicationError).statusCode??500).send({message:error.message}));
+  registerBulkPreparationRoutes(app,deps,bulk);
+  registerProductionReadinessRoutes(app,deps,readiness,h.f.attachments);
+  const base='/digital-production/orders/'+orderId,rd=base+'/production-readiness',bp=base+'/bulk-preparation';
+  const get=async<T>(url:string,who='warehouse')=>{
+   const response=await app.inject({method:'GET',url,headers:{cookie:'dx_rework_session='+who}});
+   expect(response.statusCode,response.body).toBe(200);
+   return response.json<T>();
+  };
+  const post=(url:string,payload:object,who='warehouse',key=randomUUID())=>app.inject({
+   method:'POST',url,payload,headers:{cookie:'dx_rework_session='+who,'idempotency-key':key},
+  });
+  const status=()=>warehouseReceiptCutover(h.db,'status',sha,'test-acceptance-operator',{resource});
+  const transition=async(action:'activate'|'safe-read',override={})=>{
+   const prior=await status();
+   return warehouseReceiptCutover(h.db,action,sha,'test-acceptance-operator',{resource,sourceId:prior.sourceId,
+    expectedGeneration:prior.generation,requestId:randomUUID(),reason:'TEST exact original 104m PO scope',
+    scopes:prior.scopes.map(({key,investment,basisRevision})=>({key,investment,basisRevision})),...override});
+  };
+  const window=async()=> (await h.db.query(`SELECT window_id,started_at,basis_json FROM digital_preparation_windows
+   WHERE production_order_id=$1 AND kind='draft' ORDER BY epoch`,[orderId])).rows;
+  const sheet=()=>get<BulkPreparationSheet>(bp);
+  const work=async()=> (await get<WarehouseReceiptWorkItem[]>(rd+'/warehouse-receipt-work'))[0]!;
+  const take=async(quantity:string,occurredAt:string,extra:object={},key=randomUUID())=>{
+   const item=await work(),basis=item.basis;
+   return post(rd+'/warehouse-receipts',{kind:'fabric_receipt',scopeRef:item.scopeRef,materialId,lineId:item.lineId,
+    supplierId:basis.supplierId,unit:basis.unit,investment:item.purchase.original,materialFingerprint:basis.adoptedRef,
+    expectedReceiptVersion:item.receiptVersion,quantity,occurredAt,note:'TEST real physical receipt',evidenceIds:[],...extra},'warehouse',key);
+  };
+  const report=async(at:string)=>{
+   const info=(await sheet()).fabric!.warehouseInspection!;
+   return {expectedReportId:null,expectedWarehouseBasisRevision:info.basisRevision,material:'TEST main fabric',
+    arrivedAt:info.firstReceiptAt,inspectedAt:at,result:'不合格',note:'TEST original inspection rejects quality',
+    receiptBatches:info.lots!.filter(lot=>lot.occurredAt<=at).map(lot=>({materialId:lot.materialId,lineId:lot.lineId,receipt:lot.receipt}))};
+  };
+  try{
+   await h.f.runtime.run(scene,root,async()=>{
+    const current=await instructions.read(merch,orderId);
+    const saved=await instructions.save(merch,orderId,{expectedVersion:current.version,orderVersion:current.currentOrderVersion,
+     document:{...initialInstruction(),secondaryCraft:'无',preshrink:'无需预缩',
+      fabrics:[{id:materialId,name:'TEST 104 米主布',part:'本身',colors:{},remarks:''}]}},randomUUID());
+    const common={scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:first,evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+    const handover=await readiness.record(root,resource,{...common,kind:'design_handover',orderInstructionVersion:saved.version,
+     quantities:[],recipientId:merch.actorId,note:'TEST exact original handover'},randomUUID());
+    await readiness.record(merch,resource,{...common,kind:'material_investment',quantities:[
+     {materialId,lineId:handover.lines[0]!.lineId,name:'TEST 104 米主布',quantity:104,unit:'米'}],note:'TEST actual purchasing 104m'},randomUUID());
+    await readiness.assign(root,resource,{expectedVersion:0,warehouseWorkerId:warehouse.actorId,colorConfirmationWorkerId:null,
+     colorConfirmationRole:null,reason:'TEST original warehouse assignment'},randomUUID());
+    const native=await take('90',first);
+    expect(native.statusCode,native.body).toBe(200);
+    expect(await window()).toEqual([]);
+    expect((await sheet()).fabric?.warehouseInspection).toBeUndefined();
+    await expect(transition('activate',{expectedGeneration:1})).rejects.toThrow(/generation has changed/);
+    expect((await status()).mode).toBe('legacy');
+    expect(await window()).toEqual([]);
+    expect((await transition('activate')).mode).toBe('active');
+    const [draft]=await window();
+    expect(draft.started_at.toISOString()).toBe(first);
+    expect(draft.basis_json.receipt).toEqual([(await work()).activeBatches[0]!.ref.recordId,1]);
+    expect((await work()).balance.procurementRemaining).toBe('14');
+    expect((await sheet()).fabric?.warehouseInspection).toMatchObject({eligible:false,firstReceiptAt:first,reasons:[expect.stringContaining('90%')]});
+    const rejected=await post(bp+'/fabric-report',await report(first));
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.body).toContain('90%');
+   });
+   await h.f.advance(scene,second);
+   await h.f.runtime.run(scene,root,async()=>{
+    const receipt=await take('3.6',second);
+    expect(receipt.statusCode,receipt.body).toBe(200);
+    expect(await work()).toMatchObject({received:{quantity:'93.6'},balance:{procurementRemaining:'10.4'}});
+    const current=await sheet();
+    expect(current.fabric?.warehouseInspection).toMatchObject({eligible:true,firstReceiptAt:first,lots:[
+     {quantity:{quantity:'90'},occurredAt:first},{quantity:{quantity:'3.6'},occurredAt:second}]});
+    const tooEarly=await post(bp+'/fabric-report',await report(first));
+    expect(tooEarly.statusCode).toBe(409);
+    expect(tooEarly.body).toContain('90%');
+    expect((await sheet()).fabric?.report).toBeNull();
+    const result=await post(bp+'/fabric-report',await report(second));
+    expect(result.statusCode,result.body).toBe(200);
+    const row=result.json().fabric.report;
+    expect(row).toMatchObject({result:'不合格',arrivedAt:first,inspectedAt:second});
+    expect(row.receiptBatches).toHaveLength(2);
+    expect(result.json().fabric.usable).toBe(false);
+    const firstDecision=await post(bp+'/fabric-decision',{reportId:row.reportId,expectedDecisionId:null,allowUse:false,note:'TEST do not use'},'root');
+    expect(firstDecision.statusCode,firstDecision.body).toBe(200);
+    expect(firstDecision.json().fabric.usable).toBe(false);
+    const permitted=await post(bp+'/fabric-decision',{reportId:row.reportId,expectedDecisionId:firstDecision.json().fabric.decision.decisionId,
+     allowUse:true,note:'TEST original quality permission'},'root');
+    expect(permitted.statusCode,permitted.body).toBe(200);
+    expect(permitted.json().fabric.usable).toBe(true);
+    expect((await productionReadiness(h.db,orderId)).finalReasons).toContain('客户最终批复及本次技术尺寸复核尚未形成有效走货依据');
+    const before=await window();
+    const oldRequest={kind:'fabric_receipt',scopeRef:'whole',expectedVersion:0,state:'partial',occurredAt:second,note:'TEST pending, not real receipt',
+     quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+    const oldKey=randomUUID();
+    const pending=await post(rd+'/materials',oldRequest,'warehouse',oldKey);
+    expect(pending.statusCode).toBe(409);expect(pending.body).toContain('未登记');
+    expect((await work()).pendingReceipts).toMatchObject([{key:oldKey,input:{note:oldRequest.note}}]);
+    expect((await work()).received).toEqual({quantity:'93.6',unit:'米'});
+    expect((await transition('safe-read')).mode).toBe('safe_read');
+    expect(await work()).toMatchObject({cutover:{mode:'safe_read'},received:{quantity:'93.6'}});
+    expect((await take('1',second)).statusCode).toBe(409);
+    expect((await sheet()).fabric?.report?.reportId).toBe(row.reportId);
+    expect((await transition('activate')).mode).toBe('active');
+    expect(await window()).toEqual(before);
+    const attachmentId=await h.f.image(warehouse);
+    const proof={attachmentId,documentNumber:'TEST-RECEIPT-CONTINUE',line:'1'};
+    const none=await take('1',second,{continuesReceipt:{resource,key:oldKey}});
+    expect(none.statusCode).toBe(409);
+    const resumed=await take('1',second,{continuesReceipt:{resource,key:oldKey},receiptEvidenceLine:proof,evidenceIds:[attachmentId]});
+    expect(resumed.statusCode,resumed.body).toBe(200);
+    expect((await work()).received).toEqual({quantity:'94.6',unit:'米'});
+    const recovered=await post(rd+'/materials',oldRequest,'warehouse',oldKey);
+    expect(recovered.statusCode,recovered.body).toBe(200);
+    expect((await work()).pendingReceipts).toEqual([]);
+    const copied=await take('1',second,{receiptEvidenceLine:proof,evidenceIds:[attachmentId]});
+    expect(copied.statusCode).toBe(409);
+    expect((await work()).received).toEqual({quantity:'94.6',unit:'米'});
+   });
+  }finally{await app.close();}
+ });
  it('uses the guarded clock on the real material panel, scan, claim and todo through a late B order',async()=>{
   const fixture=await businessAnchorFixture(url!),app=Fastify({logger:false});
   try{

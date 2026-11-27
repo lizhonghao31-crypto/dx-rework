@@ -10,7 +10,8 @@ import {developmentReadTables} from './development-amendment-repository.js';
 import {attachCurrentPreorderApplicability,currentPreparationMaterials,instructionInvestmentMaterials,legacyPreparationMaterialFingerprint,materialBasisChanged,preparationHandoverCurrent,sourceHandoverChanged,warehouseReceiptMaterialCurrent} from './preparation-material-repository.js';
 import {readPreorderApplicabilityProofs} from './preorder-investment-evidence.js';
 import {readWarehouseReceiptReconciliations,reconciliationResourceKey} from './warehouse-receipt-reconciliation-repository.js';
-import {deriveWarehouseReceiptWork} from './warehouse-receipt-projection.js';
+import {warehouseCutovers,warehouseCutoverResources,effectiveWarehouseCutover,warehouseCutoverScopesCurrent} from './warehouse-receipt-cutover-repository.js';
+import {deriveWarehouseReceiptWork,warehouseReceiptCommonView} from './warehouse-receipt-projection.js';
 import {prioritizeWithinRushGroups,projectDevelopmentRushResources} from './development-order-rush.js';
 import {readWarehouseInstructionDemands} from './warehouse-instruction-demand.js';
 import {issuedOrderNumbers} from './order-number-repository.js';
@@ -102,7 +103,8 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     }:null,
     order:scope.order_id&&scope.order_number?{source_id:scope.source_id,design_style_no:scope.order_number}:null,
    })));
-   const bindings=includeReconciliation?await readWarehouseReceiptReconciliations(db,[...nativeKeys.values()]):null;
+   const cutovers=await warehouseCutovers(db,[...nativeKeys.values()]);
+   const bindings=includeReconciliation||cutovers.size?await readWarehouseReceiptReconciliations(db,[...nativeKeys.values()]):null;
    const asOf=businessNow().toISOString(),search=input.search.toLowerCase();
    for(const [scopeIndex,scope] of context.entries()){
     const nativeRows=[...(indexed.get(`order:${scope.order_id}`)??[]),...(indexed.get(`source:${scope.source_id}`)??[])];
@@ -128,7 +130,11 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
     const matchesLine=(line:Source['lines'][number])=>[line.poNumber,line.formalStyleNo,line.temporaryStyleNo].some(matches);
     const matchesOrder=[orderNumber,scope.order_number,scope.source_style_no].some(matches);
     const matchesSharedPo=Boolean(search)&&scope.lines.some(matchesLine);
-    for(const item of work){
+    const resource={kind:scope.kind,id:scope.id};
+    const cutover=effectiveWarehouseCutover(cutovers,warehouseCutoverResources(resource,scope.source_id));
+    const current=cutover?warehouseCutoverScopesCurrent(work,cutover):true;
+    for(const original of work){
+     const item=cutover&&original.kind==='fabric_receipt'?warehouseReceiptCommonView(original,current):original;
      const line=scope.lines.find(row=>row.lineId===item.lineId);
      const procurementComplete=item.balance.procurementRemaining==='0'&&item.balance.excessReceived==='0';
      if((input.status==='completed')!==procurementComplete)continue;
@@ -137,6 +143,7 @@ export async function warehouseReceiptPage(pool:Pool,actor:TrustedActorContext,i
       resource:{kind:scope.kind,id:scope.id},orderNumber:scope.order_number,issuedOrderNumber:orderNumber,customerCode:scope.customer_code,poNumber:line?.poNumber??null,
       assigneeName:scope.assignee_name,kind:item.kind,materialId:item.materialId,name:item.name,lineId:item.lineId,scopeRef:item.scopeRef,supplier:item.supplier,
       received:item.received,productionRequired:item.productionRequired,balance:item.balance,invested:item.purchase.invested,investedAt:item.purchase.investedAt,
+      ...(cutover&&item.kind==='fabric_receipt'?{cutover:{generation:cutover.generation,mode:current?cutover.mode:'safe_read'}}:{}),
       ...(item.reconciliation?{reconciliation:{
        basisRevision:item.reconciliation.basisRevision,verified:item.reconciliation.verified,received:item.reconciliation.received,
        nativeNeedsReview:item.reconciliation.nativeNeedsReview,procurementRemaining:item.reconciliation.procurementRemaining,

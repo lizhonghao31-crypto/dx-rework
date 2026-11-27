@@ -1,3 +1,6 @@
+import {readWarehouseFabricReceiptBasis} from './warehouse-fabric-report-lots.js';
+import {readWarehouseCutover,warehouseCutoverPaused,warehouseCutoverResources,warehouseCutoverScopeKey,warehouseCutoverScopesCurrent} from './warehouse-receipt-cutover-repository.js';
+import {originalReceiptCommand,pendingWarehouseReceiptOrigin,preserveLegacyWarehouseReceipt} from './warehouse-receipt-continuation.js';
 import {WarehouseReceiptAttestationSchema,WarehouseReceiptReconciliationSchema,WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
 import {appendWarehouseReceiptReconciliation,readWarehouseReceiptReconciliations,reconciliationResourceKey,warehouseReceiptReconciliationAvailable} from './warehouse-receipt-reconciliation-repository.js';
 import {createWarehouseOperatorAttestation,findWarehouseReceiptReconciliationItem,originalWarehouseReconciliationPair,
@@ -257,7 +260,9 @@ export class ProductionReadinessService{
   const investment=a.facts.find(f=>f.kind==='material_investment'&&f.scopeRef==='whole');
   const reminder=handover&&orderId&&!(investment?.state==='ready'&&investment.valid)?await materialInvestmentReminder(db,{sourceId:a.context.sourceId,orderId,handoverId:handover.recordId,scopeFingerprint:handover.investmentScopeBasis!.fingerprint}):null;
   const orderInstruction=canRecordInstructionHandover&&orderId?await directInvestmentInstruction(db,orderId):null;
-  return {...(candidates.length?{preorderApplicabilityCandidates:candidates}:{}),...(reminder?{materialInvestmentReminder:{...reminder,canClose:writable&&!reminder.termination&&reminder.enabled
+  const cutover=orderId?readiness?.fabric.warehouseInspection?.cutover:await readWarehouseCutover(db,resource);
+  const warehouseFacts=cutover&&orderId&&a.warehouse?(await readWarehouseFabricReceiptBasis(db,{kind:'order',id:orderId},businessNow().toISOString())).work:undefined;
+  return {...(warehouseFacts?{warehouseReceiptFacts:warehouseFacts}:{}),...(cutover?{warehouseReceiptCutover:{mode:cutover.mode,generation:cutover.generation}}:{}),...(candidates.length?{preorderApplicabilityCandidates:candidates}:{}),...(reminder?{materialInvestmentReminder:{...reminder,canClose:writable&&!reminder.termination&&reminder.enabled
    &&reminder.status!=='waiting'&&(a.merch||root)}}:{}),...(canRecordInstructionHandover?{orderInstructionVersion:orderInstruction?.version??null}:{}),sourceIsPreorderDraft:sourceIsPreorderDraft===true,sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:writable&&a.leader,
    canDeliverInstruction:writable&&(a.merch||root),canAcknowledgeAdoption:writable&&!enrolled&&Boolean(orderId)&&(a.merch||root),canAdopt:writable&&!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
    adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
@@ -266,7 +271,8 @@ export class ProductionReadinessService{
    instructionDeliveries:deliveries.map(r=>({eventId:r.event_id,instructionVersion:r.instruction_version,recipient:r.recipient,occurredAt:preparationIso(r.occurred_at)!,note:r.note,evidenceIds:r.evidence_ids})),
    ranges:ranges.map(r=>({rangeId:r.range_id,preparationId:r.preparation_id,kind:r.kind,version:r.version,lineIds:r.line_ids,complete:r.complete,pendingMaterialIds:r.pending_material_ids,note:r.note,recordedAt:preparationIso(r.occurred_at)!,evidenceIds:r.evidence_ids,basis:r.basis_json}))};
  }
- private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void>){
+ private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void|
+  {pending:{resource:PreparationResource;key:string}}|{settled:{resource:PreparationResource;key:string;hash:string}}>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
   const db=this.transactionClient??await this.database.connect();try{
    if(!this.transactionClient)await db.query('BEGIN');
@@ -299,15 +305,29 @@ export class ProductionReadinessService{
    // Eligibility is rechecked before replay; a revoked user cannot recover prior private responses.
    if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
    if(prior){
-    const response=prior.response as ProductionReadinessState,scope=a.preorderRecipient;
+    const original=prior.response as ProductionReadinessState,scope=a.preorderRecipient;
+    const subject=a.context.orderId?{kind:'order' as const,id:a.context.orderId}:resource;
+    const response=record?.kind==='fabric_receipt'&&await readWarehouseCutover(db,subject,a.context.sourceId)
+     ?await this.read(actor,resource,db):original;
     const scoped=(rows:PreparationMaterialFact[])=>scopedApplicabilityConfirmations(rows,actor.actorId,a.leader,a.originalPreorderMerch);
     if(!this.transactionClient)await db.query('COMMIT');
     return {...response,history:scope?preorderRecipientRows(scoped(response.history),scope,true):scoped(response.history),
      facts:scope?preorderRecipientRows(scoped(response.facts),scope):scoped(response.facts)};
    }
-   await work(db,a);
+   const effect=await work(db,a);
+   if(effect&&'pending' in effect){
+    const response=await this.read(actor,resource,db);
+    if(!this.transactionClient)await db.query('COMMIT');
+    return {...response,warehouseReceiptPending:effect.pending};
+   }
    if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);await new BulkPreparationService(this.database).sync(db,actor,a.context.orderId);}
    const response=await this.read(actor,resource,db);
+   if(effect&&'settled' in effect){
+    const old=effect.settled;
+    const originalResponse=old.resource.kind===resource.kind&&old.resource.id===resource.id?response:await this.read(actor,old.resource,db);
+    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',
+     [actor.actorId,originalReceiptCommand(old.resource),old.key,old.hash,JSON.stringify(originalResponse)]);
+   }
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`preparation_${action}`,resource.id,JSON.stringify(input)]);
    if(!this.transactionClient)await db.query('COMMIT');return response;
@@ -433,17 +453,55 @@ export class ProductionReadinessService{
     !await workbenchPreorderPublication(db,resource.id))conflict('未发布开发来源不能办理实收');
    const view=await this.read(actor,resource,db);
    if(!view.canRecord.includes(input.kind))digitalForbidden();
-   const item=deriveWarehouseReceiptWork(view,now).find(row=>row.kind===input.kind&&row.scopeRef===input.scopeRef&&
+   const items=deriveWarehouseReceiptWork(view,now),cutover=input.kind==='fabric_receipt'?
+    await readWarehouseCutover(db,resource,a.context.sourceId):null;
+   if(cutover&&(cutover.mode==='safe_read'||!warehouseCutoverScopesCurrent(items,cutover)))conflict(warehouseCutoverPaused);
+   if(input.continuesReceipt&&(!cutover||input.kind!=='fabric_receipt'))conflict('本采购范围没有可继续的原收布提交');
+   const continuation=input.continuesReceipt;
+   if(continuation&&(continuation.key===key||!(continuation.resource.kind===resource.kind&&continuation.resource.id===resource.id||
+     continuation.resource.kind==='source'&&continuation.resource.id===a.context.sourceId)))conflict('继续办理的原提交不属于本单');
+   const pending=continuation?await pendingWarehouseReceiptOrigin(db,actor.actorId,continuation.resource,continuation.key):null;
+   if(pending){
+    if(!input.receiptEvidenceLine&&!input.replaces)conflict('原提交须补齐可核对的独立凭证明细或准确订正原批');
+    const original=pending.original;
+    if(!['ready','partial'].includes(original.state)||original.scopeRef!==input.scopeRef||
+     original.occurredAt&&Date.parse(original.occurredAt)!==occurred)conflict('原未过账实收的范围或已填写时间不同，请核对原请求');
+    const exact=original.quantities.filter(row=>(!row.materialId||row.materialId===input.materialId)&&
+     (!row.lineId||row.lineId===input.lineId)&&row.unit===input.unit);
+    if(original.quantities.length&&!exact.length||exact.length===1&&!input.replaces&&exact[0]!.quantity!==Number(input.quantity))
+     conflict('实收的物料、PO、单位或原已填写数量不符，请核对原数量行');
+   }
+   const item=items.find(row=>row.kind===input.kind&&row.scopeRef===input.scopeRef&&
     row.materialId===input.materialId&&row.lineId===input.lineId&&row.basis.supplierId===input.supplierId&&row.basis.unit===input.unit&&
     row.basis.adoptedRef===input.materialFingerprint&&row.purchase.original.recordId===input.investment.recordId&&
     row.purchase.original.version===input.investment.version);
    if(!item)return conflict('原投料、款色、单位或采用资料已变化，请重新读取');
+   if(cutover&&!cutover.scopeKeys.includes(warehouseCutoverScopeKey(item)))conflict('不在当前收布采购范围，请核对原件');
+   if(input.receiptEvidenceLine&&!input.evidenceIds.includes(input.receiptEvidenceLine.attachmentId))conflict('所选物理凭证明细需引用本次原收料凭证');
    if(occurred<Date.parse(item.purchase.investedAt))conflict('实收不能早于本项真实投料');
    const scopeRef=warehouseReceiptScope(item.materialId,item.lineId),target=item.basis.resource;
    const original=view.history.filter(row=>row.warehouseReceipt&&row.kind===input.kind&&row.scopeRef===scopeRef&&
     row.resource.kind===target.kind&&row.resource.id===target.id).sort((left,right)=>right.version-left.version)[0];
    if((original?.version??0)!==input.expectedReceiptVersion)conflict('收料批次已更新，请重新读取');
    const movement=warehouseReceiptMovements(view.history,item.basis),nextVersion=input.expectedReceiptVersion+1;
+   if(input.receiptEvidenceLine){
+    const identity=(line:{documentNumber:string;line:string})=>JSON.stringify(
+     [line.documentNumber.normalize('NFKC').toUpperCase(),line.line.normalize('NFKC').toUpperCase()]);
+    const same=view.history.some(row=>{
+     const proof=row.warehouseReceipt?.receiptEvidenceLine;
+     return proof&&identity(proof)===identity(input.receiptEvidenceLine!)&&row.warehouseReceipt?.materialId===input.materialId&&
+      row.warehouseReceipt?.lineId===input.lineId&&row.warehouseReceipt?.scopeRef===input.scopeRef&&
+      row.warehouseReceipt?.supplierId===input.supplierId&&row.warehouseReceipt?.unit===input.unit&&
+      (row.recordId!==input.replaces?.recordId||row.version!==input.replaces?.version);
+    });
+    const related=warehouseCutoverResources(resource,a.context.sourceId);
+    const approvals=cutover&&!input.replaces?await readWarehouseReceiptReconciliations(db,related):null;
+    const duplicateBinding=related.some(scope=>approvals?.get(reconciliationResourceKey(scope))?.some(row=>row.state==='confirmed'&&row.proofValid&&
+     row.materialId===input.materialId&&row.lineId===input.lineId&&row.scopeRef===input.scopeRef&&
+     row.supplierId===input.supplierId&&row.unit===input.unit&&row.proof.mode==='document'&&
+     [row.proof.legacy,row.proof.batch].some(line=>identity(line)===identity(input.receiptEvidenceLine!))));
+    if((same||duplicateBinding)&&!input.replaces)conflict('同一采购范围的原凭证明细已经登记，不能重复加批');
+   }
    const revised=[...movement,{basis:item.basis,
     original:{recordId:original?.recordId??'first-native-batch',version:nextVersion},
     ...(input.replaces?{replaces:input.replaces}:{}),quantity:{unit:input.unit,quantity:input.quantity},occurredAt:input.occurredAt,valid:true}];
@@ -456,12 +514,14 @@ export class ProductionReadinessService{
    }
    const evidence:WarehouseReceiptBatchEvidence={kind:input.kind,scopeRef:input.scopeRef,materialId:input.materialId,
     lineId:input.lineId,supplierId:input.supplierId,unit:input.unit,investment:input.investment,materialFingerprint:input.materialFingerprint,quantity:input.quantity,
+    ...(input.receiptEvidenceLine?{receiptEvidenceLine:input.receiptEvidenceLine}:{}),
     ...(input.replaces?{replaces:input.replaces}:{})};
    await this.bindFiles(db,actor,resource,input.evidenceIds);
    const quantity=Number(input.quantity);
    await appendPreparationMaterial(db,a.context,actor.actorId,{kind:input.kind,scopeRef,expectedVersion:input.expectedReceiptVersion,
     state:'partial',occurredAt:input.occurredAt,note:input.note,quantities:quantity?[{lineId:input.lineId,materialId:input.materialId,
      name:item.name,quantity,unit:input.unit}]:[],evidenceIds:input.evidenceIds,sourceDocumentVersion:null,recipientId:null},{target,evidence});
+   return pending?{settled:pending}:undefined;
   });
  }
  async record(actor:TrustedActorContext,resource:PreparationResource,raw:PreparationMaterialRecord,key:string){
@@ -470,6 +530,16 @@ export class ProductionReadinessService{
   return this.command(actor,resource,'record',input,key,async(db,a)=>{
    const state=await this.read(actor,resource,db);if(!state.canRecord.includes(input.kind))digitalForbidden();
    if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())conflict('实际时间不能在未来');
+   if(input.kind==='fabric_receipt'){
+    const canonical=a.context.orderId?{kind:'order' as const,id:a.context.orderId}:resource;
+    const cutover=await readWarehouseCutover(db,canonical,a.context.sourceId);
+    if(cutover){
+     // The old native envelope has no immutable delivery line or typed
+     // correction target. Preserve it exactly, never reinterpret its total.
+     const pending=await preserveLegacyWarehouseReceipt(db,actor.actorId,resource,key,preparationHash(input),input);
+     return {pending};
+    }
+   }
    const prior=a.facts.find(f=>f.kind===input.kind&&f.scopeRef===input.scopeRef);
    if((prior?.version??0)!==input.expectedVersion)conflict('本项资料已更新，请刷新后追加订正');
    if(input.kind==='design_handover'){

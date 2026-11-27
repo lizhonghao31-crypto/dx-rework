@@ -52,7 +52,11 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
     return service.recordWarehouseReceiptBatch(await actor(r),resource(r),parse(WarehouseReceiptBatchSchema,r.body),key(r));
    });
   }
-  app.post(`${base}/materials`,async r=>service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r)));
+  app.post(`${base}/materials`,async r=>{
+   const result=await service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r));
+   if(result.warehouseReceiptPending)throw new ApplicationError('WAREHOUSE_RECEIPT_NOT_POSTED','未登记，请从原物料的仓库批次面板继续，原输入已保留',409);
+   return result;
+  });
   app.put(`${base}/responsibility`,async r=>service.assign(await actor(r),resource(r),parse(PreparationResponsibilitySchema,r.body),key(r)));
   app.post(`${base}/adoption-acknowledgement`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r),true));
   app.post(`${base}/adoption`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r)));

@@ -2843,5 +2843,21 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0320_warehouse_receipt_cutover": {
+    "checksum": "426a59c94a9f7a6619c5e8626330ee245b12284e83d158a093a87e8a616803f3",
+    "tables": [],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_warehouse_receipt_cutovers"
+    ],
+    "execute": [
+      "digital_journey_register_change",
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

@@ -32,6 +32,7 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  if(!repeat&&tail?.kind!=='尾查通过')finalReasons.push('本轮尾查未通过；已有首版的复版须提供原首版和客户面料确认依据');
  const scopedInspection=fabric.warehouseInspection;
  if(!scopedInspection&&receipt&&(!receipt.valid||receipt.state!=='ready'))finalReasons.push('当前主料到仓记录尚未有效备齐');
+ if(scopedInspection?.writePaused)finalReasons.push(scopedInspection.writePaused);
  if(!fabric.usable)finalReasons.push('主料未通过验布或尚无有效允许使用决定');
  const receiptAt=scopedInspection?scopedInspection.firstReceiptAt:receipt&&['ready','partial'].includes(receipt.state)&&receipt.valid?receipt.occurredAt:!receipt?fabric.report?.arrivedAt??null:null;
  if(scopedInspection?!scopedInspection.firstReceiptAt:!receiptAt&&!receipt&&!fabric.report?.arrivedAt)finalReasons.push('尚未登记主料实际到仓');
@@ -48,18 +49,21 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  return {context,adoption,document,technical,materials,materialHistory,receipt,fabric,receiptAt,finalReasons,readyAt,revision};
 }
 
-export async function refreshPreparationWindows(db:PreparationDB,orderId:string){
+export async function refreshPreparationWindows(db:PreparationDB,orderId:string,mode:'both'|'draft-only'='both'){
  if(!await preparationAvailable(db))return;
  const receiptExists=(await db.query(`SELECT 1 FROM digital_preparation_material_versions m JOIN digital_production_orders o ON o.production_order_id=$1 WHERE m.kind='fabric_receipt' AND ((m.resource_kind='order' AND m.resource_id=o.production_order_id) OR (m.resource_kind='source' AND m.resource_id=o.source_id)) UNION ALL SELECT 1 FROM digital_production_task_events WHERE resource_kind='order' AND resource_id=$1 AND event_kind='bulk_fabric_report' LIMIT 1`,[orderId])).rowCount;
  if(!receiptExists)return;
  const state=await productionReadiness(db,orderId);if(!state.adoption)return;
  const managed=(await db.query("SELECT to_jsonb(o)->>'order_time_managed' AS managed FROM digital_production_orders o WHERE production_order_id=$1",[orderId])).rows[0]?.managed==='true';
  for(const [kind,at,minutes] of [['draft',state.receiptAt,state.adoption.standards.draftMinutes],['final',!state.finalReasons.length?state.readyAt:null,state.adoption.standards.finalMinutes]] as const){
-  if(!at||kind==='draft'&&state.adoption.standards.retainedDraftVersion>0||kind==='final'&&state.adoption.standards.retainedInstructionVersion&&state.adoption.standards.retainedTechnicalRevision===state.technical?.revision)continue;
+  if(mode==='draft-only'&&kind!=='draft'||!at||kind==='draft'&&state.adoption.standards.retainedDraftVersion>0||kind==='final'&&state.adoption.standards.retainedInstructionVersion&&state.adoption.standards.retainedTechnicalRevision===state.technical?.revision)continue;
   const chosen=managed?await orderTimePolicyAt(db,{kind:'order',id:orderId},at):null,rule=chosen?orderTimeRule(chosen.plan,'production_sheet')?.rule:null;
   const quota=chosen?rule?.kind==='work'?rule.minutes:null:minutes,calendar=chosen?rule?.calendar??null:'continuous';
   if(quota===null||!calendar)continue;
-  const dueAt=shiftFixedTimeline(at,quota,calendar),basis={readinessRevision:state.revision,technicalRevision:state.technical?.revision??null,receipt:state.receipt?[state.receipt.recordId,state.receipt.version]:null,
+  const dueAt=shiftFixedTimeline(at,quota,calendar),basis={readinessRevision:state.revision,technicalRevision:state.technical?.revision??null,receipt:state.fabric.warehouseInspection?.firstReceiptRef?
+   [state.fabric.warehouseInspection.firstReceiptRef.recordId,state.fabric.warehouseInspection.firstReceiptRef.version]:
+   state.receipt?[state.receipt.recordId,state.receipt.version]:null,
+   ...(state.fabric.warehouseInspection?.basisRevision?{warehouseReceiptRevision:state.fabric.warehouseInspection.basisRevision}:{}),
    ...(chosen?{orderTimePlanRef:chosen.id,calendarRef:calendar,warningPercent:rule!.reminder.percent,notificationEnabled:rule!.reminder.enabled}:{})};
   await db.query(`INSERT INTO digital_preparation_windows(window_id,production_order_id,kind,epoch,adoption_id,started_at,due_at,minutes,basis_json)
    VALUES($1,$2,$3,1,$4,$5,$6,$7,$8) ON CONFLICT(production_order_id,kind,epoch) DO NOTHING`,

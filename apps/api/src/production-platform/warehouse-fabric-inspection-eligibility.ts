@@ -22,12 +22,12 @@ export function warehouseFabricInspectionEligibility(required:readonly Material[
    if(!scope.received){reasons.push(`${scope.name}：尚无可核的同范围实际实收`);continue;}
    const lots=scope.activeBatches.filter(batch=>Date.parse(batch.occurredAt)<=cutoff);
    const actual=warehouseReceiptBatches(unit,lots.map(batch=>({
-    id:JSON.stringify([batch.ref.recordId,batch.ref.version]),quantity:batch.quantity,
+    id:JSON.stringify([batch.ref.recordId,batch.ref.version,'quantityRowKey' in batch?batch.quantityRowKey:null]),quantity:batch.quantity,
    })));
    const started=warehouseFabricInspectionThreshold(unit,scope.purchase.invested,actual);
    if(started!==true)reasons.push(started===false?`${scope.name}：本范围实际实收未达到采购应收90%`:
     `${scope.name}：实际到仓批次、单位或采购应收尚无可核依据`);
-   for(const lot of lots)if(!firstReceiptAt||Date.parse(lot.occurredAt)<Date.parse(firstReceiptAt))firstReceiptAt=lot.occurredAt;
+   for(const lot of lots)if(Number(lot.quantity.quantity)>0&&(!firstReceiptAt||Date.parse(lot.occurredAt)<Date.parse(firstReceiptAt)))firstReceiptAt=lot.occurredAt;
   }
  }
  return {eligible:reasons.length===0,reasons,firstReceiptAt};
