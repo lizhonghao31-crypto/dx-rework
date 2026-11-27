@@ -6,7 +6,10 @@ import {join} from 'node:path';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {verifyFinalCloseout} from './final-closeout.mjs';
-import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, gateKind, finalRef, requireSha,
+import {AFFECTED_MAP_PATH, affectedEntryPlan} from './full-gate-risk-map.mjs';
+import {AFFECTED_JOB, parseAffectedReceipt} from './affected-entry-preflight.mjs';
+import {HOSTED_REVIEW_POLICY, readHostedReview, reviewDigest} from './hosted-review-preflight.mjs';
+import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, REVIEW_BOT, gateKind, finalRef, requireSha,
   trustedReview, reviewDecision, parseReceipt, assertRunBinding, assertReuseLineage, allowedBase} from './pr-gate-protocol.mjs';
 
 // Operator-side only. CI uses ci-gate-runtime.mjs and needs no API permission.
@@ -138,6 +141,77 @@ async function reviewFor(api, snapshot, decision) {
 }
 
 async function jobs(api, run) { return api.pages(`${prefix}/actions/runs/${run.id}/jobs`, 'jobs'); }
+
+async function commitTree(api, sha) {
+  const commit = await api.request(`${prefix}/git/commits/${requireSha(sha)}`);
+  if (commit.sha !== sha) throw Error('GitHub returned a different commit for affected entries');
+  const ref = requireSha(commit.tree?.sha);
+  const result = await api.request(`${prefix}/git/trees/${ref}?recursive=1`);
+  if (result.sha !== ref || result.truncated !== false || !Array.isArray(result.tree)) {
+    throw Error('Cannot obtain complete pinned GitHub tree for affected entries');
+  }
+  return new Map(result.tree.filter(entry=>entry.type!=='tree')
+    .map(entry=>[entry.path,entry.type+':'+entry.mode+':'+entry.sha]));
+}
+
+const changedTreePaths=(base,head)=>[...new Set([...base.keys(),...head.keys()])].filter(path=>base.get(path)!==head.get(path));
+
+export async function affectedEntriesFor(api, plan) {
+  if (plan.kind !== 'full') return {active:false, selected:[], registry:null, paths:[]};
+  let pinned;
+  try { pinned = await api.request(`${prefix}/contents/${AFFECTED_MAP_PATH}?ref=${plan.base}`); }
+  catch (error) {
+    if (error instanceof GitHubError && error.status === 404) return {active:false, selected:[], registry:null, paths:[]};
+    throw error;
+  }
+  if (pinned.type!=='file' || pinned.encoding!=='base64' || typeof pinned.content!=='string'
+    || pinned.content.length>131072) throw Error('Cannot read pinned affected-entry risk map');
+  const registry = JSON.parse(Buffer.from(pinned.content,'base64').toString('utf8'));
+  const [base,head] = await Promise.all([commitTree(api,plan.base),commitTree(api,plan.head)]);
+  if (!base.has(AFFECTED_MAP_PATH)) throw Error('Pinned affected-entry map is missing from its commit tree');
+  const paths=changedTreePaths(base,head);
+  return {active:true, registry, paths, selected:affectedEntryPlan(registry,paths)};
+}
+
+async function hostedReviewFor(api,plan,affected){
+  if(plan.kind!=='full')return null;
+  const present=async sha=>{
+    try{
+      const policy=await api.request(`${prefix}/contents/${HOSTED_REVIEW_POLICY}?ref=${sha}`);
+      if(policy.type!=='file')throw Error('Cannot identify the frozen hosted Review policy');
+      return true;
+    }catch(error){
+      if(error instanceof GitHubError&&error.status===404)return false;
+      throw error;
+    }
+  };
+  const [base,head]=await Promise.all([present(plan.base),present(plan.head)]);
+  if(!base&&!head)return null; // Historical workflow and receipts only.
+  return readHostedReview(api,plan,affected.registry,affected.paths,async (earlier,later)=>{
+    const comparison=await api.request(`${prefix}/compare/${earlier}...${later}`);
+    if(comparison.status!=='ahead'||comparison.behind_by!==0||comparison.merge_base_commit?.sha!==earlier)
+      throw Error('Reviewed commit is not an ancestor of the final Head');
+    const [oldTree,newTree]=await Promise.all([commitTree(api,earlier),commitTree(api,later)]);
+    return changedTreePaths(oldTree,newTree);
+  });
+}
+
+async function verifyHostedAffected(api, run, plan, selected, reviewSha256) {
+  const attempts=await api.pages(`${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,'jobs');
+  const matching=attempts.filter(j=>j.name===AFFECTED_JOB);
+  if (matching.length!==1) throw Error('Missing or ambiguous actual hosted affected-entry job');
+  const job=matching[0];
+  if (job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==plan.head
+    || job.status!=='completed' || job.conclusion!=='success'
+    || !job.steps?.some(step=>step.name==='Run and verify exact affected cases'&&step.conclusion==='success')) {
+    throw Error('Hosted affected-entry check failed, was skipped, or belongs to a different attempt/Head');
+  }
+  if(reviewSha256&&selected.length&&!job.steps?.some(step=>step.name==='Preserve the original named test report'&&step.conclusion==='success')){
+    throw Error('Hosted affected-entry job did not retain the original named test report');
+  }
+  return parseAffectedReceipt(await api.request(`${prefix}/actions/jobs/${job.id}/logs`,{raw:true}),plan,run,selected,reviewSha256);
+}
+
 export async function proofForRun(api, run, plan, phase) {
   const name = phase === 'light' ? LIGHT_CHECK : FINAL_CHECK;
   const named = (await jobs(api, run)).filter(job => job.name === name);
@@ -168,7 +242,11 @@ export async function finalStatus(api, plan, ref) {
   if (run.head_branch !== ref || run.head_sha !== plan.head) throw new Error('Final run is not bound to its immutable request ref');
   if (run.status !== 'completed') return {state: 'running', runId: run.id, ref};
   if (run.conclusion !== 'success') return {state: 'failed', runId: run.id, ref, conclusion: run.conclusion};
-  return {state: 'approved', ref, ...await proofForRun(api, run, plan, 'final')};
+  const proof=await proofForRun(api,run,plan,'final');
+  const affected=await affectedEntriesFor(api,plan);
+  const hosted=await hostedReviewFor(api,plan,affected);
+  const affectedReceipt=affected.active||hosted ? await verifyHostedAffected(api,run,plan,affected.selected,hosted?reviewDigest(hosted):undefined) : null;
+  return {state: 'approved', ref, ...proof, ...(affectedReceipt?{affectedReceipt}:{})};
 }
 
 async function existingRef(api, ref, head) {
@@ -186,7 +264,10 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
     if ((await inspect(api, number, head)).ref !== snapshot.ref) throw new Error('PR base/mode changed while inspecting the existing final request');
     return {...status, reviewDecision: review};
   }
-  const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review);
+  const affected = await affectedEntriesFor(api,snapshot.plan);
+  const hosted = await hostedReviewFor(api,snapshot.plan,affected);
+  if(hosted&&hosted.reviewedHead!==review.commit_sha)throw Error('Hosted Review and operator Review differ');
+  const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review,affected.selected);
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR base/mode changed before the final request');
@@ -222,8 +303,22 @@ export async function verifyMerge(api, number, head, {reviewPolicy} = {}) {
 }
 
 export async function reviewStep(api, number, head, requestId, {now = Date.now(), apply = false, stateDir = tmpdir()} = {}) {
-  await inspect(api, number, head);
-  const decide = async () => reviewDecision({comments: await api.comments(number), requestId, now, expectedHead: head});
+  const {plan}=await inspect(api, number, head);
+  const decide = async () => {
+    const comments=await api.comments(number);
+    const decision=reviewDecision({comments,requestId,now,expectedHead:head});
+    if (plan.kind!=='full'||decision.action!=='reopen') return decision;
+    const manual=comments.filter(comment=>comment.body?.trim()==='@codex review');
+    if(manual.length>=2)return {action:'review_round_limit',limit:2};
+    const reviews=await api.pages(`${prefix}/pulls/${number}/reviews`);
+    const requested=manual.find(comment=>comment.id===requestId);
+    // Count an earlier automatic completed round even if no issue comment
+    // requested it. The current timed-out request is one round of its own.
+    if(reviews.some(review=>review.user?.login===REVIEW_BOT&&review.state!=='PENDING'
+      && Date.parse(review.submitted_at)<Date.parse(requested.created_at)))
+      return {action:'review_round_limit',limit:2};
+    return decision;
+  };
   const first = await decide();
   if (first.action !== 'reopen' || !apply) return first;
   const key = createHash('sha256').update(`${REPOSITORY}:${number}:${head}:${requestId}`).digest('hex');

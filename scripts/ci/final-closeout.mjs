@@ -1,6 +1,8 @@
 import {createHash} from 'node:crypto';
 import {readFile,lstat} from 'node:fs/promises';
+import {isAbsolute} from 'node:path';
 import {REPOSITORY,REVIEW_BOT} from './pr-gate-protocol.mjs';
+import {requireAffectedCases,vitestCases} from './affected-entry-preflight.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const detail=value=>typeof value==='string'&&value.trim().length>=20&&value.length<=4000;
@@ -25,14 +27,14 @@ function logTotals(body){
  const total=word=>summaries.reduce((sum,line)=>sum+Number(line.match(new RegExp('(\\d+) '+word))?.[1]??0),0);
  const result={passed:total('passed'),failed:total('failed'),skipped:total('skipped')+total('todo')};if(!result.passed||result.failed)throw Error('actual command log failed or ran no tests');return result;
 }
-export function closeoutReport(body,format){
+export function closeoutReport(body,format,cwd){
  if(format==='vitest-json'){
   const r=JSON.parse(body);if(r.success!==true||!Array.isArray(r.testResults))throw Error('Vitest did not succeed');
   const assertions=r.testResults.flatMap(file=>file.assertionResults??[]);
   if(assertions.some(a=>!['passed','pending','skipped','todo','disabled'].includes(a.status)))throw Error('failed/unreadable assertion');
   const names=assertions.filter(a=>a.status==='passed').map(a=>a.fullName);
   if(!names.length||names.some(name=>typeof name!=='string'||!name.trim())||r.numFailedTests!==0||r.numPassedTests!==names.length)throw Error('empty/inconsistent Vitest report');
-  return {passed:names.length,failed:0,skipped:r.numPendingTests??0,names};
+  return {passed:names.length,failed:0,skipped:r.numPendingTests??0,names,cases:vitestCases(r,cwd)};
  }
  if(format==='node-tap'){
   const passed=Number(body.match(/^# pass (\d+)$/m)?.[1]),failed=Number(body.match(/^# fail (\d+)$/m)?.[1]);
@@ -52,7 +54,7 @@ export function closeoutReport(body,format){
  * The already verified exact-head light validates construction-evidence against
  * source. Read its pinned bytes again; do not trust a local replacement record.
  */
-export async function verifyFinalCloseout(api,plan,path,review){
+export async function verifyFinalCloseout(api,plan,path,review,affected=[]){
  const errors=[],reports=new Map();let pack,evidence,packageBytes;
  try{if(!path)throw Error('missing --closeout package');packageBytes=await bytes(path,1024*1024);pack=JSON.parse(packageBytes);}catch(e){errors.push('package: '+e.message);}
  if(pack){
@@ -78,8 +80,8 @@ export async function verifyFinalCloseout(api,plan,path,review){
    if(!check||check.status!=='passed'||check.exitCode!==0)throw Error('no passing construction check');
    const log=await bytes(check.log);if(sha(log)!==check.logSha256)throw Error('actual command log digest differs');
    const files=report.files??[report];if(!Array.isArray(files)||!files.length||files.length>20)throw Error('bounded actual result reports required');
-   const parsedFiles=[],seen=new Set();for(const file of files){const content=await bytes(file.path),digest=sha(content);if(digest!==file.sha256||seen.has(digest))throw Error('actual result report digest differs or is duplicated');seen.add(digest);parsedFiles.push(closeoutReport(content.toString('utf8'),file.format));}
-   const parsed=check.kind==='command'?parsedFiles[0]:{passed:parsedFiles.reduce((n,r)=>n+r.passed,0),failed:parsedFiles.reduce((n,r)=>n+r.failed,0),skipped:parsedFiles.reduce((n,r)=>n+r.skipped,0),names:parsedFiles.flatMap(r=>r.names)};
+   const parsedFiles=[],seen=new Set();for(const file of files){const content=await bytes(file.path),digest=sha(content);if(digest!==file.sha256||seen.has(digest))throw Error('actual result report digest differs or is duplicated');seen.add(digest);parsedFiles.push(closeoutReport(content.toString('utf8'),file.format,check.cwd));}
+   const parsed=check.kind==='command'?parsedFiles[0]:{passed:parsedFiles.reduce((n,r)=>n+r.passed,0),failed:parsedFiles.reduce((n,r)=>n+r.failed,0),skipped:parsedFiles.reduce((n,r)=>n+r.skipped,0),names:parsedFiles.flatMap(r=>r.names),cases:parsedFiles.flatMap(r=>r.cases??[])};
    if(check.kind==='command'){
     if(files.length!==1||files[0].format!=='command-record'||plan.kind!=='quick'||!detail(evidence.automaticTestsNotApplicable)||parsed.command!==check.command)throw Error('command-only proof is not an authorized static Quick alternative');
    }else{
@@ -109,6 +111,23 @@ export async function verifyFinalCloseout(api,plan,path,review){
    }
   }
   for(let i=0;i<evidence.rules.length;i++)if(!covered.has(i))errors.push('unclosed construction rule '+i);
+  if(affected.length)try{
+   const requiredProofs=[...reports.values()].filter(proof=>proof.check.sourceFingerprint===evidence.sourceFingerprint
+     && proof.check.inputPaths===undefined && /^[0-9a-f]{40}$/.test(proof.check.testedHead??'')
+     && (proof.check.cwd===undefined||typeof proof.check.cwd==='string'&&isAbsolute(proof.check.cwd)));
+   for(const tested of new Set(requiredProofs.filter(proof=>proof.cases?.length).map(proof=>proof.check.testedHead))){
+    if(tested===plan.head)continue;
+    const comparison=await api.request(`/repos/${REPOSITORY}/compare/${tested}...${plan.head}`);
+    if(comparison.status!=='ahead'||comparison.behind_by!==0)throw Error('Affected source proof is not from the frozen candidate lineage');
+   }
+   // An overlapping report can legitimately mark the same case skipped (suite
+   // name filtering). A passed case must be present in a pinned exact-source
+   // command and in its reported original file.
+   const actual=new Map(requiredProofs.flatMap(proof=>proof.cases??[])
+     .filter(result=>result.status==='passed').map(result=>[JSON.stringify([result.file,result.name]),result]));
+   requireAffectedCases(affected,[...actual.values()]);
+  }catch(e){errors.push(e.message);}
+
   try{
    const inline=await api.pages(`/repos/${REPOSITORY}/pulls/${plan.pr}/comments`);
    const known=inline.filter(c=>c.user?.login===REVIEW_BOT&&!c.in_reply_to_id&&(/codex-code-review-finding:v1|\bP[0-3]\b/.test(c.body??'')));

@@ -14,6 +14,7 @@ function setup(){
   request:async(path,{method='GET',body}={})=>{
    if(path==='/graphql')return {data:{repository:{pullRequest:{reviewThreads:{nodes:[],pageInfo:{hasNextPage:false}}}}}};
    if(path.includes('/branches/'))return {commit:{sha:base}};
+   if(path.includes('/contents/scripts/ci/affected-entry-map.json')||path.includes('/contents/scripts/ci/hosted-review-preflight.mjs'))throw new GitHubError(404,'Not Found');
    if(path.includes('/contents/'))return closeout.encoded();
    if(path.includes('/logs'))return RECEIPT_PREFIX+JSON.stringify({version:1,...plan,phase:'light',runId:101,attempt:1,jobStatus:'success',missing:[],checks:['title','checkout','head','policy'].map(id=>({id,applicable:true,outcome:'success'}))});
    if(path.includes('/git/ref/heads/')){if(!state.ref)throw new GitHubError(404,'not found');return state.ref;}

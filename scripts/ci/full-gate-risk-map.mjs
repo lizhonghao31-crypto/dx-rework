@@ -1,6 +1,10 @@
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { POSTGRES_CHAIN_TESTS, SLA_JOURNEY_CHAIN_EXCLUSIONS } from "../test-suite-plan.mjs";
 
+// Full's bounded, blocking original-entry profile is narrower than the
+// mapped/exhaustive PostgreSQL coverage below, and uses the same exact diff.
+export {AFFECTED_MAP_PATH, affectedEntryPlan} from './affected-entry-preflight.mjs';
+
 const normalize = (path) => path.trim().replaceAll("\\", "/");
 
 const TESTS = Object.freeze({
@@ -271,6 +275,11 @@ const SHARED_GATE_INPUTS = new Set([
   "scripts/ci/impact-shadow-policy.json",
   "scripts/ci/pr-gate-protocol.mjs",
   "scripts/ci/pr-gate-controller.mjs",
+  "scripts/ci/final-closeout.mjs",
+  "scripts/ci/affected-entry-map.json",
+  "scripts/ci/affected-entry-preflight.mjs",
+  "scripts/ci/hosted-review-preflight.mjs",
+  "scripts/ci/start-affected-entry-postgres.sh",
   "scripts/ci/verify-actions-policy.mjs",
   "scripts/ci/light-reuse.mjs",
   "scripts/ci/construction-evidence.mjs",

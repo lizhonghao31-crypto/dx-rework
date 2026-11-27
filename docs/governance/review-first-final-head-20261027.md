@@ -24,9 +24,9 @@
 
 ## Review与恢复
 
-本地必要验证及完整 diff 组装完成、PR 创建后，首次 Light 与必要 GitHub Codex Review 并行启动：Light 由 opened 自动启动；单一控制者核已有同 Head 请求后，按已有授权请求一次 Review，不等待 Light 结论。Review 不是额外 Actions job，不新增 runner、凭据或写权限。两路结果都收齐后集中修复，再冻结最终 Head 和实际 base、请求最终 Quick/Full；记录 Light SHA、被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。
+本地必要验证及完整 diff 组装完成、PR 创建后，首次 Light 与必要 GitHub Codex Review 并行启动：Light 由 opened 自动启动；单一控制者核已有同 Head 请求后，按已有授权请求一次 Review，不等待 Light 结论。Review 不是额外 Actions job，不新增 runner、凭据或写权限。两路结果集中处理，确认事项修完并在最终候选和实际基线上通过受影响原入口定向用例，再请求最终 Quick/Full；记录 Light SHA、被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。已采用原入口策略的 Full 还需先通过同 run/attempt 的托管受影响原入口检查；同一候选三元组仅创建一个请求，已有请求默认只观察。不动引用、不换 run；原因已查实为瞬态且已获原授权时，用同一个 GitHub run 完整重试一次，让托管定向和 Full 在同一新 attempt 留证。禁止自动重试，失败的业务断言须修源码后用新 Head。
 
-`watch-review --pr <N> --head <Head40> --request-id <ID> --watch --apply --review-retry-authorized --state-dir <private-dir>`使用已存在的15分钟恢复授权。时间从请求的服务端created_at起，先核已完成/新请求/在途状态，防重复发送；本地锁只对同一控制者有效，不能冒充跨机器互斥。拒绝和不确定写入保留journal，先只读reconcile，不删除锁或另换发送通道。
+`watch-review --pr <N> --head <Head40> --request-id <ID> --watch --apply --review-retry-authorized --state-dir <private-dir>`使用已存在的15分钟恢复授权。时间从请求的服务端created_at起，先核已完成/新请求/在途状态，防重复发送；本地锁只对同一控制者有效，不能冒充跨机器互斥。拒绝和不确定写入保留journal，先只读reconcile，不删除锁或另换发送通道。Full 按需要一到两轮，不例行重复。达到两轮时恢复工具不发第三轮。第二轮确认事项有逐条修复、定向证据及线程闭环后，直接申请新 Head 的 Full，不等 bot 改写已审提交。
 
 低风险Quick确实不需Review时，协议允许带`--review-not-required --review-reason <理由> --review-authorization <已有授权来源>`。这不授予豁免；Full、已经开始/失败的Review或未关闭finding不能被此声明抹掉。
 
@@ -34,7 +34,7 @@
 
 `ci.yml` 的 Light 仅受 PR opened/首次 attempt 条件约束；Codex Review 由现有 GitHub Review 服务独立处理，不在该 workflow 的 job 依赖图内。`pr-gate-controller.mjs` 的 `reviewStep` 不读取 Light job，`requestFinal`/`verifyMerge` 仍调用必要 Review 核证及线程闭环。无需修改 workflow concurrency；现有 Light 与最终 Gate 的同 PR 排队保持，防止重复资源消耗。
 
-并行只缩短 Light 与 Review 的串行等待，不减少任何检查。已知 Light/Review 发现进入同一修复及外置收口包；不得把运行中、失败、旧 SHA 或未闭合 Review 当作通过。新实质风险沿原协议处理；原正常一轮 Review 及恢复防重复规则不变。Full 复用 Light 仍要求最终 Head/base 与源成功产物完全匹配；发生修复导致不匹配时执行原检查，不为复用补跑 Light。
+并行只缩短 Light 与 Review 的串行等待，不减少任何检查。已知 Light/Review 发现进入同一修复及外置收口包；不得把运行中、失败、旧 SHA 或未闭合 Review 当作通过。新实质风险沿原协议处理；正常一轮已足够时不另开，恢复防重复规则保留。Full 复用 Light 仍要求最终 Head/base 与源成功产物完全匹配；发生修复导致不匹配时执行原检查，不为复用补跑 Light。
 
 ## 执行与复用证据
 

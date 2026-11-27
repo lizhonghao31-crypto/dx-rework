@@ -13,10 +13,10 @@ const evaluate=(value,c)=>{
  if(value?.startsWith('${{ '))return runInNewContext(value.slice(4,-3),env);
  return value?.replace(/\$\{\{ (.*?) \}\}/g,(_,e)=>runInNewContext(e,env));
 };
-const context=(title='[FULL] change',action='opened',changes={})=>({github:{event_name:'pull_request',run_attempt:1,sha:'c'.repeat(40),ref:'refs/pull/901/merge',event:{action,changes,pull_request:{number:901,title,head:{sha:head},base:{sha:base,ref:baseRef}}}},needs:{request:{result:'skipped',outputs:{}}}});
+const context=(title='[FULL] change',action='opened',changes={})=>({github:{event_name:'pull_request',run_attempt:1,sha:'c'.repeat(40),ref:'refs/pull/901/merge',event:{action,changes,pull_request:{number:901,title,head:{sha:head},base:{sha:base,ref:baseRef}}}},needs:{request:{result:'skipped',outputs:{}},affected_entries:{result:'skipped'}}});
 const created=(kind='full')=>{
  const ref=finalRef({kind,head,base,baseRef,pr:901});
- return {github:{event_name:'create',sha:head,ref:`refs/heads/${ref}`,event:{ref,ref_type:'branch',pull_request:{}}},needs:{request:{result:'success',outputs:{kind,pr:'901'}}}};
+ return {github:{event_name:'create',run_attempt:1,sha:head,ref:`refs/heads/${ref}`,event:{ref,ref_type:'branch',pull_request:{}}},needs:{request:{result:'success',outputs:{kind,pr:'901'}},affected_entries:{result:'success'}}};
 };
 const selected=(id,c)=>Boolean(evaluate(expression(job(ci,id),'if'),c));
 const name=(id,c)=>evaluate(expression(job(ci,id),'name'),c);
@@ -28,17 +28,17 @@ for(const kind of ['FULL','QUICK'])for(const action of ['opened','synchronize','
 });
 for(const changes of [{body:{from:'old'}},{title:{from:'[FULL] old'}},{title:{from:'[FULL] old'},body:{from:'old'}},{}])test(`unrelated metadata ${JSON.stringify(changes)} allocates no runner or required name`,()=>{
  const c=context('[FULL] change','edited',changes);
- for(const id of ['request','validate','full','approval'])assert.equal(selected(id,c),false,id);
+ for(const id of ['request','validate','affected_entries','full','approval'])assert.equal(selected(id,c),false,id);
  assert.notEqual(name('validate',c),LIGHT_CHECK);assert.notEqual(name('approval',c),FINAL_CHECK);
 });
 for(const [ref,ref_type]of [['feature/ordinary','branch'],['v1','tag']])test(`ordinary create ${ref}: no runner`,()=>{
  const c=created();Object.assign(c.github.event,{ref,ref_type});c.needs.request={result:'skipped',outputs:{}};
- for(const id of ['request','validate','full','approval'])assert.equal(selected(id,c),false,id);
+ for(const id of ['request','validate','affected_entries','full','approval'])assert.equal(selected(id,c),false,id);
  assert.notEqual(name('approval',c),FINAL_CHECK);
 });
 for(const kind of ['quick','full'])test(`canonical ${kind} create selects one worker and real final certification`,()=>{
  const c=created(kind);assert.equal(selected('request',c),true);
- assert.equal(selected('validate',c),kind==='quick');assert.equal(selected('full',c),kind==='full');
+ assert.equal(selected('validate',c),kind==='quick');assert.equal(selected('affected_entries',c),kind==='full');assert.equal(selected('full',c),kind==='full');
  assert.equal(selected('approval',c),true);assert.equal(name('approval',c),FINAL_CHECK);
  c.needs.request.result='failure';assert.equal(selected('validate',c),false);assert.equal(selected('full',c),false);
  assert.equal(selected('approval',c),true); // The certifier must fail, not become a green skipped approval.
@@ -46,6 +46,22 @@ for(const kind of ['quick','full'])test(`canonical ${kind} create selects one wo
 for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])test('base or risk-mode edits run no additional Light; final binding remains exact',()=>{
  const c=context('[FULL] change','edited',changes);assert.equal(selected('validate',c),false);
  assert.equal(selected('full',c),false);assert.equal(selected('approval',c),false);
+});
+test('Full permits one bounded recovery attempt but requires an actual affected proof in that attempt and blocks a third',()=>{
+ for(const result of ['failure','skipped','cancelled']){
+  const c=created();c.needs.affected_entries.result=result;
+  assert.equal(selected('affected_entries',c),true);
+  assert.equal(selected('full',c),false);
+  assert.equal(selected('approval',c),true);
+ }
+ const retry=created();retry.github.run_attempt=2;
+ assert.equal(selected('affected_entries',retry),true);
+ assert.equal(selected('full',retry),true);
+ retry.needs.affected_entries.result='skipped';
+ assert.equal(selected('full',retry),false);
+ const replay=created();replay.github.run_attempt=3;
+ assert.equal(selected('affected_entries',replay),false);
+ assert.equal(selected('full',replay),false);
 });
 test('initial Light and final requests queue without cancelling either',()=>{
  const light=context(),fin=created();
