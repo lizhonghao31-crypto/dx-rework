@@ -45,15 +45,30 @@ export function materialIssuesOnScope(history:readonly MaterialIssueEvent[],inst
  return out;
 }
 
+/** Reconciled historical quantities do not share the root of another row
+ * on the same document. Replacing their comparison batch invalidates the
+ * binding, so the correction cannot silently lose recorded occupations. */
+export function legacyMaterialIssueMovements(item:WarehouseReceiptWorkItem,replaces?:WarehouseLotIssue['allocations'][number]['receipt']){
+ const reconciliation=item.reconciliation;
+ if(!reconciliation?.received)return [];
+ return reconciliation.activeBatches.flatMap(row=>{
+  const quantityRowKey=row.quantityRowKey;
+  if(!quantityRowKey||replaces&&reconciliation.confirmed.some(binding=>binding.quantityRowKey===quantityRowKey&&
+   binding.ref.recordId===row.ref.recordId&&binding.ref.version===row.ref.version&&
+   binding.batch.recordId===replaces.recordId&&binding.batch.version===replaces.version))return [];
+  return [{basis:item.basis,original:{...row.ref,quantityRowKey},quantity:row.quantity,occurredAt:row.occurredAt,valid:true}];
+ });
+}
+
 export function ledgerForMaterialIssue(item:WarehouseReceiptWorkItem,history:readonly PreparationMaterialFact[],issues:readonly WarehouseLotIssue[]|null,
  usableFabricLots?:readonly BulkFabricBatchRef[]){
  if(!item.received&&!usableFabricLots)return null;
  const movements=warehouseReceiptMovements(history,item.basis);
- const legacy=item.reconciliation?.activeBatches.filter(row=>row.quantityRowKey).map(row=>({
-  basis:item.basis,original:row.ref,quantity:row.quantity,occurredAt:row.occurredAt,valid:true,
- }))??[];
+ const legacy=legacyMaterialIssueMovements(item);
  const ledger=projectWarehouseIssueAllocation(item.basis.unit,[...movements,...legacy],issues);
- return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots.filter(lot=>lot.materialId===item.materialId).map(lot=>lot.receipt)):ledger;
+ return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots
+  .filter(lot=>lot.materialId===item.materialId&&(lot.lineId??null)===item.lineId)
+  .map(lot=>({...lot.receipt,...(lot.quantityRowKey?{quantityRowKey:lot.quantityRowKey}:{})}))):ledger;
 }
 
 type IssueApproval={sourcing_case_id:string;sourcing_decision_id:string;sourcing_approval_snapshot_id:string;supplier_id:string};

@@ -8,7 +8,7 @@ import {createWarehouseOperatorAttestation,findWarehouseReceiptReconciliationIte
 import {warehouseReceiptPage} from './warehouse-receipt-page.js';
 import {readWarehouseReceiptWork} from './warehouse-receipt-work.js';
 import {sourcedInstructionMaterialId} from './warehouse-instruction-demand.js';
-import {materialIssuesOnScope,originalMaterialIssueHistory} from './warehouse-material-issue.js';
+import {legacyMaterialIssueMovements,materialIssuesOnScope,originalMaterialIssueHistory} from './warehouse-material-issue.js';
 import {projectWarehouseIssueAllocation} from './warehouse-issue-allocation.js';
 import {scopedWarehouseReceiptQuantity} from './warehouse-material-balance.js';
 import {deriveWarehouseReceiptWork,warehouseReceiptMovements,warehouseReceiptScope,warehouseReceiptScopePrefix} from './warehouse-receipt-projection.js';
@@ -485,22 +485,30 @@ export class ProductionReadinessService{
    if((original?.version??0)!==input.expectedReceiptVersion)conflict('收料批次已更新，请重新读取');
    const movement=warehouseReceiptMovements(view.history,item.basis),nextVersion=input.expectedReceiptVersion+1;
    if(input.receiptEvidenceLine){
+    const submitted=input.receiptEvidenceLine;
     const identity=(line:{documentNumber:string;line:string})=>JSON.stringify(
      [line.documentNumber.normalize('NFKC').toUpperCase(),line.line.normalize('NFKC').toUpperCase()]);
-    const same=view.history.some(row=>{
-     const proof=row.warehouseReceipt?.receiptEvidenceLine;
-     return proof&&identity(proof)===identity(input.receiptEvidenceLine!)&&row.warehouseReceipt?.materialId===input.materialId&&
-      row.warehouseReceipt?.lineId===input.lineId&&row.warehouseReceipt?.scopeRef===input.scopeRef&&
-      row.warehouseReceipt?.supplierId===input.supplierId&&row.warehouseReceipt?.unit===input.unit&&
-      (row.recordId!==input.replaces?.recordId||row.version!==input.replaces?.version);
-    });
+    const proofKey=identity(submitted),isCorrectionTarget=(ref:{recordId:string;version:number})=>Boolean(input.replaces&&sameReceiptRef(input.replaces,ref));
+    const id=(ref:{recordId:string;version:number})=>JSON.stringify([ref.recordId,ref.version]);
+    const replaced=new Set(movement.flatMap(row=>row.replaces?[id(row.replaces)]:[]));
+    const proofByVersion=new Map(view.history.flatMap(row=>row.warehouseReceipt?.receiptEvidenceLine?
+     [[id(row),identity(row.warehouseReceipt.receiptEvidenceLine)] as const]:[]));
+    // Quantity-only corrections do not relinquish their physical document line.
+    const occupiedProof=new Map<string,string>();
+    for(const row of movement){
+     const ref=id(row.original),proof=proofByVersion.get(ref)??(row.replaces?occupiedProof.get(id(row.replaces)):undefined);
+     if(proof)occupiedProof.set(ref,proof);
+    }
+    const same=movement.some(row=>row.valid&&!isCorrectionTarget(row.original)&&!replaced.has(id(row.original))&&
+     occupiedProof.get(id(row.original))===proofKey);
     const related=warehouseCutoverResources(resource,a.context.sourceId);
-    const approvals=cutover&&!input.replaces?await readWarehouseReceiptReconciliations(db,related):null;
+    const approvals=cutover?await readWarehouseReceiptReconciliations(db,related):null;
     const duplicateBinding=related.some(scope=>approvals?.get(reconciliationResourceKey(scope))?.some(row=>row.state==='confirmed'&&row.proofValid&&
      row.materialId===input.materialId&&row.lineId===input.lineId&&row.scopeRef===input.scopeRef&&
      row.supplierId===input.supplierId&&row.unit===input.unit&&row.proof.mode==='document'&&
-     [row.proof.legacy,row.proof.batch].some(line=>identity(line)===identity(input.receiptEvidenceLine!))));
-    if((same||duplicateBinding)&&!input.replaces)conflict('同一采购范围的原凭证明细已经登记，不能重复加批');
+     ((!isCorrectionTarget(row.batch)||row.relation==='independent')&&identity(row.proof.legacy)===proofKey||
+      !isCorrectionTarget(row.batch)&&identity(row.proof.batch)===proofKey)));
+    if(same||duplicateBinding)conflict('同一采购范围的原凭证明细已经登记，不能重复加批');
    }
    const revised=[...movement,{basis:item.basis,
     original:{recordId:original?.recordId??'first-native-batch',version:nextVersion},
@@ -510,7 +518,11 @@ export class ProductionReadinessService{
    if(input.replaces&&a.context.orderId&&item.basis.resource.kind==='source'){
     const instructionMaterialId=sourcedInstructionMaterialId(a.context.orderId,item.basis.resource.id,item.materialId);
     const sent=materialIssuesOnScope(await originalMaterialIssueHistory(db,a.context.orderId),instructionMaterialId,item.basis);
-    if(!sent||sent.length&&!projectWarehouseIssueAllocation(input.unit,revised,sent))conflict('本批已有实际发料，订正后数量及时间须涵盖原已发记录');
+    const resolved=cutover&&view.warehouseReceiptFacts?.find(row=>row.kind===item.kind&&row.materialId===item.materialId&&
+     row.lineId===item.lineId&&row.scopeRef===item.scopeRef&&row.basis.adoptedRef===item.basis.adoptedRef);
+    if(!sent||sent.length&&!projectWarehouseIssueAllocation(input.unit,
+     [...revised,...(resolved?legacyMaterialIssueMovements(resolved,input.replaces):[])],sent))
+     conflict('本批已有实际发料，订正后数量及时间须涵盖原已发记录');
    }
    const evidence:WarehouseReceiptBatchEvidence={kind:input.kind,scopeRef:input.scopeRef,materialId:input.materialId,
     lineId:input.lineId,supplierId:input.supplierId,unit:input.unit,investment:input.investment,materialFingerprint:input.materialFingerprint,quantity:input.quantity,

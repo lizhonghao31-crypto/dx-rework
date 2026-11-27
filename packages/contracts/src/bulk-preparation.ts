@@ -26,8 +26,10 @@ export type BulkPatternCardPage={page:number;pageSize:15;total:number;items:Arra
  orderId:string;designStyleNo:string;customer:string|null;orderRush?:true;card:BulkPatternCardSummary;
 }>};
 
-const MaterialIssueReceiptRef=z.object({recordId:z.uuid(),version:z.number().int().positive()}).strict();
-export const BulkFabricBatchRefSchema=z.object({materialId:z.uuid(),lineId:z.uuid().nullable().optional(),quantityRowKey:z.string().min(1).max(750).optional(),receipt:MaterialIssueReceiptRef}).strict();
+const FabricReceiptRef=z.object({recordId:z.uuid(),version:z.number().int().positive()}).strict();
+const quantityRowKey=z.string().min(1).max(750);
+const MaterialIssueReceiptRef=FabricReceiptRef.extend({quantityRowKey:quantityRowKey.optional()});
+export const BulkFabricBatchRefSchema=z.object({materialId:z.uuid(),lineId:z.uuid().nullable().optional(),quantityRowKey:quantityRowKey.optional(),receipt:FabricReceiptRef}).strict();
 export type BulkFabricBatchRef=z.infer<typeof BulkFabricBatchRefSchema>;
 export const BulkFabricReportSchema=z.object({expectedReportId:z.string().uuid().nullable(),expectedReceiptVersion:z.number().int().nonnegative().optional(),expectedWarehouseBasisRevision:z.string().regex(/^[a-f0-9]{64}$/).optional(),material:z.string().trim().min(1).max(200),
  receiptBatches:z.array(BulkFabricBatchRefSchema).min(1).max(100).optional(),
