@@ -1,4 +1,5 @@
 import {useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {DEVELOPMENT_AUXILIARY_QUANTITY_UNITS,SaveDevelopmentDesignerCorrectionSchema,developmentCreationBasicsIssues,
  developmentPreparationQuantityIssues,isDevelopmentMaterialPlaceholder,type DevelopmentDocument,type DevelopmentSheet} from '@dx-rework/contracts/digital-development';
 import {Selector} from '@astryxdesign/core/Selector';
@@ -9,9 +10,9 @@ import {confirmInApp} from './system-dialog.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 
 /** A narrowly scoped amendment of the latest source, not a new draft or customer order. */
-export function DevelopmentDesignerCorrection({sourceId,round,version,document,notes,disabled,mode='convert',onRead,onPending,onCancel}:{
+export function DevelopmentDesignerCorrection({sourceId,round,version,document,notes,disabled,mode='convert',actionsTarget,onRead,onPending,onCancel}:{
  sourceId:string;round:number;version:number;document:DevelopmentDocument;disabled:boolean;
- notes?:{brand:string;referenceNote:string}|undefined;mode?:'convert'|'edit';
+ notes?:{brand:string;referenceNote:string}|undefined;mode?:'convert'|'edit';actionsTarget?:HTMLElement|null;
  onRead:(sheet:DevelopmentSheet)=>void;onPending:(active:boolean)=>void;onCancel?:()=>void;
 }){
  const original={styleName:document.workbenchSheet?.styleName??'',brand:notes?.brand??document.workbenchSheet?.brand??'',referenceNote:notes?.referenceNote??document.workbenchSheet?.referenceNote??''};
@@ -59,7 +60,13 @@ export function DevelopmentDesignerCorrection({sourceId,round,version,document,n
  };
  if(mode==='convert'&&!missing&&received===null&&!uncertain)return null;
  const editingDisabled=busy||disabled||received!==null||uncertain;
- return <fieldset className="development-create-card" aria-label={mode==='convert'?'转正前补齐原开发资料':'编辑开发单'}>
+ const actions=<>{mode==='edit'&&onCancel&&<DevelopmentEntryAction type="button" disabled={editingDisabled} onClick={async()=>{
+   if(!dirty||await confirmInApp('尚未保存本次订正，确定取消编辑？'))onCancel();
+  }}>取消编辑</DevelopmentEntryAction>}
+  <DevelopmentEntryAction type="button" variant={mode==='edit'?'primary':'secondary'} disabled={disabled||busy} onClick={()=>void save()}>
+   {received!==null?'重新读取已保存版本':uncertain?'用同一原请求核对结果':mode==='edit'?'保存修改':'保存本轮资料订正'}
+  </DevelopmentEntryAction></>;
+ return <fieldset className={`development-create-card${mode==='edit'?' development-designer-correction':''}`} aria-label={mode==='convert'?'转正前补齐原开发资料':'编辑开发单'}>
   <legend>{mode==='convert'?`转正前补齐原开发资料 · v${version}`:`第 ${round} 轮 · v${version} · 编辑中`}</legend>
   <p>{mode==='convert'?'保存为本轮新版本。原发布版、制作数量和实际投料批次不改写。':'这里只订正品名、品牌与参考资料。制作规格、工艺或数量有实质改变，请从原复版入口办理。'}</p>
   <div className="development-basic-grid">
@@ -85,11 +92,6 @@ export function DevelopmentDesignerCorrection({sourceId,round,version,document,n
    </div>)}
   <DevelopmentEntryText label="本次订正理由" visibleLabel isRequired isDisabled={editingDisabled} value={reason} onChange={setReason} maxLength={1000}/>
   {error&&<p role="alert">{error}</p>}
-  {mode==='edit'&&onCancel&&<DevelopmentEntryAction type="button" disabled={editingDisabled} onClick={async()=>{
-   if(!dirty||await confirmInApp('尚未保存本次订正，确定取消编辑？'))onCancel();
-  }}>取消编辑</DevelopmentEntryAction>}
-  <DevelopmentEntryAction type="button" variant="secondary" disabled={disabled||busy} onClick={()=>void save()}>
-   {received!==null?'重新读取已保存版本':uncertain?'用同一原请求核对结果':mode==='edit'?'保存修改':'保存本轮资料订正'}
-  </DevelopmentEntryAction>
+  {actionsTarget?createPortal(actions,actionsTarget):actions}
  </fieldset>;
 }

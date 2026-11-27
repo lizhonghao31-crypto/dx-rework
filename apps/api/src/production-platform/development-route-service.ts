@@ -157,6 +157,18 @@ export class DevelopmentRouteService {
      if(!recipient)fail('本轮工艺尚无有效办理人，请开发文员在总委派页安排后再发出。');
      input={...input,nextAssigneeId:recipient};
    }
+   if(task.task_kind==='development_shipping'){
+     const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
+     const route:readonly string[]=task.route_version===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):
+      (await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]?.route_nodes??[];
+     const predecessors=route.filter(kind=>kind==='development_confirmation'||kind==='development_patch_confirmation');
+     if(predecessors.length){
+       const proof=(await db.query(`SELECT 1 FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+        WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind=ANY($3::text[]) AND t.state='completed' LIMIT 1`,
+       [sourceId,task.route_version,predecessors])).rowCount;
+       if(!proof)fail('本轮最终设计确认尚未完成，不能登记寄出');
+     }
+   }
    if(task.task_kind==='development_shipping'&&(!input.sentDate||!input.trackingNo?.trim()))fail('请填写实际寄出日期和快递号');
    if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){

@@ -136,6 +136,7 @@ export function paginateDevelopmentPrint(root:HTMLElement){
     continue;
    }
    if(tryAppend(element))continue;
+   if(original.dataset.printSinglePage==='true')throw Error('版单摘要超出原 A4 横向范围，未生成不完整打印。请查看本版本在线资料。');
    if(element.hasAttribute('data-print-split-text')&&element.querySelector('p')?.textContent){appendText(element);continue;}
    if(element.hasAttribute('data-print-split-table')){appendTable(element);continue;}
    if(current.flow.children.length)current=newPage();

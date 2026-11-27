@@ -241,14 +241,17 @@ export class DigitalDevelopmentService {
         &&(await readDevelopmentOrderRush(db,[{sourceId,orderId:null}])).has(`source:${sourceId}`);
       const basics=enableWorkbenchBasics&&result.document?.workbenchSheet&&result.version>0
         ?await readDevelopmentWorkbenchBasics(db,sourceId,result.roundNumber??1,result.version):undefined;
-      const basicsEditable=enableWorkbenchBasics&&result.canEdit&&result.document?.workbenchSheet&&
-        (result.status==='published'||result.preorderPublication)&&(isRootActor(actor)||actor.actorRoles.includes('sample_designer')&&
+      const canEditCurrent=enableWorkbenchBasics&&this.creationEnabled&&result.canEdit&&Boolean(result.document)&&
+        (result.status==='published'||Boolean(result.preorderPublication))&&(isRootActor(actor)||actor.actorRoles.includes('sample_designer')&&
         (await db.query("SELECT 1 FROM digital_production_sources WHERE source_id=$1 AND created_by=$2",[sourceId,actor.actorId])).rowCount&&
         await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'));
+      const basicsEditable=canEditCurrent&&result.document?.workbenchSheet;
+      const designerCorrectionEditable=canEditCurrent&&result.status==='published';
       const sales=result.numberedIdentity?.orderNumber
         ?await new OrderNumberRepository(db).boundSales(sourceId,result.numberedIdentity.orderNumber):undefined;
       await db.query('COMMIT');return {...result,...(orderRush?{orderRush:true as const}:{}),
         ...(basics?{workbenchBasics:basics}:{}),...(basicsEditable?{workbenchBasicsEditable:true as const}:{}),
+        ...(designerCorrectionEditable?{designerCorrectionEditable:true as const}:{}),
         ...(sales?{numberedSales:sales}:{})};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }

@@ -112,8 +112,18 @@ export function preparationHandoverCurrent(handover:Pick<PreparationMaterialFact
 export const materialBasisChanged='物料要求已变化，请核对本轮实际适用性；原物料记录保留';
 export const sourceHandoverChanged='设计交接所引用资料已有新版本';
 
+type HandoverBasisDocument=Parameters<typeof preparationHandoverCurrent>[1];
+function designHandoverVersionReasons(body:PreparationMaterialRecord,resourceKind:PreparationResource['kind'],orderId:string|null,
+ sourceId:string|null,sourceDocument:HandoverBasisDocument,instruction:HandoverBasisDocument){
+ if(body.orderInstructionVersion!==undefined&&orderId){
+  return preparationHandoverCurrent(body,instruction,'instruction')?[]:['设计交接所引用的本单制单资料已有新版本'];
+ }
+ if(sourceId&&(resourceKind==='source'||body.sourceDocumentVersion!=null)&&!preparationHandoverCurrent(body,sourceDocument))return [sourceHandoverChanged];
+ return [];
+}
+
 export async function attachCurrentPreorderApplicability(db:PreparationDB,history:PreparationMaterialFact[],
- sourceId:string|null,document:{document:DevelopmentDocument;version:number;round_number:number}|null|undefined,
+ sourceId:string|null,document:{document:Pick<DevelopmentDocument,'materials'>;version:number;round_number:number}|null|undefined,
  preloadedProofs?:Awaited<ReturnType<typeof readPreorderApplicabilityProofs>>){
  if(!sourceId||!document)return history;
  const investment=history.find(fact=>fact.kind==='material_investment'&&fact.scopeRef==='whole'&&fact.resource.kind==='source'&&fact.resource.id===sourceId);
@@ -170,14 +180,10 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
   if(receipt?!warehouseReceiptMaterialCurrent(row.resource_kind,receipt,receiptSource?.document.materials??null,orderInstruction?.document??null)
    :row.body.materialBasis&&row.body.materialBasis!==await preparationMaterialBasis(db,context,row.kind))missing.push(materialBasisChanged);
   if(row.kind==='design_handover'){
-   if(row.body.orderInstructionVersion!==undefined&&context.orderId){
-    if(!preparationHandoverCurrent(row.body,instructionBasis,'instruction'))
-     missing.push('设计交接所引用的本单制单资料已有新版本');
-   }else if(context.sourceId&&(row.resource_kind==='source'||row.body.sourceDocumentVersion!=null)){
-    const document=receiptSource??await developmentDocumentRow(db,context.sourceId);
-    if(!preparationHandoverCurrent(row.body,document?{version:document.version,materials:document.document.materials}:null))
-     missing.push(sourceHandoverChanged);
-   }
+   const document=!(row.body.orderInstructionVersion!==undefined&&context.orderId)&&context.sourceId&&
+    (row.resource_kind==='source'||row.body.sourceDocumentVersion!=null)?receiptSource??await developmentDocumentRow(db,context.sourceId):null;
+   missing.push(...designHandoverVersionReasons(row.body,row.resource_kind,context.orderId,context.sourceId,
+    document?{version:document.version,materials:document.document.materials}:null,instructionBasis));
   }
   if(row.body.evidenceIds?.length){const ready=(await db.query("SELECT count(*)::int AS n FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready'",[row.body.evidenceIds])).rows[0].n;if(ready!==row.body.evidenceIds.length)missing.push('原凭证已失效或尚未完成上传');}
   const proof=row.applicability_confirmation;
@@ -185,6 +191,60 @@ export async function preparationMaterialHistory(db:PreparationDB,context:Awaite
    ...(proof?{preorderApplicabilityConfirmation:{confirmedAt:proof.confirmedAt,evidenceIds:proof.sameMaterialEvidenceIds}}:{})});
  }
  return attachCurrentPreorderApplicability(db,result,context.sourceId,receiptSource);
+}
+
+type FormalPreparationPair={orderId:string;sourceId:string;version:number;round_number:number;document:Pick<DevelopmentDocument,'materials'>};
+
+/** Only evidence consumed by the current formal-design receipt. Restrict
+ * order streams to the original order and source, not every prep activity. */
+export async function currentFormalPreparationHandovers(db:PreparationDB,pairs:readonly FormalPreparationPair[]){
+ const result=new Map<string,PreparationMaterialFact>();
+ if(!pairs.length||!await preparationAvailable(db))return result;
+ const scope=JSON.stringify(pairs.map(({orderId,sourceId})=>({orderId,sourceId})));
+ const rows=(await db.query<{orderId:string;record_id:string;version:number;resource_kind:PreparationResource['kind'];resource_id:string;
+  kind:PreparationMaterialKind;scope_ref:string;state:PreparationMaterialFact['state'];body:PreparationMaterialRecord&{materialBasis?:string};occurred_at:Date|null;
+  recorded_at:Date;actor_id:string;evidence_current:boolean}>(`WITH selected AS(
+  SELECT * FROM jsonb_to_recordset($1::jsonb) AS pair("orderId" uuid,"sourceId" uuid)
+ ) SELECT pair."orderId",m.record_id,m.version,m.resource_kind,m.resource_id,m.kind,m.scope_ref,m.state,m.body,m.occurred_at,m.recorded_at,m.actor_id,
+  jsonb_array_length(proof.ids)=(SELECT count(*) FROM attachments a WHERE a.status='ready' AND a.attachment_id IN
+   (SELECT id::uuid FROM jsonb_array_elements_text(proof.ids) AS evidence(id))) AS evidence_current
+ FROM selected pair JOIN LATERAL(
+  SELECT m.* FROM digital_preparation_material_versions m WHERE m.kind='design_handover' AND m.scope_ref='whole'
+   AND (m.resource_kind='source' AND m.resource_id=pair."sourceId" OR m.resource_kind='order' AND m.resource_id=pair."orderId")
+  UNION ALL
+  (SELECT m.* FROM digital_preparation_material_versions m WHERE m.kind='material_investment' AND m.scope_ref='whole'
+   AND m.resource_kind='source' AND m.resource_id=pair."sourceId" ORDER BY m.recorded_at DESC,m.version DESC,m.record_id LIMIT 1)
+ ) m ON true CROSS JOIN LATERAL (SELECT coalesce(nullif(m.body->'evidenceIds','null'::jsonb),'[]'::jsonb) AS ids) proof
+ ORDER BY pair."orderId",m.recorded_at DESC,m.version DESC,m.record_id`,[scope])).rows;
+ const instructionIds=[...new Set(rows.filter(row=>row.kind==='design_handover'&&row.body.orderInstructionVersion!==undefined).map(row=>row.orderId))];
+ const instructions=new Map<string,HandoverBasisDocument>(instructionIds.length?(await db.query<{production_order_id:string;version:number;document:InstructionDocument}>(
+  'SELECT production_order_id,version,document FROM digital_instruction_documents WHERE production_order_id=ANY($1::uuid[]) AND version>0',[instructionIds])).rows
+  .map(row=>[row.production_order_id,{version:row.version,materials:instructionInvestmentMaterials(row.document)}]):[]);
+ const documents=new Map(pairs.map(pair=>[pair.orderId,pair]));
+ const histories=new Map<string,PreparationMaterialFact[]>();
+ for(const row of rows){
+  const pair=documents.get(row.orderId)!;
+  const history=histories.get(pair.orderId)??[];
+  const missing=row.kind==='design_handover'?designHandoverVersionReasons(row.body,row.resource_kind,pair.orderId,pair.sourceId,
+   {version:pair.version,materials:pair.document.materials},instructions.get(pair.orderId)??null):[];
+  if(row.body.materialBasis)missing.unshift(materialBasisChanged);
+  if(!row.evidence_current)missing.push('原凭证已失效或尚未完成上传');
+  history.push({...row.body,kind:row.kind,scopeRef:row.scope_ref,state:row.state,recordId:row.record_id,version:row.version,
+   resource:{kind:row.resource_kind,id:row.resource_id},occurredAt:preparationIso(row.occurred_at),recordedAt:preparationIso(row.recorded_at)!,
+   recordedBy:row.actor_id,operatorName:'',valid:!missing.length,invalidReasons:missing});
+  histories.set(pair.orderId,history);
+ }
+ const sourcesNeedingProofs=pairs.filter(pair=>histories.get(pair.orderId)?.some(row=>row.kind==='design_handover'&&
+  row.resource.kind==='source'&&row.investmentScopeBasis?.preorder&&row.sourceDocumentVersion!==pair.version)).map(pair=>pair.sourceId);
+ const proofs=await readPreorderApplicabilityProofs(db,[...new Set(sourcesNeedingProofs)]);
+ for(const pair of pairs){
+  const history=histories.get(pair.orderId);
+  if(!history)continue;
+  const current=currentPreparationMaterials(await attachCurrentPreorderApplicability(db,history,pair.sourceId,pair,proofs),pair.orderId)
+   .find(row=>row.kind==='design_handover');
+  if(current)result.set(pair.orderId,current);
+ }
+ return result;
 }
 /** An existing order stream keeps authority after source attachment. Source-only records are adopted by reference, never copied as receipts. */
 export function currentPreparationMaterials(history:PreparationMaterialFact[],orderId:string|null){

@@ -25,6 +25,7 @@ import {developmentDocumentRow} from './development-round-repository.js';
 import {DEVELOPMENT_HANDOVER_ENTITY,SAMPLE_HANDOVER_EVENT,designElectronicBases,designSampleHandoverHistory,readDesignElectronicHandover,readFormalDesignHandover,recordFormalDesignHandover,shareApprovedDesignVersions} from './development-electronic-handover.js';
 import {formalDevelopmentHandoverEvidence} from './development-formal-handover-evidence.js';
 import {orderTimeCreated} from './order-time-created.js';
+import {readCurrentFormalHandovers} from './development-current-handover-batch.js';
 import {preparationContext,preparationAvailable,preparationAdoption,preparationHash,preparationIso,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,appendPreparationMaterial,directInvestmentInstruction,type PreparationDB} from './preparation-material-repository.js';
 import {materialInvestmentReminder} from './material-investment-reminder.js';
 import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
@@ -161,6 +162,9 @@ export class ProductionReadinessService{
   const view={sourceId,round,documentVersion,recipient,electronic,canConfirm,current,history};
   return formal&&order?{...view,formal:{...formal,currentComplete:Boolean(formal.historicalCompletion&&
    formalDevelopmentHandoverEvidence(view,await orderTimeCreated(db,{kind:'order',id:order.id})))}}:view;
+ }
+ currentFormalHandoversInSnapshot(db:PoolClient,actor:TrustedActorContext,pairs:readonly {sourceId:string;orderId:string}[]){
+  return readCurrentFormalHandovers(db,actor,pairs);
  }
  async sampleHandover(actor:TrustedActorContext,sourceId:string){
   const db=await this.database.connect();

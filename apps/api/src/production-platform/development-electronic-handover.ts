@@ -15,14 +15,16 @@ import {appendSeriesSourceEvent} from './series-plan-facts.js';
 
 export const DEVELOPMENT_HANDOVER_ENTITY='digital_development_handover';
 export const SAMPLE_HANDOVER_EVENT='design_sample_handed_over';
-const ELECTRONIC_HANDOVER_EVENT='design_electronic_documents_shared';
+export const ELECTRONIC_HANDOVER_EVENT='design_electronic_documents_shared';
 const FORMAL_HANDOVER_EVENT='design_formal_handover_completed';
 const electronicKinds=['materials','order_quantities','quotation'] as const;
 
 type Basis={kind:DevelopmentElectronicHandoverItem['kind'];id:string;version:number;content:string;orderId?:string};
 type HandoverScope={sourceId:string;round:number;recipientId:string|null};
-type ElectronicEvent={id:string;after_state:{round:number;recipientId:string;at:string;bases:Basis[]}};
+export type ElectronicEvent={id:string;after_state:{round:number;recipientId:string;at:string;bases:Basis[]}};
 type SampleDeliveryEvent={event_id:string;actor_id:string;actor_name:string|null;payload:Omit<DevelopmentSampleHandoverReceipt,'eventId'|'confirmedBy'|'confirmedByName'>};
+export type ElectronicQuantityRow={line_id:string;po_number:string|null;color:string;size:string|null;quantity:number|null};
+export type ElectronicQuoteRow={quote_id:string;version:number};
 
 export async function designSampleHandoverHistory(db:PreparationDB,sourceId:string,round:number){
  const events=(await db.query<SampleDeliveryEvent>(`SELECT e.id AS event_id,e.actor_id,u.display_name AS actor_name,e.after_state AS payload
@@ -32,7 +34,7 @@ export async function designSampleHandoverHistory(db:PreparationDB,sourceId:stri
  return events.map(event=>({eventId:event.event_id,...event.payload,confirmedBy:event.actor_id,confirmedByName:event.actor_name}));
 }
 
-function materialBasis(document:DevelopmentDocument){
+function materialBasis(document:Pick<DevelopmentDocument,'materials'>){
  const rows=document.materials.filter(row=>row.requiredThisRound||row.name.trim());
  if(!rows.length||rows.some(row=>!row.name.trim()||!row.supplier.trim()||!row.quantity.trim()||!row.quantityUnit?.trim()))return null;
  return preparationHash(rows.map(row=>[row.materialId,row.category,row.name,row.supplier,row.quantity,row.quantityUnit,
@@ -40,35 +42,48 @@ function materialBasis(document:DevelopmentDocument){
  ]).sort(([a],[b])=>String(a).localeCompare(String(b),'en')));
 }
 
-export async function designElectronicBases(db:PreparationDB,sourceId:string,document:{version:number;document:DevelopmentDocument},
- order:{id:string;version:number;customer:string}|null):Promise<Basis[]>{
+export function designElectronicBasesFromFacts(sourceId:string,document:{version:number;document:Pick<DevelopmentDocument,'materials'>},
+ order:{id:string;version:number}|null,rows:ElectronicQuantityRow[],quotes:ElectronicQuoteRow[]):Basis[]{
  const bases:Basis[]=[];
  const materials=materialBasis(document.document);
  if(materials)bases.push({kind:'materials',id:sourceId,version:document.version,content:materials});
  if(!order)return bases;
- const rows=(await db.query<{line_id:string;po_number:string|null;color:string;size:string|null;quantity:number|null}>(`SELECT p.line_id,p.po_number,p.color,s.size,s.quantity
-  FROM digital_production_po_lines p LEFT JOIN digital_production_po_sizes s USING(line_id)
-  WHERE p.production_order_id=$1 ORDER BY p.line_id,s.size COLLATE "C"`,[order.id])).rows;
  if(rows.length&&rows.every(row=>row.size&&row.quantity&&row.quantity>0))bases.push({kind:'order_quantities',id:order.id,orderId:order.id,
   version:order.version,content:preparationHash(rows)});
- if(await hasQuotationSchema(db)){
-  const quotes=(await db.query<{quote_id:string;version:number}>(`SELECT d.quote_id,v.version FROM digital_quotation_documents d
-   JOIN digital_quotation_versions v ON v.quote_id=d.quote_id AND v.version=d.confirmed_version AND v.customer_code=$3
-   WHERE d.production_order_id=$1 AND d.version=d.confirmed_version AND (d.source_id=$2 OR d.source_id IS NULL)`,[order.id,sourceId,order.customer])).rows;
-  if(quotes.length===1){const quote=quotes[0]!;bases.push({kind:'quotation',id:quote.quote_id,orderId:order.id,version:quote.version,content:String(quote.version)});}
- }
+ if(quotes.length===1){const quote=quotes[0]!;bases.push({kind:'quotation',id:quote.quote_id,orderId:order.id,version:quote.version,content:String(quote.version)});}
  return bases;
 }
 
+export async function designElectronicBases(db:PreparationDB,sourceId:string,document:{version:number;document:DevelopmentDocument},
+ order:{id:string;version:number;customer:string}|null):Promise<Basis[]>{
+ if(!order)return designElectronicBasesFromFacts(sourceId,document,null,[],[]);
+ const rows=(await db.query<ElectronicQuantityRow>(`SELECT p.line_id,p.po_number,p.color,s.size,s.quantity
+  FROM digital_production_po_lines p LEFT JOIN digital_production_po_sizes s USING(line_id)
+  WHERE p.production_order_id=$1 ORDER BY p.line_id,s.size COLLATE "C"`,[order.id])).rows;
+ const quotes=await hasQuotationSchema(db)?(await db.query<ElectronicQuoteRow>(`SELECT d.quote_id,v.version FROM digital_quotation_documents d
+   JOIN digital_quotation_versions v ON v.quote_id=d.quote_id AND v.version=d.confirmed_version AND v.customer_code=$3
+   WHERE d.production_order_id=$1 AND d.version=d.confirmed_version AND (d.source_id=$2 OR d.source_id IS NULL)`,[order.id,sourceId,order.customer])).rows:[];
+ return designElectronicBasesFromFacts(sourceId,document,order,rows,quotes);
+}
+
+export const effectiveElectronicHandover=(scope:HandoverScope,handover:PreparationMaterialFact|undefined)=>
+ handover?.state==='ready'&&handover.valid&&handover.recipientId===scope.recipientId?handover:undefined;
+
 export async function readDesignElectronicHandover(db:PreparationDB,scope:HandoverScope,bases:readonly Basis[],
  handover:PreparationMaterialFact|undefined,orderState:'available'|'not_applicable'|'unavailable'):Promise<DevelopmentElectronicHandoverItem[]>{
- const currentHandover=handover?.state==='ready'&&handover.valid&&handover.recipientId===scope.recipientId?handover:undefined;
+ const currentHandover=effectiveElectronicHandover(scope,handover);
  const events=scope.recipientId&&currentHandover?(await db.query<ElectronicEvent>(`SELECT id,after_state FROM audit_events
   WHERE entity_type=$1 AND entity_id=$2 AND action=$3 AND after_state->>'round'=$4 AND after_state->>'recipientId'=$5
   ORDER BY created_at DESC,id DESC`,[DEVELOPMENT_HANDOVER_ENTITY,scope.sourceId,ELECTRONIC_HANDOVER_EVENT,String(scope.round),scope.recipientId])).rows:[];
  const originalVersion=currentHandover?.sourceDocumentVersion;
  const original=scope.recipientId&&currentHandover?.valid&&originalVersion
   ?await developmentDocumentSnapshot(db,scope.sourceId,scope.round,originalVersion):undefined;
+ return projectDesignElectronicHandover(scope,bases,currentHandover,orderState,events,original?.document);
+}
+
+export function projectDesignElectronicHandover(scope:HandoverScope,bases:readonly Basis[],currentHandover:PreparationMaterialFact|undefined,
+ orderState:'available'|'not_applicable'|'unavailable',events:readonly ElectronicEvent[],original:Pick<DevelopmentDocument,'materials'>|undefined):DevelopmentElectronicHandoverItem[]{
+ const originalVersion=currentHandover?.sourceDocumentVersion;
  return electronicKinds.map(kind=>{
   const basis=bases.find(item=>item.kind===kind);
   const version=basis?.version??null;
@@ -76,7 +91,7 @@ export async function readDesignElectronicHandover(db:PreparationDB,scope:Handov
   if(orderState==='not_applicable'&&kind==='order_quantities')return {kind,version,state:'not_applicable'};
   if(!basis)return {kind,version,state:'incomplete'};
   if(!scope.recipientId)return {kind,version,state:'waiting_recipient'};
-  const originalMatches=kind==='materials'&&original&&materialBasis(original.document)===basis.content;
+  const originalMatches=kind==='materials'&&original&&materialBasis(original)===basis.content;
   if(originalMatches&&currentHandover?.occurredAt)return {kind,version,state:'shared',receipt:{
    id:currentHandover.recordId,version:originalVersion!,recipientId:scope.recipientId,at:currentHandover.occurredAt,
   }};

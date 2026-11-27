@@ -72,6 +72,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    s.created_at AS source_created,o.created_at AS order_created,${cockpitLegacyOrderTimeSql('o')} AS legacy_order_business_time,(coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) OR coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false)) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
    designer.display_name AS designer,primary_person.display_name AS primary_name,
    sourcing.child_id AS sourcing_id,production.child_id AS production_id,source_case.style_name_snapshot,source_case.erp_order_no,
+   CASE WHEN r."sourceAccess" THEN nullif(btrim((CASE WHEN coalesce(round.round_number,1)>1 THEN round.document ELSE document.document END)->'workbenchSheet'->>'styleName'),'') END AS development_style_name,
    additional.people AS secondary_merchandisers,source_case.sourcing_case_id AS visible_sourcing_id,
    CASE WHEN coalesce(round.round_number,1)>1 THEN round.document->>'template' ELSE document.document->>'template' END AS category_template,
    CASE WHEN document.status='published' THEN document.published_at END AS legacy_published_at,
@@ -172,7 +173,7 @@ flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND complet
   CASE WHEN n."orderAccess" OR n.sid IS NULL THEN n.order_temporary ELSE n.source_temporary END AS "temporaryStyleNo",
   CASE WHEN n."orderAccess" OR n.sid IS NULL THEN n.order_customer ELSE n.source_customer END AS customer,
   coalesce(CASE WHEN n."sourceAccess" THEN n.category_template END,CASE WHEN n."orderAccess" THEN n.product_group END) AS category,
-  n.designer,n.style_name_snapshot AS "styleName",
+  n.designer,${options.workspaceNodes==='designer'?'n.development_style_name':'n.style_name_snapshot'} AS "styleName",
   (CASE WHEN n."orderAccess" AND n.primary_merchandiser_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('id',n.primary_merchandiser_id,'name',n.primary_name)) ELSE '[]'::jsonb END)
    ||coalesce(n.secondary_merchandisers,'[]'::jsonb) AS merchandisers,
   CASE WHEN n.erp_order_no IS NOT NULL AND n.erp_order_no<>'' THEN ARRAY[n.erp_order_no] ELSE ARRAY[]::text[] END AS "orderNumbers",

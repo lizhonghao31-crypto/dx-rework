@@ -729,7 +729,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   ])});
   const designerTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=workspace&development='+source.sourceId);
   try{
-   const area=designerTab.page.getByRole('region',{name:'报价',exact:true});
+   const area=designerTab.page.getByRole('region',{name:'对客户报价表',exact:true});
+   await area.locator(':scope > summary').click();
    await area.getByRole('row').filter({hasText:'TEST冲突主料'}).getByText('缺资料',{exact:true}).waitFor();
    await area.getByRole('row').filter({hasText:'TEST匹配辅料'}).getByText('已填有效',{exact:true}).waitFor();
    await area.getByText(/已完成 1\//).waitFor();
@@ -899,8 +900,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await forms.publish(designer,source.sourceId,publication.version,randomUUID());
    const workbenchPath='/ui/digital-production?workspace=designer&section=workspace&area=customer&development='+source.sourceId;
    await d.page.goto(h.base+workbenchPath);
-   const customerArea=d.page.getByRole('region',{name:'报价',exact:true});
+   const customerArea=d.page.getByRole('region',{name:'对客户报价表',exact:true});
    await customerArea.getByRole('heading',{name:'对客户报价表',exact:true}).waitFor();
+   await customerArea.locator(':scope > summary').click();
    await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
    const statusPanel = customerArea.locator('[aria-label="当前报价状态"]');
    expect(await customerArea.getByRole('columnheader',{name:'技术用量负责人',exact:true}).count()).toBe(0);
@@ -914,6 +916,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await d.page.getByRole('button',{name:'保存报价',exact:true}).click();
    await expect.poll(async()=>(await quotes.read(designer,resource)).assignments.some(a=>a.priceAssigneeId===ie.actorId)).toBe(true);
    await d.page.goto(h.base+workbenchPath);
+   await customerArea.locator(':scope > summary').click();
    await customerArea.locator('.quotation-editor').getByText('客户当前确认版：尚未确认',{exact:true}).waitFor();
    expect(await d.page.getByRole('button',{name:'添加主料',exact:true}).count()).toBe(0);
    expect(await d.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
@@ -1006,6 +1009,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await panel.getByText('已保存报价测算，尚未记录客户确认。',{exact:true}).waitFor();
     await quotes.saveWorkbenchPricingDraft(designer,resource,pricing,pricingKey);
     await d.page.reload();
+    await customerArea.locator(':scope > summary').click();
     await panel.getByText('测算不等于客户确认',{exact:false}).waitFor();
     await price.focus();
     expect(await price.inputValue()).toBe('49.123456');
@@ -1135,6 +1139,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const zeroFabric=await quotes.fillRow(designer,resource,materialId,{expectedVersion:beforeZero.version,unitPrice:'0'},randomUUID());
     const zeroCost=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:zeroFabric.version,unitPrice:'0'},randomUUID());
     await d.page.reload();
+    await customerArea.locator(':scope > summary').click();
     const zeroInput=d.page.getByLabel('对客户单价（元/件）',{exact:true});
     await zeroInput.focus();await zeroInput.fill('7.5');
     expect(await zeroInput.inputValue()).toBe('7.5');

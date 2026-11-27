@@ -54,7 +54,9 @@ export function DigitalQuotationPage(){
  if(query.has('id')||query.has('kind'))return parsed.success?<DigitalQuotationPanel key={`${parsed.data.kind}:${parsed.data.id}`} resource={parsed.data}/>:<Surface><p role="alert">报价来源编号无效，请从原单进入</p></Surface>;
  return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}<OrderRushBadge value={item.orderRush}/></td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
 }
-export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,designerWorkbench}:{resource:QuotationResource;onChanged?:()=>void;originalSnapshot?:QuotationSheet|undefined;designerWorkbench?:{actorId:string|undefined}}){
+export type QuotationWorkbenchHeadline={resource:QuotationResource,state:DesignerQuotationStatusCode,quoteId:string|null,version:number|null,roundNumber:number|null};
+
+export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,designerWorkbench}:{resource:QuotationResource;onChanged?:()=>void;originalSnapshot?:QuotationSheet|undefined;designerWorkbench?:{actorId:string|undefined;roundNumber?:number;onHeadline?:(value:QuotationWorkbenchHeadline)=>void}}){
  const [initialHistory]=useState<{version?:number;error?:string}>(()=>originalSnapshot?{version:originalSnapshot.version}:quotationHistoryFromSearch(window.location.search,resource));
  const [originalSheet,setSheet]=useState<QuotationSheet|null>(null),[document,setDocument]=useState<BudgetDocument>(empty),[assignments,setAssignments]=useState<QuotationAssignment[]>([]);
  const [participants,setParticipants]=useState<Array<{id:string;name:string;role:string}>>([]),[rowInputs,setRowInputs]=useState<Record<string,{consumption?:string;unitPrice?:string;pricingUnit?:string}>>({});
@@ -147,7 +149,14 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  const unitMismatches=new Set(sheet?.rows.filter(row=>row.technicalConsumptionIssue==='unit_mismatch').map(row=>row.rowId));
  const validDocument=BudgetDocumentSchema.safeParse(document),totals=validDocument.success?calculateBudget(validDocument.data):null;
  const workbenchPricing=(ownsQuote||sheet?.requiresWorkbenchPricing&&sheet.canConfirm)&&!history&&sheet?.status==='draft'&&sheet.quoteId;
- const statusCode:DesignerQuotationStatusCode=refreshing?'unverified':readFailure??sheet?.designerStatus?.state??'unverified';
+ const onHeadline=designerWorkbench?.onHeadline;
+ const projection=sheet?.designerStatus,expectedRound=designerWorkbench?.roundNumber;
+ const sameRound=!projection?.roundNumber||!expectedRound||projection.roundNumber===expectedRound;
+ const statusCode:DesignerQuotationStatusCode=refreshing||onHeadline&&history!==undefined?'unverified':readFailure??(sameRound?projection?.state:undefined)??'unverified';
+ const currentStatus=canEditDisplayed&&history===undefined&&sameRound?projection:undefined;
+ const quoteId=currentStatus?.quoteId??null,quoteVersion=currentStatus?.version??null,quoteRound=currentStatus?.roundNumber??null;
+ useEffect(()=>onHeadline?.({resource:{kind:resource.kind,id:resource.id},state:statusCode,quoteId,version:quoteVersion,roundNumber:quoteRound}),
+  [onHeadline,resource.kind,resource.id,statusCode,quoteId,quoteVersion,quoteRound]);
  const displayStatus=DESIGNER_QUOTATION_STATUS_DISPLAY[statusCode];
  const rowStates=new Map(sheet?.designerStatus?.rows.map(row=>[row.rowId,row.state]));
  const confirmedPricing=sheet?.status==='confirmed'?sheet.confirmedPricing:null;
@@ -157,7 +166,7 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  </DocumentToolbar>{error&&<p role="alert">{error}</p>}{uncertain?<><Button disabled={busy} onClick={()=>void recover()}>使用原内容核对报价提交</Button><Button disabled={busy} onClick={()=>void reload()}>仅核对当前版本</Button></>:<Button disabled={busy||refreshing} onClick={()=>void reload()}>重新读取报价</Button>}
  {workbench&&<div className="quotation-designer-state" aria-label="当前报价状态">
    <StatusBadge tone={displayStatus.tone}>{displayStatus.label}</StatusBadge>
-   {sheet?.designerStatus&&canEditDisplayed&&<><span>已完成 {sheet.designerStatus.completed}/{sheet.designerStatus.applicable} 项</span>
+   {sheet?.designerStatus&&canEditDisplayed&&sameRound&&<><span>已完成 {sheet.designerStatus.completed}/{sheet.designerStatus.applicable} 项</span>
     {sheet.designerStatus.reasons.length>0&&<p>{sheet.designerStatus.reasons.join('、')}</p>}</>}
  </div>}
  {sheet&&<>{!workbench&&sheet.automatic&&<p>材料、用量与工艺按本单资料自动汇集。{sheet.status==='confirmed'?'':sheet.workbenchReadiness?.canConfirm?'报价资料已齐，待客户确认。':sheet.workbenchReadiness?.reasons.length?sheet.workbenchReadiness.reasons.join('、')+'。':'仍有资料或负责人员待补齐。'}</p>}<div className="budget-heading"><p>设计编号：<strong>{sheet.designStyleNo}</strong></p><p>客户：{sheet.customerCode??'通用开发'}</p><p>{workbench&&sheet.status==='draft'&&sheet.confirmedVersion!==null?'客户上次确认版':'客户当前确认版'}：{sheet.confirmedVersion??'尚未确认'}</p></div>

@@ -127,7 +127,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.post('/digital-production/whole-orders/delete-preview',async request=>dependencies.service.deletions().preview(await actor(request),parse(WholeOrderSelectionSchema,request.body)));
   app.post('/digital-production/whole-orders/delete',async request=>dependencies.service.deletions().remove(await actor(request),parse(WholeOrderDeletionInputSchema,request.body),key(request)));
   if (dependencies.journeys) {
-    const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys,dependencies.notificationService);
+    const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys,dependencies.notificationService,dependencies.readinessService);
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => {

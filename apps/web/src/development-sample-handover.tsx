@@ -14,7 +14,7 @@ const dateLabel=(value:string)=>new Date(value).toLocaleString('zh-CN',{timeZone
 const electronicLabels={materials:'面辅料供应信息',order_quantities:'客户订单数量',quotation:'报价表'} as const;
 const incomplete={materials:'请在版单补齐材料、供应商、数量和单位',order_quantities:'待核原订单的 PO 与尺码数量',quotation:'待有可交付的客户确认报价'} as const;
 
-export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,refreshRevision,onReady}:{sourceId:string;round:number;documentVersion:number;refreshRevision:number;onReady:(ready:boolean)=>void}){
+export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,refreshRevision,onReady,onProgress}:{sourceId:string;round:number;documentVersion:number;refreshRevision:number;onReady:(ready:boolean)=>void;onProgress?:(state:'complete'|'pending'|'unknown'|'failed')=>void}){
  const path=`sources/${sourceId}/production-readiness/sample-handover`;
  const read=useCallback((signal:AbortSignal)=>digitalRequest<DevelopmentSampleHandover>(path,'GET',undefined,undefined,{signal}),[path]);
  const result=useForegroundRead('development-sample-handover',`${sourceId}:${round}:${documentVersion}:${refreshRevision}`,read);
@@ -25,6 +25,7 @@ export function DevelopmentSampleHandoverPanel({sourceId,round,documentVersion,r
  const writing=useRef(false),attempt=useRef(new SubmissionAttempt());
  const unknown=attempt.current.hasPending;
  useEffect(()=>onReady(!result.waiting),[result.waiting,onReady]);
+ useEffect(()=>onProgress?.(result.error?'failed':progress??'unknown'),[result.error,progress,onProgress]);
  useDigitalDetailNavigationGuard(unknown,busy,writing,'本次样衣交接结果尚未确认，确认离开？');
 
  const send=async(retry=false)=>{
