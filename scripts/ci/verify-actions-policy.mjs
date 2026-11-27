@@ -50,8 +50,17 @@ const branches = quick.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+
 assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4", "unified-p*", "deliver/sla-foundation-development-budget-20261024", "deliver/sla-preparation-cutting-dispatch-20261024"]),
   "CI caller must admit only the approved exact PR base branches");
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
-assert(countOccurrences(quick, 'timeout-minutes:') === 3 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
-  "Only two bounded request/certification metadata jobs may accompany the five-minute light/Quick worker");
+assert(countOccurrences(quick, 'timeout-minutes:') === 4 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
+  "Light/Quick retains one five-minute worker and two metadata checks; Full has one separately bounded preflight");
+const affected = quick.split('\n  affected_entries:\n')[1]?.split('\n  full:\n')[0];
+const fullCaller = quick.split('\n  full:\n')[1]?.split('\n  approval:\n')[0];
+assert(affected && affected.includes("    needs: request") && affected.includes("timeout-minutes: 12")
+  && affected.includes("github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full'")
+  && affected.includes('persist-credentials: false') && affected.includes('git show "$AFFECTED_BASE:scripts/ci/affected-entry-preflight.mjs"')
+  && affected.includes('node "$RUNNER_TEMP/dx-affected-entry.mjs" verify'),
+  "Affected native preflight is bounded, read-only and restricted to the exact explicit Full request");
+assert(fullCaller?.includes('needs: [request, affected_entries]') && fullCaller.includes("github.run_attempt == 1") && fullCaller.includes("needs.affected_entries.result == 'success'"),
+  "The expensive Full worker cannot start if the actual affected-entry preflight is absent, skipped, or failed");
 assert(countOccurrences(full,'timeout-minutes:')===4 && (full.match(/^ {4}timeout-minutes: 30[ \t]*$/gm)||[]).length===2 && (full.match(/^ {4}timeout-minutes: 60[ \t]*$/gm)||[]).length===1 && (full.match(/^ {4}timeout-minutes: 2[ \t]*$/gm)||[]).length===1,
   "Full preparation/non-DB remain30minutes; expanded PG lane is bounded to60minutes, aggregation to2minutes");
 for(const [job,budget]of [['prepare',30],['non-db',30],['postgres',60],['full-validate',2]]) {

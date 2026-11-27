@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {test,after} from 'node:test';
-import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
+import {affectedEntryPlan,affectedReceipt,AFFECTED_JOB,AFFECTED_PREFIX} from './affected-entry-preflight.mjs';
 import {checkTimeSiteInventory} from '../acceptance/time-site-inventory.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {GitHub,GitHubError,decodeGitHubResponse,requestFinal as guardedRequestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
-import {closeoutFixture,disposeCloseoutFixtures} from './final-closeout.fixture.mjs';
+import {closeoutFixture,disposeCloseoutFixtures,closeoutSha} from './final-closeout.fixture.mjs';
 after(disposeCloseoutFixtures);
 const closeouts=new WeakMap();
 const requestFinal=(api,number,head,options={})=>guardedRequestFinal(api,number,head,{closeoutPath:closeouts.get(api)?.path,...options});
@@ -26,12 +27,14 @@ function fixture(){
  const api={pr:async()=>structuredClone(state.pr),comments:async()=>structuredClone(state.comments),pages:async(path,key)=>{
   state.reads.push(path);
   if(path===`${prefix}/pulls/901/comments`)return structuredClone(state.inlineComments);
+  if(path===`${prefix}/pulls/901/reviews`)return structuredClone(state.reviews??[]);
   if(path.includes('/jobs'))return structuredClone(state.jobs[Number(path.match(/runs\/(\d+)/)[1])]??[]);
   if(key==='workflow_runs')return structuredClone(path.includes('event=create')?state.runs.final:state.runs.light);
   throw new Error(`Unexpected pages ${path}`);
  },request:async(path,{method='GET',body}={})=>{
   if(method==='GET')state.reads.push(path);else state.writes.push({path,method,body});
   if(path==='/graphql')return {data:{repository:{pullRequest:{reviewThreads:{nodes:state.threads,pageInfo:{hasNextPage:false}}}}}};
+  if(path.includes('/contents/scripts/ci/affected-entry-map.json'))throw new GitHubError(404,'Not Found');
   if(path.includes('/contents/docs/engineering/construction-evidence.json'))return state.closeout.encoded();
   if(path.includes('/compare/'))return {status:'ahead',behind_by:0};
   if(path.includes('/logs'))return state.logs[Number(path.match(/jobs\/(\d+)/)[1])];
@@ -211,5 +214,81 @@ test('parallel Light does not let unfinished Review or unresolved findings start
   else state.threads=[{id:'known',isResolved:false}];
   await assert.rejects(()=>requestFinal(api,901,head,{apply:true}),/Review/);
   assert.equal(state.writes.some(write=>write.path.endsWith('/git/refs')),false);
+ }
+});
+
+async function withPinnedImpact(f,{path='apps/web/src/digital-development-create-form.tsx',truncated=false}={}){
+ const bytes=await readFile('scripts/ci/affected-entry-map.json'),registry=JSON.parse(bytes);
+ const original=f.api.request;
+ const baseTree='1'.repeat(40),headTree='2'.repeat(40),file='scripts/ci/affected-entry-map.json';
+ const map={path:file,type:'blob',mode:'100644',sha:'3'.repeat(40)};
+ const touched={path,type:'blob',mode:'100644',sha:'4'.repeat(40)};
+ f.api.request=async(apiPath,options)=>{
+  if(apiPath.endsWith('/contents/'+file+'?ref='+base))return {type:'file',encoding:'base64',content:bytes.toString('base64')};
+  if(apiPath.endsWith('/git/commits/'+base))return {sha:base,tree:{sha:baseTree}};
+  if(apiPath.endsWith('/git/commits/'+head))return {sha:head,tree:{sha:headTree}};
+  if(apiPath.includes('/git/trees/'+baseTree))return {sha:baseTree,truncated,tree:[map,touched]};
+  if(apiPath.includes('/git/trees/'+headTree))return {sha:headTree,truncated:false,tree:[map,{...touched,sha:'5'.repeat(40)}]};
+  return original(apiPath,options);
+ };
+ return affectedEntryPlan(registry,[path]);
+}
+
+async function closeoutBrowser(f,tests,{stale=false}={}){
+ const c=f.state.closeout,cwd=c.dir,byFile=Map.groupBy(tests,test=>test.file);
+ const body=JSON.stringify({success:true,numFailedTests:0,numPassedTests:tests.length,numPendingTests:0,
+  testResults:[...byFile].map(([file,tests])=>({name:join(cwd,file),assertionResults:tests.map(test=>({fullName:test.name,status:'passed'}))}))});
+ await writeFile(c.log,body);
+ const proof=c.evidence.checks[0];
+ Object.assign(proof,{cwd,logSha256:closeoutSha(body),passed:tests.length,sourceFingerprint:stale?'d'.repeat(64):c.evidence.sourceFingerprint,testedHead:head});
+ c.pack.reports[0]={checkId:proof.id,path:c.log,format:'vitest-json',sha256:closeoutSha(body)};
+ c.pack.scopeChecks[0].testNames=[tests[0].name];
+ c.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(c.evidence));c.save();
+}
+
+test('the creation-equivalent diff with only the new wizard blocks Full before any immutable write',async()=>{
+ const f=fixture(),selected=await withPinnedImpact(f);
+ await closeoutBrowser(f,selected.filter(c=>c.id==='original-numbered-creation'));
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true}),
+  e=>/AFFECTED_ENTRY_PROOF_MISSING: original-fixed-timeline-creation, original-preorder-conversion, original-preorder-investment-from-task/.test(e.message));
+ assert.equal(f.state.ref,null);
+ await closeoutBrowser(f,selected,{stale:true});
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true}),/AFFECTED_ENTRY_PROOF_MISSING/);
+ assert.equal(f.state.ref,null);
+ await closeoutBrowser(f,selected);
+ assert.equal((await requestFinal(f.api,901,head,{apply:true})).state,'requested');
+ assert.equal(f.state.writes.filter(w=>w.path.endsWith('/git/refs')).length,1);
+});
+
+test('unrelated paths use the existing closeout and branch binding, while a truncated pinned diff denies',async()=>{
+ const independent=fixture();assert.deepEqual(await withPinnedImpact(independent,{path:'apps/api/src/production-platform/rework-service.ts'}),[]);
+ assert.equal((await requestFinal(independent.api,901,head,{apply:true})).state,'requested');
+ const incomplete=fixture();await withPinnedImpact(incomplete,{truncated:true});
+ await assert.rejects(()=>requestFinal(incomplete.api,901,head,{apply:true}),/complete pinned GitHub tree/);
+ assert.equal(incomplete.state.ref,null);
+});
+
+test('merge requires the real hosted affected check and refuses skips, forged context names or an old attempt',async()=>{
+ const f=fixture(),selected=await withPinnedImpact(f);await closeoutBrowser(f,selected);
+ await requestFinal(f.api,901,head,{apply:true});f.addFinal();
+ await assert.rejects(()=>verifyMerge(f.api,901,head),/actual hosted affected-entry job/);
+ const hosted={id:302,name:AFFECTED_JOB,run_id:102,run_attempt:1,head_sha:head,status:'completed',conclusion:'success',
+  steps:[{name:'Run and verify exact affected cases',conclusion:'skipped'}]};
+ f.state.jobs[102].push(hosted);
+ await assert.rejects(()=>verifyMerge(f.api,901,head),/skipped/);
+ hosted.steps[0].conclusion='success';
+ f.state.logs[302]=AFFECTED_PREFIX+JSON.stringify(affectedReceipt(plan,{id:102,run_attempt:2},selected,'a'.repeat(64)));
+ await assert.rejects(()=>verifyMerge(f.api,901,head),/stale/);
+ f.state.logs[302]=AFFECTED_PREFIX+JSON.stringify(affectedReceipt(plan,{id:102,run_attempt:1},selected,'a'.repeat(64)));
+ assert.deepEqual((await verifyMerge(f.api,901,head)).final.affectedReceipt.cases,selected.map(t=>t.id));
+});
+
+test('Full Review retry does not create a third round after either two requests or one automatic round and a request',async()=>{
+ for(const autoRound of [true,false]){
+  const f=fixture(),created='2026-10-27T17:00:01Z',second={...request,id:20,created_at:created};
+  f.state.comments=autoRound?[second,summary('running')]:[request,second,summary('running')];
+  if(autoRound)f.state.reviews=[{user:{login:REVIEW_BOT},state:'COMMENTED',submitted_at:'2026-10-27T16:54:00Z'}];
+  assert.deepEqual(await reviewStep(f.api,901,head,20,{apply:true,now:Date.parse(created)+900000}),{action:'review_round_limit',limit:2});
+  assert.equal(f.state.writes.length,0);
  }
 });

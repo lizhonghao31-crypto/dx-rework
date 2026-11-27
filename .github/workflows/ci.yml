@@ -371,6 +371,59 @@ jobs:
           GATE_SUMMARY_JS
           node scripts/ci/ci-gate-runtime.mjs emit
 
+  affected_entries:
+    name: Verify affected native entry points
+    needs: request
+    if: ${{ github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AFFECTED_PR: ${{ needs.request.outputs.pr }}
+      AFFECTED_HEAD: ${{ needs.request.outputs.head }}
+      AFFECTED_BASE: ${{ needs.request.outputs.base }}
+      AFFECTED_BASE_REF: ${{ needs.request.outputs.base_ref }}
+    steps:
+      - name: Checkout pinned request source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.request.outputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up affected-entry Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Select affected native entries with the pinned base policy
+        id: affected
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AFFECTED_HEAD"
+          test "$(git rev-parse "refs/remotes/origin/$AFFECTED_BASE_REF")" = "$AFFECTED_BASE"
+          verify="$RUNNER_TEMP/dx-affected-entry.mjs"
+          if [[ -n "$(git ls-tree "$AFFECTED_BASE" -- scripts/ci/affected-entry-map.json)" ]]; then
+            git show "$AFFECTED_BASE:scripts/ci/affected-entry-preflight.mjs" > "$verify"
+          else
+            # Bootstrap on branches which have not yet adopted this policy.
+            cp scripts/ci/affected-entry-preflight.mjs "$verify"
+          fi
+          node "$verify" select
+      - name: Install locked affected-entry dependencies
+        if: steps.affected.outputs.required == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build shared packages for original entry points
+        if: steps.affected.outputs.required == 'true'
+        run: npm run build:packages
+      - name: Start disposable database for affected native entries
+        if: steps.affected.outputs.required == 'true'
+        shell: bash
+        run: bash scripts/ci/start-affected-entry-postgres.sh
+      - name: Prepare canonical Chromium
+        if: steps.affected.outputs.required == 'true'
+        run: node --input-type=module -e 'import {prepareSettingsBrowser} from "./scripts/ci/prepare-settings-browser.mjs"; prepareSettingsBrowser()'
+      - name: Run and verify exact affected cases
+        run: node "$RUNNER_TEMP/dx-affected-entry.mjs" verify
+
   full:
     permissions:
       contents: read
@@ -379,8 +432,8 @@ jobs:
     concurrency:
       group: pr-gate-${{ needs.request.outputs.pr }}
       cancel-in-progress: false
-    needs: request
-    if: ${{ always() && github.event_name == 'create' && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
+    needs: [request, affected_entries]
+    if: ${{ always() && github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' && needs.affected_entries.result == 'success' }}
     uses: ./.github/workflows/full-gate.yml
     with:
       pr_number: ${{ needs.request.outputs.pr }}

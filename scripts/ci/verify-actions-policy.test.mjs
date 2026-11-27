@@ -21,8 +21,15 @@ for(const event of ['synchronize','reopened','edited'])test(`the actual validato
  const result=verify(source=>source.replace('      - opened','      - opened\n      - '+event));assert.notEqual(result.status,0);assert.match(result.stderr,/Light must trigger only once/);
 });
 test('the actual validator rejects Light retry workers and cancelling queued final work',()=>{
- const retry=verify(source=>source.replaceAll(' && github.run_attempt == 1',''));assert.notEqual(retry.status,0);assert.match(retry.stderr,/reject later events and repeat attempts/);
+ const retry=verify(source=>source.replaceAll("github.event.action == 'opened' && github.run_attempt == 1","github.event.action == 'opened'"));assert.notEqual(retry.status,0);assert.match(retry.stderr,/reject later events and repeat attempts/);
  const cancellation=verify(source=>source.replace('cancel-in-progress: false','cancel-in-progress: true'));assert.notEqual(cancellation.status,0);assert.match(cancellation.stderr,/queue without cancelling/);
+});
+
+test('the validator rejects bypassing affected entry proof or replaying Full',()=>{
+ const bypass=verify(source=>source.replace(" && needs.affected_entries.result == 'success'",''));
+ assert.notEqual(bypass.status,0);assert.match(bypass.stderr,/expensive Full worker cannot start/);
+ const retry=verify(source=>source.replace("github.event_name == 'create' && github.run_attempt == 1","github.event_name == 'create'"));
+ assert.notEqual(retry.status,0);assert.match(retry.stderr,/Affected native preflight is bounded/);
 });
 
 for(const workflow of ['ci','full-gate']){

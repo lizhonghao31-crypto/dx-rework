@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "original-numbered-creation",
+      "paths": [
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-browser-steps.ts"
+      ],
+      "file": "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+      "name": "C2 G2 numbered preorder native entry resumes an unnumbered draft, recovers preorder publication and formally confirms the same numbered source"
+    },
+    {
+      "id": "original-fixed-timeline-creation",
+      "paths": [
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/independent-craft-field.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/fixed-timeline-mode.ts",
+        "apps/api/src/production-platform/order-time-native-commands.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-browser-steps.ts"
+      ],
+      "file": "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+      "name": "fixed timeline choices through the original production App and AuthService saves the actual chosen craft order as a native draft and restores it at1165px"
+    },
+    {
+      "id": "original-preorder-investment-from-task",
+      "paths": [
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-browser-steps.ts"
+      ],
+      "file": "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+      "name": "preorder material investment on the original signed App lets the actual merchandiser enter from My Tasks, save real procurement and keep the draft unpublished and untimed"
+    },
+    {
+      "id": "original-preorder-conversion",
+      "paths": [
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-document-fields.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/workbench-development-sheet-fields.tsx",
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-round-repository.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/development-creation-browser-steps.ts"
+      ],
+      "file": "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+      "name": "preorder material investment on the original signed App converts the original preorder in the wizard and keeps its handover, procurement, attachments and time"
+    }
+  ]
+}
