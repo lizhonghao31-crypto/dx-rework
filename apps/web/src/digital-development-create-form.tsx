@@ -1,3 +1,5 @@
+import {DevelopmentDesignerCorrection} from './development-designer-correction.js';
+import {developmentCreationBasicsIssues,developmentPreparationQuantityIssues,projectDevelopmentSewingRows,type WorkbenchDevelopmentSheet} from '@dx-rework/contracts/digital-development';
 import {Step,Stepper} from '@astryxdesign/core/Stepper';
 import {z} from 'zod';
 import {DEVELOPMENT_GARMENTS,DEVELOPMENT_STYLE_PICTURE_LIMIT,DevelopmentDocumentSchema,developmentCraftOptions,isDevelopmentStylePicture} from '@dx-rework/contracts/digital-development';
@@ -83,7 +85,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     return issued?{...restored,designStyleNo:issued}:restored;
   });
   const [fixedCraft,setFixedCraft]=useState(creation?.snapshot?.fixedCraft??(existingDraft?existingDraft.timelineSchemaVersion===2:independentCraftsEnabled));
-  const [document,setDocument]=useState<DevelopmentDocument>(()=>creation?.snapshot?.document??(existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.draftDocumentDate??existingDraft.developmentCreatedDate??null}):{...(initialChoices?initialGuidedDevelopmentDocument(initialChoices):initialDevelopmentDocument()),orderDate:existingDraft?.draftDocumentDate??serverToday??null,...(guidedCreation&&!source&&!existingDraft&&!initialPreorder?{workbenchSheet:emptyWorkbenchDevelopmentSheet()}: {})}));
+  const [document,setDocument]=useState<DevelopmentDocument>(()=>creation?.snapshot?.document??(existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.draftDocumentDate??existingDraft.developmentCreatedDate??null}):{...(initialChoices?initialGuidedDevelopmentDocument(initialChoices):initialDevelopmentDocument()),orderDate:existingDraft?.draftDocumentDate??serverToday??null,...(guidedCreation&&!source&&!existingDraft?{workbenchSheet:emptyWorkbenchDevelopmentSheet()}: {})}));
   const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>creation?.snapshot?.sizeQuantityInputs??developmentSizeQuantityInputs(document));
   const [quantityInput,setQuantityInput]=useState(()=>creation?.snapshot?.quantityInput??(document.quantity===null?"":String(document.quantity)));
   const [stepValidation,setStepValidation]=useState(false);
@@ -108,6 +110,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [published,setPublished]=useState(existingDraft?.status==="published");
   const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
+  const [conversionVersion,setConversionVersion]=useState(existingDraft?.version??0);
+  const [correctionPending,setCorrectionPending]=useState(false);
+  const correctionScope=Boolean(source&&existingDraft?.document&&(numberedCreation||document.templateConfirmed&&document.workbenchSheet)&&workbenchNumberedCreation);
+  const conversionNotes=existingDraft?.version===conversionVersion?existingDraft.workbenchBasics:undefined;
+  const conversionNeedsChanges=correctionScope&&Boolean(developmentCreationBasicsIssues(conversionNotes&&document.workbenchSheet?
+   {workbenchSheet:{...document.workbenchSheet,brand:conversionNotes.brand}}:document).length||developmentPreparationQuantityIssues(document,true).length);
+
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>(creation?.snapshot?.fileKind??"款图");
   const measurementIds=useRef(creation?.snapshot?.measurementIds??document.measurements.map(()=>createClientRequestId()));
   const [sharedPoColumns,setSharedPoColumns]=useState(creation?.snapshot?.sharedPoColumns??form.lines.every(row=>row.sizes.length===form.lines[0]!.sizes.length&&row.sizes.every((size,index)=>size.size===form.lines[0]!.sizes[index]!.size)));
@@ -115,6 +124,17 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const poSizeIds=useRef(creation?.snapshot?.poSizeIds??Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
+  const sewingExplicit=useRef(false);
+  const editSewing=(workbenchSheet:WorkbenchDevelopmentSheet)=>{
+    sewingExplicit.current=true;
+    const complete=projectDevelopmentSewingRows({...document,workbenchSheet}).document;
+    if(!complete){edit({workbenchSheet});return;}
+    while(measurementIds.current.length<complete.measurements.length)measurementIds.current.push(createClientRequestId());
+    setQuantityInput(String(complete.quantity));
+    setSizeQuantityInputs(developmentSizeQuantityInputs(complete));
+    setDocument(complete);
+  };
+
   // Only the first visit to the chosen garment's editor initializes the original
   // template; an emptied but saved table is already initialized.
   useLayoutEffect(()=>{
@@ -338,11 +358,32 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       let liveConfirmationCalendar:CustomerOrderCalendar|undefined=effectiveConfirmationCalendar;
       const savedWizardStep=guided&&draftOnly?wizardStep:document.customerOrderDraft?.wizardStep;
       const keepPreorder=guided&&draftOnly&&!preorder&&document.customerOrderDraft?.stage==='preorder';
-      const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{
+      let submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{
         withOrder,stage:preorder||keepPreorder?'preorder':'formal',order:form,
         ...(keepPreorder?{wizardConfirmPreorder:true as const}:{}),
         ...(savedWizardStep===undefined?{}:{wizardStep:savedWizardStep}),
       }};
+      if(guided&&!source&&!published&&!draftOnly&&(submissionDocument.workbenchSheet||numberedCreation)){
+        const basics=developmentCreationBasicsIssues(submissionDocument);
+        const material=developmentPreparationQuantityIssues(submissionDocument,preorder||withOrder);
+        const full=!preorder&&existingDraft?.revisionSource?.outputKind!=='工艺布片';
+        const sewing=full?projectDevelopmentSewingRows(submissionDocument):null;
+        const previous=existingDraft?.document??creation?.snapshot?.document;
+        const conflicts=Boolean(previous&&sewing?.document&&!sewingExplicit.current&&(
+          previous.quantity!==null&&previous.quantity!==sewing.document.quantity||
+          previous.sizeQuantities?.some((value,index)=>value!==null&&value!==sewing.document!.sizeQuantities?.[index])
+        ));
+        const findings=[
+          ...(full&&(submissionDocument.craftSteps?.length??(submissionDocument.craft==='印绣花'?2:0))>=2&&submissionDocument.craftOrderConfirmed!==true
+            ?[{id:'development-workbench-processingSelected',label:'工艺顺序',message:'请选择并确认每一站的实际工艺顺序'}]:[]),
+          ...basics.map(({field,label,message})=>({id:`development-workbench-${field}`,label,message})),
+          ...material.map(({materialId,field,message})=>({id:`development-${materialId}-${field}`,label:'面辅料',message})),
+          ...(sewing?.issues??[]).map(({rowId,field,message})=>({id:rowId?`development-workbench-${rowId}-${field}`:'development-workbench-sewing',label:'打板信息',message})),
+          ...(conflicts?[{id:'development-workbench-sewing',label:'打板信息',message:'原草稿制作数量与本次分行合计不一致，请在打板信息核对各行后再发布'}]:[]),
+        ];
+        if(findings.length){showBusinessError(action,documentIssuesForDialog(findings));return false;}
+        if(sewing?.document)submissionDocument=sewing.document;
+      }
       if(orderCandidate){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
@@ -612,9 +653,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     if(pendingSubmission.current){if(!writing.current&&await confirmInApp('原提交结果尚未确定；离开会丢失本页原命令核对入口，仍要离开？'))onCancel();return;}
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel(!dirty.current&&loadedVersion.current!==null);
   };
-  const changeCraft=(craft:DevelopmentDocument["craft"],craftSteps?:DevelopmentDocument["craftSteps"])=>{
+  const changeCraft=(craft:DevelopmentDocument["craft"],craftSteps?:DevelopmentDocument["craftSteps"],orderConfirmed=false)=>{
     const keys=new Set(developmentCraftOptions({craft,craftSteps}).map(step=>step.key));
-    edit({craft,craftSteps,...(document.craftRequirements?{craftRequirements:document.craftRequirements.filter(row=>keys.has(row.stepKey))}:{}),
+    edit({craft,craftSteps,craftOrderConfirmed:orderConfirmed?true:undefined,...(document.craftRequirements?{craftRequirements:document.craftRequirements.filter(row=>keys.has(row.stepKey))}:{}),
       ...(document.workbenchSheet?{workbenchSheet:{...document.workbenchSheet,processingSelected:true}}:{})});
   };
   const compositionStarted=()=>{setComposingCode(true);sourceSearchSequence.current++;setCheckingCode(false);setCodeCheck(null);};
@@ -623,7 +664,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     setForm(current=>({...current,designStyleNo}));
   };
   const developmentDate=<label>开发下单日期（固定）<input className="development-create-readonly-input" id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>;
-  const craftControl=<>{fixedCraft?<IndependentCraftField label="工艺" entryControls={guided} firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:guided?<Selector id={workbenchCraftControl} label="工艺" size="sm" isDisabled={busy||published}
+  const craftControl=<>{fixedCraft?<IndependentCraftField label="工艺" entryControls={guided} explicitOrder={guided} orderConfirmed={document.craftOrderConfirmed===true} firstControlId={workbenchCraftControl} value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={changeCraft}/>:guided?<Selector id={workbenchCraftControl} label="工艺" size="sm" isDisabled={busy||published}
       value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft}
       placeholder="选择加工类型" options={["无","印花","绣花","印绣花"]} onChange={value=>changeCraft(value as DevelopmentDocument["craft"])}/>
       :<label>工艺<select id={workbenchCraftControl} aria-label="工艺" disabled={published} value={document.workbenchSheet&&!document.workbenchSheet.processingSelected?"":document.craft} onChange={event=>changeCraft(event.target.value as DevelopmentDocument["craft"])}>{document.workbenchSheet&&<option value="" disabled>选择加工类型</option>}{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}
@@ -649,7 +690,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           if(dirty.current&&!await confirmInApp("更换类型会打开一份新草稿。当前填写保留在原草稿，可从创建页继续。确定更换？"))return;
           if(!writing.current)onChooseCreationType();
         }}/>}
-      {!source&&!published&&(!preorder||numberedCreation&&!preorderAlreadyPublished)&&<FormAction type="button" disabled={!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>{preorder?'保存预下单备料资料':'保存开发资料草稿'}</FormAction>}<FormAction form={formId} type="submit" variant="primary" disabled={!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</FormAction>{guided&&preorder&&!numberedCreation&&createdSource&&Boolean(loadedVersion.current)&&!published&&
+      {!source&&!published&&(!preorder||numberedCreation&&!preorderAlreadyPublished)&&<FormAction type="button" disabled={!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>{preorder?'保存预下单备料资料':'保存开发资料草稿'}</FormAction>}<FormAction form={formId} type="submit" variant="primary" disabled={conversionNeedsChanges||correctionPending||!safeToWriteNumbered||busy||submissionUnknown||!calendarReady||Boolean(calendarError)||(!guided&&!source&&!published&&!preorder&&existingDraft?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)}>{busy?"保存中…":guided&&wizardStep<stepCount?"下一步":submitLabel}</FormAction>{guided&&preorder&&!numberedCreation&&createdSource&&Boolean(loadedVersion.current)&&!published&&
       <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>void beginPreorderConfirmation()}>客户确认下单</FormAction>}
       {guided&&!preorder&&!published&&document.customerOrderDraft?.stage==='preorder'&&
       <FormAction type="button" disabled={busy||submissionUnknown} onClick={()=>{setPreorder(true);setStepValidation(false);setReachedWizardStep(1);changeStep(1);}}>返回预下单备料</FormAction>}
@@ -685,13 +726,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     <div className="development-create-order"><section className="development-create-card" hidden={guided&&wizardStep===2}><h3>{guided?(wizardStep===3?"客户资料":"基本资料"):"1 · 基本资料"}</h3><BasicLayout><div className="development-create-grid" hidden={guided&&wizardStep!==1}>
       {guided&&<><div><Selector id="development-create-garment" label="衣类" placeholder="请选择衣类" size="sm" isRequired
         value={document.templateConfirmed?document.template:""} isDisabled={busy||published}
-        options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value}))} onChange={value=>void changeGarment(value)}/></div>
+        options={DEVELOPMENT_GARMENTS.map(value=>({value,label:value==='上衣'?'上装':'下装'}))} onChange={value=>void changeGarment(value)}/></div>
         <div><Selector label="急单" placeholder="请选择急单" size="sm" value={document.rush===undefined?"":document.rush?"yes":"no"} isDisabled={busy||published}
           options={[{value:"yes",label:"是"},{value:"no",label:"否"}]}
           onChange={value=>{if(value==="yes"||value==="no")edit({rush:value==="yes"});}}/></div></>}
       {!guided&&intent!=="confirm_order"&&formSelect("开发类型",developmentType,[{value:"头版",label:"头版"},{value:"开发板",label:"开发板"}],
         value=>setDevelopmentType(value as "头版"|"开发板"),Boolean(createdSource))}
-      {numberedCreation?<label>订单ID（自动生成）<input aria-label="订单ID" readOnly value={form.designStyleNo||existingDraft?.numberedIdentity?.orderNumber||'待生成'}/></label>:<div className="development-code-field">
+      {numberedCreation?<DevelopmentEntryText label="订单ID" visibleLabel isReadOnly value={form.designStyleNo||existingDraft?.numberedIdentity?.orderNumber||'待生成'}/>:<div className="development-code-field">
         {guided?<span className="development-code-label">设计款号 / 业务ID（必填）</span>
           :<label htmlFor="development-create-style">设计款号 / 业务ID（必填）</label>}
         <div className="development-code-check">
@@ -714,7 +755,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         isReadOnly={Boolean(createdSource)} onChange={temporaryStyleNo=>setForm({...form,temporaryStyleNo:temporaryStyleNo||null})}/>
         :<label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>}
       <label>设计师（只读）<input className="development-create-readonly-input" aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
-{guided&&!preorder&&developmentDate}</div><div className="development-create-grid development-create-grid-secondary" hidden={guided&&!numberedCreation&&(preorder||withOrder&&wizardStep===1)}>
+{guided&&!preorder&&developmentDate}</div><div className={`development-create-grid development-create-grid-secondary${guided?' development-create-compact-grid':''}`} hidden={guided&&!numberedCreation&&(preorder||withOrder&&wizardStep===1)}>
       {guided?<div id="development-create-customer" tabIndex={-1}>
         <Selector label="客户" isRequired={withOrder&&!preorder} size="sm" hasSearch searchPlaceholder="搜索客户或编号"
           isDisabled={busy||Boolean(createdSource&&(fixedCustomer||!withOrder))}
@@ -735,6 +776,10 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           max={calendarToday} value={form.orderDate} onChange={value=>setForm({...form,orderDate:value??''})}/></div>
          :<label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>)}
 </>}{!guided&&<>{developmentDate}{craftControl}</>}</div></BasicLayout></section>
+    {correctionScope&&source?.sourceId&&conversionVersion>0&&<DevelopmentDesignerCorrection key={`${source.sourceId}:${conversionVersion}`}
+      sourceId={source.sourceId} round={existingDraft?.roundNumber??1} version={conversionVersion} document={document} notes={conversionNotes} disabled={busy}
+      onRead={sheet=>{setDocument(sheet.document!);setConversionVersion(sheet.version);loadedVersion.current=sheet.version;}}
+      onPending={setCorrectionPending}/>}
     {withOrder&&(!guided||!preorder&&wizardStep===3) && <section className="development-create-card development-create-details"><h3>{guided?"客户订单明细":"2 · 客户订单明细"} <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
       {guided&&sharedPoColumns&&form.lines.length>1&&!boundOrder&&<FormAction type="button" onClick={()=>setSharedPoColumns(false)}>分别编辑各 PO 尺码</FormAction>}
       {!sharedPoColumns&&<p className="development-legacy-po-note">各 PO 尺码按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}
@@ -792,10 +837,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!source&&<div className="development-editor dx-doc-development">
       <DocumentErrors issues={issues} onLocateField={locateStep}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      {guided&&!preorder&&wizardStep===1&&document.workbenchSheet&&
-        <WorkbenchDevelopmentSheetFields creation originalFields={!document.templateConfirmed} sheet={document.workbenchSheet} readonly={busy||published} issue={id=>issues.find(value=>value.id===id)?.message}
+    {guided&&(document.workbenchSheet||numberedCreation)&&(preorder||wizardStep===1)&&
+        <WorkbenchDevelopmentSheetFields creation part={preorder?'light':'primary'} sheet={document.workbenchSheet??emptyWorkbenchDevelopmentSheet()} readonly={busy||published} issue={id=>issues.find(value=>value.id===id)?.message}
           onChange={workbenchSheet=>edit({workbenchSheet})}/>}
-      <div hidden={guided&&wizardStep===3}><DevelopmentDocumentFields materialSupplierCatalog={guided&&workbenchNumberedCreation} craftControls={guided?craftControl:undefined} locatingField={locatingField} creationView={guided?(preorder?"preorder":wizardStep===1?"sheet":"requirements"):undefined} fixedCraft={fixedCraft} materialFactsReadonly={Boolean(creation||existingDraft?.draftDocumentDate||existingDraft?.materialForecastOnly)} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);const missing=lostLocalFiles.find(file=>file.id===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:missing?{filename:missing.name,mimeType:missing.type,sizeBytes:missing.size}:undefined;}} metadataPath={id=>createdSource&&!lostLocalFiles.some(file=>file.id===id)&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>lostLocalFiles.some(file=>file.id===id)?'':picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/></div>
+      <div hidden={guided&&wizardStep===3}><DevelopmentDocumentFields materialSupplierCatalog={guided&&workbenchNumberedCreation} craftControls={guided?craftControl:undefined} locatingField={locatingField} creationView={guided?(preorder?"preorder":wizardStep===1?"sheet":"requirements"):undefined} fixedCraft={fixedCraft} materialFactsReadonly={Boolean(creation||existingDraft?.draftDocumentDate||existingDraft?.materialForecastOnly)} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);const missing=lostLocalFiles.find(file=>file.id===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:missing?{filename:missing.name,mimeType:missing.type,sizeBytes:missing.size}:undefined;}} metadataPath={id=>createdSource&&!lostLocalFiles.some(file=>file.id===id)&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>lostLocalFiles.some(file=>file.id===id)?'':picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/>
+       {guided&&!preorder&&wizardStep===2&&document.workbenchSheet&&<WorkbenchDevelopmentSheetFields creation part="sewing"
+         sheet={document.workbenchSheet} readonly={busy||published} issue={id=>issues.find(value=>value.id===id)?.message} onChange={editSewing}/>}
+      </div>:null}/></div>
     </div>}
     </fieldset>
     {calendar?.orderTimeEnabled&&withOrder&&!preorder&&(!guided||wizardStep===3)&&<OrderTimeProductionRoute value={document.productionPlanning} disabled={busy} onChange={productionPlanning=>edit({productionPlanning})}/>}

@@ -12,7 +12,7 @@ export async function developmentDocumentRow(db:DB,sourceId:string,roundNumber?:
  const selected=roundNumber??latest;
  const withAmendment=async(row:typeof original)=>{
   if(!tables.amended)return row;
-  const amended=(await db.query("SELECT amendment_id,published_at,published_by FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 ORDER BY document_version DESC LIMIT 1",[sourceId,selected])).rows[0];
+  const amended=(await db.query("SELECT amendment_id,published_at,published_by FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 AND document_version=$3",[sourceId,selected,row.version])).rows[0];
   return amended?{...row,revision:{...(row.revision??row),published_at:amended.published_at,published_by:amended.published_by,updated_at:amended.published_at,updated_by:amended.published_by}}:row;
  };
  if(selected===1)return withAmendment({...original,round_number:1,latest_round_number:latest});

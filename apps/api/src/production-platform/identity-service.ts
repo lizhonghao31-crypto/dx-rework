@@ -1,3 +1,4 @@
+import {developmentCreationBasicsIssues,developmentPreparationQuantityIssues} from '@dx-rework/contracts/digital-development';
 import {developmentSourceLifecycle,effectiveDevelopmentSourceSql,workbenchPreorderPublication} from './development-source-lifecycle.js';
 import {assertWholeOrderActive,wholeOrderActiveSql} from './whole-order-visibility.js';
 import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
@@ -377,6 +378,11 @@ export class DigitalProductionIdentityService {
         const published=await developmentDocumentRow(client,sourceId);
         preorder=Boolean(source.workbench_generated_number&&await workbenchPreorderPublication(client,sourceId));
         if(published?.status!=="published"&&!preorder)fail("请先发布开发单，再正式确认客户订单");
+        const selected=published?.document;
+        if(selected&&(source.workbench_generated_number||selected.templateConfirmed&&selected.workbenchSheet)){
+          const issues=[...developmentCreationBasicsIssues(selected),...developmentPreparationQuantityIssues(selected,true)];
+          if(issues.length)fail(issues.map(issue=>issue.message).join('；'),400);
+        }
         if(published?.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
         if(preorder){
           await assertWholeOrderActive(client,'source',sourceId);

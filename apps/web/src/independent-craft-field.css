@@ -34,3 +34,8 @@
 .development-craft-choice li::before { content: counter(craft-step) "."; }
 .development-craft-choice li > span { flex: 1 1 10rem; overflow-wrap: anywhere; }
 .development-craft-choice li > button { flex: 0 0 auto; white-space: nowrap; }
+
+.development-craft-choice-main{display:contents}
+.development-craft-choice[data-explicit-order=true]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:var(--dx-v2-space-3,12px)}
+.development-craft-choice[data-explicit-order=true] .development-craft-choice-main,.development-craft-stations{display:grid;gap:var(--dx-v2-space-2,8px);min-width:0}
+@media(max-width:640px){.development-craft-choice[data-explicit-order=true]{grid-template-columns:minmax(0,1fr)}}

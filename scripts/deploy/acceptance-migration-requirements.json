@@ -2801,5 +2801,14 @@
       "digital_whole_order_active"
     ],
     "sequences": []
+  },
+  "0318_development_designer_corrections": {
+    "checksum": "2977a62217d56de4731444a16e4db32535b3e590d833fc913ee668680411e44d",
+    "tables": [
+      "digital_development_amendments",
+      "audit_events",
+      "digital_production_sources"
+    ],
+    "sequences": []
   }
 }
