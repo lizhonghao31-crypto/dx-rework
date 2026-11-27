@@ -43,6 +43,11 @@ test('only the actual hosted job’s same run and attempt / Head / Base / exact 
   assert.throws(()=>parse({...good,...patch}));
  assert.throws(()=>parseAffectedReceipt('',plan,run,selected),/Expected one/);
  assert.throws(()=>parseAffectedReceipt([1,2].map(()=>AFFECTED_PREFIX+JSON.stringify(good)).join('\n'),plan,run,selected),/Expected one/);
+ const retry={...run,run_attempt:2};
+ const second=affectedReceipt(plan,retry,selected,'3'.repeat(64));
+ assert.deepEqual(parseAffectedReceipt(AFFECTED_PREFIX+JSON.stringify(second),plan,retry,selected),second);
+ assert.throws(()=>parseAffectedReceipt(AFFECTED_PREFIX+JSON.stringify(good),plan,retry,selected),/stale/);
+ assert.throws(()=>affectedReceipt(plan,{...run,run_attempt:3},selected,'3'.repeat(64)),/bounded recovery/);
  const empty=affectedReceipt(plan,run,[],null);
  assert.deepEqual(parseAffectedReceipt(AFFECTED_PREFIX+JSON.stringify(empty),plan,run,[]),empty);
 });

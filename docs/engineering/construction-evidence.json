@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "3075f6a4e99c146d5f558f4e04ac4644726b70e3",
-  "sourceFingerprint": "2fabf692d325243f27e5f885b7d8be97dc878331e9f89483bc7b0f1ea4fd13c1",
+  "sourceFingerprint": "713754e1dcb3b8a0857882fab308e442bcc464a188a58cc830e87e2beb26ba35",
   "risk": "full",
   "checks": [
     {
@@ -13,13 +13,13 @@
       "passed": 296,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3075f6a4e99c146d5f558f4e04ac4644726b70e3",
-      "sourceFingerprint": "2fabf692d325243f27e5f885b7d8be97dc878331e9f89483bc7b0f1ea4fd13c1",
+      "testedHead": "27ac1c3244f3ae2ac220e9397c201eb8aa0e3f20",
+      "sourceFingerprint": "713754e1dcb3b8a0857882fab308e442bcc464a188a58cc830e87e2beb26ba35",
       "context": "Node 22 canonical repository CI protocol, executable workflow selection, policy negatives and migration lint; browser proven separately on the unchanged release base",
-      "startedAt": "2026-11-27T06:05:18Z",
-      "endedAt": "2026-11-27T06:05:26Z",
-      "log": "/workspace/scratch/affected-entry-acceptance/ui-ci-protocol-final.log",
-      "logSha256": "37b09476a1762fb83650e9d7b3f2d01acf202bc420fd60f81c58c49297d63808"
+      "startedAt": "2026-11-27T06:10:50.225972+00:00",
+      "endedAt": "2026-11-27T06:10:56.187437+00:00",
+      "log": "/workspace/scratch/affected-entry-acceptance/governance-bounded-retry.log",
+      "logSha256": "15b6dc6f9b77c4e95d82bca121c6105799253fce390ef77af006ee70d5979fd1"
     }
   ],
   "rules": [
@@ -60,7 +60,7 @@
       ],
       "initialization": "只走现有 Full 请求与隔离临时 PostgreSQL，目标基线未引入配置时没有阶段性补跑；不改任一数据库迁移。",
       "dateAndPermission": "保留 GitHub 只读 Contents 权限与既有分支设置，Review 自动恢复不请求第三轮，不更改业务时间。",
-      "expectation": "缺原既有路径、跳过、失败、错源和旧尝试一律挡住昂贵 Full，合并只采用相同运行的原始托管回执。无相关改动无需浏览器和数据库。",
+      "expectation": "缺原既有路径、跳过、失败、错源和旧尝试一律挡住昂贵 Full，合并只采用相同运行的原始托管回执。无相关改动无需浏览器和数据库。 经原规则授权且已定位瞬态根因时保留同一 run 的第二次整轮校验，第三次不会分配昂贵任务。新尝试不承接旧证明。",
       "checks": [
         "affected-entry-protocol"
       ]

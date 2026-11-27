@@ -55,11 +55,11 @@ assert(countOccurrences(quick, 'timeout-minutes:') === 4 && countOccurrences(qui
 const affected = quick.split('\n  affected_entries:\n')[1]?.split('\n  full:\n')[0];
 const fullCaller = quick.split('\n  full:\n')[1]?.split('\n  approval:\n')[0];
 assert(affected && affected.includes("    needs: request") && affected.includes("timeout-minutes: 12")
-  && affected.includes("github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full'")
+  && affected.includes("github.event_name == 'create' && github.run_attempt <= 2 && needs.request.result == 'success' && needs.request.outputs.kind == 'full'")
   && affected.includes('persist-credentials: false') && affected.includes('git show "$AFFECTED_BASE:scripts/ci/affected-entry-preflight.mjs"')
   && affected.includes('node "$RUNNER_TEMP/dx-affected-entry.mjs" verify'),
   "Affected native preflight is bounded, read-only and restricted to the exact explicit Full request");
-assert(fullCaller?.includes('needs: [request, affected_entries]') && fullCaller.includes("github.run_attempt == 1") && fullCaller.includes("needs.affected_entries.result == 'success'"),
+assert(fullCaller?.includes('needs: [request, affected_entries]') && fullCaller.includes("github.run_attempt <= 2") && fullCaller.includes("needs.affected_entries.result == 'success'"),
   "The expensive Full worker cannot start if the actual affected-entry preflight is absent, skipped, or failed");
 assert(countOccurrences(full,'timeout-minutes:')===4 && (full.match(/^ {4}timeout-minutes: 30[ \t]*$/gm)||[]).length===2 && (full.match(/^ {4}timeout-minutes: 60[ \t]*$/gm)||[]).length===1 && (full.match(/^ {4}timeout-minutes: 2[ \t]*$/gm)||[]).length===1,
   "Full preparation/non-DB remain30minutes; expanded PG lane is bounded to60minutes, aggregation to2minutes");

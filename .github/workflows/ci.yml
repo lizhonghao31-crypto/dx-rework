@@ -374,7 +374,7 @@ jobs:
   affected_entries:
     name: Verify affected native entry points
     needs: request
-    if: ${{ github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
+    if: ${{ github.event_name == 'create' && github.run_attempt <= 2 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
@@ -433,7 +433,7 @@ jobs:
       group: pr-gate-${{ needs.request.outputs.pr }}
       cancel-in-progress: false
     needs: [request, affected_entries]
-    if: ${{ always() && github.event_name == 'create' && github.run_attempt == 1 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' && needs.affected_entries.result == 'success' }}
+    if: ${{ always() && github.event_name == 'create' && github.run_attempt <= 2 && needs.request.result == 'success' && needs.request.outputs.kind == 'full' && needs.affected_entries.result == 'success' }}
     uses: ./.github/workflows/full-gate.yml
     with:
       pr_number: ${{ needs.request.outputs.pr }}

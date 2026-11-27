@@ -24,7 +24,7 @@
 
 ## Review与恢复
 
-本地必要验证及完整 diff 组装完成、PR 创建后，首次 Light 与必要 GitHub Codex Review 并行启动：Light 由 opened 自动启动；单一控制者核已有同 Head 请求后，按已有授权请求一次 Review，不等待 Light 结论。Review 不是额外 Actions job，不新增 runner、凭据或写权限。两路结果集中处理，确认事项修完并在最终候选和实际基线上通过受影响原入口定向用例，再请求最终 Quick/Full；记录 Light SHA、被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。已采用原入口策略的 Full 还需先通过同 run/attempt 的托管受影响原入口检查；同一候选三元组已存在时观察该次结果，不再跑昂贵 worker。
+本地必要验证及完整 diff 组装完成、PR 创建后，首次 Light 与必要 GitHub Codex Review 并行启动：Light 由 opened 自动启动；单一控制者核已有同 Head 请求后，按已有授权请求一次 Review，不等待 Light 结论。Review 不是额外 Actions job，不新增 runner、凭据或写权限。两路结果集中处理，确认事项修完并在最终候选和实际基线上通过受影响原入口定向用例，再请求最终 Quick/Full；记录 Light SHA、被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。已采用原入口策略的 Full 还需先通过同 run/attempt 的托管受影响原入口检查；同一候选三元组仅创建一个请求，已有请求默认只观察。不动引用、不换 run；原因已查实为瞬态且已获原授权时，用同一个 GitHub run 完整重试一次，让托管定向和 Full 在同一新 attempt 留证。禁止自动重试，失败的业务断言须修源码后用新 Head。
 
 `watch-review --pr <N> --head <Head40> --request-id <ID> --watch --apply --review-retry-authorized --state-dir <private-dir>`使用已存在的15分钟恢复授权。时间从请求的服务端created_at起，先核已完成/新请求/在途状态，防重复发送；本地锁只对同一控制者有效，不能冒充跨机器互斥。拒绝和不确定写入保留journal，先只读reconcile，不删除锁或另换发送通道。Full 按需要一到两轮，不例行重复。达到两轮时恢复工具不发第三轮。第二轮确认事项有逐条修复、定向证据及线程闭环后，直接申请新 Head 的 Full，不等 bot 改写已审提交。
 

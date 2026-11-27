@@ -28,7 +28,7 @@ test('the actual validator rejects Light retry workers and cancelling queued fin
 test('the validator rejects bypassing affected entry proof or replaying Full',()=>{
  const bypass=verify(source=>source.replace(" && needs.affected_entries.result == 'success'",''));
  assert.notEqual(bypass.status,0);assert.match(bypass.stderr,/expensive Full worker cannot start/);
- const retry=verify(source=>source.replace("github.event_name == 'create' && github.run_attempt == 1","github.event_name == 'create'"));
+ const retry=verify(source=>source.replace("github.event_name == 'create' && github.run_attempt <= 2","github.event_name == 'create'"));
  assert.notEqual(retry.status,0);assert.match(retry.stderr,/Affected native preflight is bounded/);
 });
 

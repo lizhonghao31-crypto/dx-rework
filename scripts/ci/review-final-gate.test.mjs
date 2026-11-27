@@ -47,14 +47,19 @@ for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])t
  const c=context('[FULL] change','edited',changes);assert.equal(selected('validate',c),false);
  assert.equal(selected('full',c),false);assert.equal(selected('approval',c),false);
 });
-test('skipped or failed affected native proof never allocates any Full lane, even on a replay',()=>{
+test('Full permits one bounded recovery attempt but requires an actual affected proof in that attempt and blocks a third',()=>{
  for(const result of ['failure','skipped','cancelled']){
   const c=created();c.needs.affected_entries.result=result;
   assert.equal(selected('affected_entries',c),true);
   assert.equal(selected('full',c),false);
   assert.equal(selected('approval',c),true);
  }
- const replay=created();replay.github.run_attempt=2;
+ const retry=created();retry.github.run_attempt=2;
+ assert.equal(selected('affected_entries',retry),true);
+ assert.equal(selected('full',retry),true);
+ retry.needs.affected_entries.result='skipped';
+ assert.equal(selected('full',retry),false);
+ const replay=created();replay.github.run_attempt=3;
  assert.equal(selected('affected_entries',replay),false);
  assert.equal(selected('full',replay),false);
 });

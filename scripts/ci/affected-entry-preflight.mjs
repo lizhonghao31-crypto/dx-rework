@@ -24,7 +24,7 @@ export function affectedEntryPlan(registry, changedPaths) {
   const ids = new Set(), cases = new Set();
   return registry.entries.flatMap(({id, paths: inputs, file, name}) => {
     if (!ID.test(id) || !SUITE.test(file) || typeof name !== 'string' || !name.trim() || name.length > 300
-      || /[\u0000-\u001f]/.test(name) || !Array.isArray(inputs) || !inputs.length
+      || [...name].some(char=>char.codePointAt(0)<32) || !Array.isArray(inputs) || !inputs.length
       || inputs.some(path => typeof path !== 'string' || !safePath(path))
       || ids.has(id) || cases.has(caseKey({file, name}))) throw Error('Invalid pinned affected-entry case');
     ids.add(id);
@@ -50,6 +50,7 @@ export function requireAffectedCases(expected, results) {
 }
 
 export function affectedReceipt(plan, run, selected, reportHash) {
+  if (![1,2].includes(run.run_attempt)) throw Error('Affected-entry run exceeds the bounded recovery attempt');
   if (selected.length ? !HASH.test(reportHash ?? '') : reportHash !== null) throw Error('Missing or unexpected actual affected-entry report');
   const {repository,pr,head,base,baseRef,kind} = plan;
   return {version:1,repository,pr,head,base,baseRef,kind,runId:run.id,attempt:run.run_attempt,
@@ -72,7 +73,7 @@ function hostedTuple(env = process.env) {
   const {AFFECTED_HEAD:head,AFFECTED_BASE:base,AFFECTED_PR:pr,AFFECTED_BASE_REF:baseRef,GITHUB_REPOSITORY:repository,
     GITHUB_RUN_ID:id,GITHUB_RUN_ATTEMPT:attempt} = env;
   if (![head,base].every(s=>/^[0-9a-f]{40}$/.test(s??'')) || ![pr,id,attempt].every(n=>/^[1-9][0-9]*$/.test(n??''))
-    || !baseRef || Number(attempt)!==1 || repository !== 'lizhonghao31-crypto/dx-rework'
+    || !baseRef || ![1,2].includes(Number(attempt)) || repository !== 'lizhonghao31-crypto/dx-rework'
     || git('rev-parse','HEAD').trim() !== head) throw Error('Hosted affected-entry tuple differs from checkout');
   return {plan:{repository,pr:Number(pr),head,base,baseRef,kind:'full'},run:{id:Number(id),run_attempt:Number(attempt)}};
 }
