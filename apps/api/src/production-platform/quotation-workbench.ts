@@ -56,26 +56,27 @@ type LineReview = {
 
 const roundFor=(quote:AssembledQuotation):number|null=>quote.assembly?.roundNumber??(quote.source_id===null?1:null);
 
-async function currentTechnicalUseBlocks(db:ReadDatabase,quote:AssembledQuotation){
+async function currentTechnicalUse(db:ReadDatabase,quote:AssembledQuotation){
   const material=quote.document.rows.filter(row=>quote.assembly?.rows[row.rowId]?.kind==='material');
-  if(!material.length)return [];
+  if(!material.length)return {blocks:[] as string[],unresolvedRows:new Set<string>()};
   const source=quote.source_id?await developmentDocumentRow(db,quote.source_id):null;
   const round=quote.assembly?.roundNumber;
   const artifact=source?.document&&quote.source_id&&round!==undefined
     ?await publishedTechnicalArtifact(db,quote.source_id,round):null;
   if(!source?.document||source.round_number!==round||!artifact
     ||artifact.row.document_fingerprint!==technicalDocumentFingerprint(source.document)){
-    return ['待正式纸样技术成果'];
+    return {blocks:['待正式纸样技术成果'],unresolvedRows:new Set(material.map(row=>row.rowId))};
   }
-  return material.some(row=>{
+  const unresolvedRows=new Set(material.filter(row=>{
     const adopted=quote.consumption_sources[row.rowId];
     return adopted?.kind!=='technical_artifact'||adopted.artifactRef?.id!==artifact.artifact.artifactSetId
       ||adopted.artifactRef.version!==artifact.artifact.version||adopted.artifactRef.materialId!==quote.assembly!.rows[row.rowId]?.sourceRef;
-  })?['待采用当前正式技术成果的单件用量']:[];
+  }).map(row=>row.rowId));
+  return {blocks:unresolvedRows.size?['待采用当前正式技术成果的单件用量']:[],unresolvedRows};
 }
 
 export async function assertCurrentWorkbenchTechnicalUse(db:PoolClient,quote:AssembledQuotation){
-  const [block]=await currentTechnicalUseBlocks(db,quote);
+  const [block]=(await currentTechnicalUse(db,quote)).blocks;
   if(block)conflict(block);
 }
 
@@ -108,7 +109,7 @@ export async function readWorkbenchQuotation(db:ReadDatabase,quote:AssembledQuot
   const result=quotationDraftReviewSummary(states);
   const releaseReady=ready&&await secondaryCraftDecisionAuthorityReady(db);
   const unmapped=await hasUnmappedSecondaryCraft(db,quote);
-  const technical=await currentTechnicalUseBlocks(db,quote);
+  const {blocks:technical,unresolvedRows}=await currentTechnicalUse(db,quote);
   const unitCost=technical.length?null:workbenchCost(quote);
   const reasons=[...technical];
   if(!quote.document.rows.length||audited.some(row=>!row.hasIdentity))reasons.push('待核对实际报价明细及单位');
@@ -125,9 +126,9 @@ export async function readWorkbenchQuotation(db:ReadDatabase,quote:AssembledQuot
   const readiness:QuotationReadiness={canMeasure,
     canConfirm:canMeasure&&quotationComplete(quote)&&result.status==='awaiting_customer_confirmation'&&!reasons.length,
     reasons:reasons.length||canMeasure?reasons:['待补齐用量、价格或负责人员']};
-  const rows:DesignerQuotationStatus['rows']=audited.map(({row,kind,hasIdentity,hasUsage,hasPrice},i)=>{
+  const rows:DesignerQuotationStatus['rows']=audited.map(({row,hasIdentity,hasUsage,hasPrice},i)=>{
     const state=states[i]!;
-    return {rowId:row.rowId,state:state.reviews.includes('returned')?'returned':!hasIdentity||!hasUsage||kind==='material'&&technical.length>0?'needs_information':
+    return {rowId:row.rowId,state:state.reviews.includes('returned')?'returned':!hasIdentity||!hasUsage||unresolvedRows.has(row.rowId)?'needs_information':
       !hasPrice?'awaiting_price':state.reviews.includes('resubmitted')?'awaiting_review':state.craftApproval==='pending'?'awaiting_craft_approval':'complete'};
   });
   const designerStatus:DesignerQuotationStatus={resource,quoteId:quote.quote_id,version:quote.version,sourceVersion:quote.assembly?.sourceVersion??null,roundNumber:round,
@@ -152,7 +153,7 @@ export async function assertNoOpenQuotationReviews(db:PoolClient,quote:Assembled
 }
 
 export async function persistWorkbenchPricing(db:PoolClient,quote:AssembledQuotation,actorId:string,input:QuotationPricingInput){
-  const cost=(await currentTechnicalUseBlocks(db,quote)).length?null:workbenchCost(quote),pricing=calculateQuotationPricing(cost,input);
+  const cost=(await currentTechnicalUse(db,quote)).blocks.length?null:workbenchCost(quote),pricing=calculateQuotationPricing(cost,input);
   if(pricing.status==='price_out_of_range')conflict('按此倍率计算的客户单价超出金额范围');
   await db.query(`INSERT INTO digital_quotation_pricing_drafts(quote_id,actor_id,quote_version,pricing,updated_at)
     VALUES($1,$2,$3,$4,$5) ON CONFLICT(quote_id,actor_id) DO UPDATE SET

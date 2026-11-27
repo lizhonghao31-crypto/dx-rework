@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b2e5b6a20723b53d079ad55c1c3425727d901186",
   "risk": "full",
-  "sourceFingerprint": "a54de2c88270285b170284241bb7bd5f69a0c6fbe106559cb154a7a67697bd15",
+  "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
   "rules": [
     {
       "rule": "由授权报价读取统一生成当前报价状态及适用进度，既有确认前置与部分可见角色不变，设计区对同一报价来源展示价格负责人、真实缺项和原依据。",
@@ -25,7 +25,7 @@
         "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
         "tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts"
       ],
-      "expectation": "候选从原原生设计报价入口用真实角色验缺失技术成果、待客户确认、确认与改价旧版区别；保真实技术角色与价格责任。T22 折叠及表内同源状态待共同版统一验证。",
+      "expectation": "同一真实报价中用量不符的主料缺资料，已采用同版技术的辅料继续显示已填有效，并精确计入已完成。现有资料、价格或审批的真实正式门槛仍为整单。原授权范围和技术角色不变。",
       "checks": [
         "ui04-native"
       ]
@@ -59,23 +59,23 @@
     {
       "id": "ui04-native",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-frozen/ui04-native.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/secondary-craft-quotation-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/ui04-current/ui04-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2e5b6a20723b53d079ad55c1c3425727d901186",
-      "sourceFingerprint": "a54de2c88270285b170284241bb7bd5f69a0c6fbe106559cb154a7a67697bd15",
-      "context": "Release b2e5b6a2 local candidate; PostgreSQL isolated fixture, signed designer, IE, tech and follow-up browser via original full App and Chromium routes, with exact row source snapshots",
-      "startedAt": "2026-11-27T01:13:53.594239+00:00",
-      "endedAt": "2026-11-27T01:15:51.041173+00:00",
-      "log": "/workspace/scratch/ui04-frozen/ui04-native.log",
-      "logSha256": "6e9407f6df83b4db19c1974f6569d280fe7324d5c18b9e8522634126fd7460e0",
+      "testedHead": "a7503dffc489c571512a5127407df20bbdc40d56",
+      "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
+      "context": "Post-review local candidate; original signed designer, IE, checkout and craft App, PostgreSQL Chromium; mixed materials, save, confirmation and R6 regression",
+      "startedAt": "2026-11-27T01:25:25.990899+00:00",
+      "endedAt": "2026-11-27T01:26:50.320022+00:00",
+      "log": "/workspace/scratch/ui04-current/ui04-native.log",
+      "logSha256": "9b8ba723eb265e515df16413d294a00d2d3006a1ce458a733f6d7bcecd103406",
       "passed": 13,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5ed32bc01d57532cc5a20cb76708496a6319e38cdb283588e604f285f0874360"
+          "sha256": "538241be2e99a03fde69238e4783fe05d4347235fb40ffe92d8efca4cf94b10a"
         }
       ]
     }

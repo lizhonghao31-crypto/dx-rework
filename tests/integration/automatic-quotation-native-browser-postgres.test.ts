@@ -724,6 +724,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(current.rows.find(row=>row.rowId===materialId)).toMatchObject({unit:'米',unitPrice:'20',consumption:'',consumptionSource:null,technicalConsumptionIssue:'unit_mismatch'});
   expect(current.rows.find(row=>row.rowId===otherId)).toMatchObject({unit:'米',unitPrice:'19.75',consumption:'1',consumptionSource:{kind:'technical_artifact'}});
   expect(current.rows.filter(row=>row.technicalConsumptionIssue).map(row=>row.rowId)).toEqual([materialId]);
+  expect(current.designerStatus).toMatchObject({state:'needs_information',completed:1,rows:expect.arrayContaining([
+   {rowId:materialId,state:'needs_information'},{rowId:otherId,state:'complete'},
+  ])});
+  const designerTab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=workspace&development='+source.sourceId);
+  try{
+   const area=designerTab.page.getByRole('region',{name:'报价',exact:true});
+   await area.getByRole('row').filter({hasText:'TEST冲突主料'}).getByText('缺资料',{exact:true}).waitFor();
+   await area.getByRole('row').filter({hasText:'TEST匹配辅料'}).getByText('已填有效',{exact:true}).waitFor();
+   await area.getByText(/已完成 1\//).waitFor();
+  }finally{await designerTab.close();}
+
   expect(current.technicalConsumptionOptions).toEqual([]);
   const technicalChoices=(await quotes.read(h.f.root,resource)).technicalConsumptionOptions;
   expect(technicalChoices).toEqual(expect.arrayContaining([expect.objectContaining({materialId:otherId,unit:'米',consumption:'1'})]));
