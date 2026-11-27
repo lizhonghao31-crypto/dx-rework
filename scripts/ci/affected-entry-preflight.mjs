@@ -13,6 +13,18 @@ const safePath = path => /^[A-Za-z0-9_.@/-]{1,400}$/.test(path) && path.split('/
 const SUITE = /^tests\/integration\/[A-Za-z0-9-]+-browser-postgres\.test\.ts$/;
 const sha = value => createHash('sha256').update(value).digest('hex');
 const caseKey = ({file, name}) => JSON.stringify([file, name]);
+const matchesCase = (test, result) => test.file === result.file && (test.leaf === true
+  ? result.name === test.name || result.name?.endsWith(' '+test.name) : result.name === test.name);
+
+export function mergeAffectedCases(pinned, derived) {
+  const byId = new Map(pinned.map(test=>[test.id,test]));
+  for (const test of derived) {
+    const existing = byId.get(test.id);
+    if (existing && JSON.stringify(existing)!==JSON.stringify(test)) throw Error('Ambiguous Review proof case identity');
+    byId.set(test.id,test);
+  }
+  return [...byId.values()].sort((a,b)=>a.id.localeCompare(b.id));
+}
 
 /** The exact-tree diff is supplied by Git or GitHub, never by the PR author. */
 export function affectedEntryPlan(registry, changedPaths) {
@@ -43,7 +55,7 @@ export function vitestCases(report, cwd = process.cwd()) {
 
 export function requireAffectedCases(expected, results) {
   const missing = expected.filter(test => {
-    const hits = results.filter(result => caseKey(test) === caseKey(result));
+    const hits = results.filter(result => matchesCase(test,result));
     return hits.length !== 1 || hits[0].status !== 'passed';
   });
   if (missing.length) throw Error('AFFECTED_ENTRY_PROOF_MISSING: ' + missing.map(t => t.id).join(', '));
@@ -98,12 +110,22 @@ export function revisionPaths(previous,head){
   return git('diff','--no-renames','--name-only','-z',previous,head).split('\0').filter(Boolean);
 }
 
+export function revisionText(commit,file) {
+  if (!/^[0-9a-f]{40}$/.test(commit)||!safePath(file)) throw Error('Invalid Review evidence source path');
+  const entry=git('ls-tree',commit,'--',file).trim();
+  if (!entry) return null;
+  if (!/^100(?:644|755) blob [0-9a-f]{40}\t/.test(entry)) throw Error('Review evidence must be a regular Git blob');
+  const text=git('show',commit+':'+file);
+  if(Buffer.byteLength(text)>3*1024*1024)throw Error('Cannot read oversized Review evidence blob');
+  return text;
+}
+
 export function runSelectedCases(selected, reportFile, cwd = process.cwd()) {
   if (!selected.length) throw Error('No affected case selected');
   if (existsSync(reportFile)) throw Error('Refusing stale affected-entry report');
   const files = [...new Set(selected.map(test=>test.file))];
   const escape = text => text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const pattern = '^(?:' + selected.map(test => escape(test.name)).join('|') + ')$';
+  const pattern = '^(?:' + selected.map(test => (test.leaf?'(?:.* )?':'') + escape(test.name)).join('|') + ')$';
   const env={...process.env,NODE_ENV:'test',DX_REWORK_TEST_SUITE_KIND:'postgres'};
   for(const key of ['REVIEW_READ_TOKEN','GH_TOKEN','GITHUB_TOKEN','GITHUB_OUTPUT','GITHUB_ENV','GITHUB_PATH','GITHUB_STATE','GITHUB_STEP_SUMMARY'])delete env[key];
   const result = spawnSync(process.execPath,['node_modules/vitest/vitest.mjs','run',

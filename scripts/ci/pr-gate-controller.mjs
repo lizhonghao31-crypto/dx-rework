@@ -8,7 +8,7 @@ import {pathToFileURL} from 'node:url';
 import {verifyFinalCloseout} from './final-closeout.mjs';
 import {AFFECTED_MAP_PATH, affectedEntryPlan} from './full-gate-risk-map.mjs';
 import {AFFECTED_JOB, parseAffectedReceipt} from './affected-entry-preflight.mjs';
-import {HOSTED_REVIEW_POLICY, readHostedReview, reviewDigest} from './hosted-review-preflight.mjs';
+import {HOSTED_REVIEW_POLICY, affectedCasesWithReview, readHostedReview, reviewDigest} from './hosted-review-preflight.mjs';
 import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, REVIEW_BOT, gateKind, finalRef, requireSha,
   trustedReview, reviewDecision, parseReceipt, assertRunBinding, assertReuseLineage, allowedBase} from './pr-gate-protocol.mjs';
 
@@ -187,12 +187,29 @@ async function hostedReviewFor(api,plan,affected){
   };
   const [base,head]=await Promise.all([present(plan.base),present(plan.head)]);
   if(!base&&!head)return null; // Historical workflow and receipts only.
-  return readHostedReview(api,plan,affected.registry,affected.paths,async (earlier,later)=>{
+  const trees=new Map();
+  const tree=sha=>{
+    if(!trees.has(sha))trees.set(sha,commitTree(api,sha));
+    return trees.get(sha);
+  };
+  return readHostedReview(api,plan,affected.registry,async (earlier,later)=>{
     const comparison=await api.request(`${prefix}/compare/${earlier}...${later}`);
     if(comparison.status!=='ahead'||comparison.behind_by!==0||comparison.merge_base_commit?.sha!==earlier)
       throw Error('Reviewed commit is not an ancestor of the final Head');
-    const [oldTree,newTree]=await Promise.all([commitTree(api,earlier),commitTree(api,later)]);
+    const [oldTree,newTree]=await Promise.all([tree(earlier),tree(later)]);
     return changedTreePaths(oldTree,newTree);
+  },async (commit,file)=>{
+    const entry=(await tree(commit)).get(file);
+    if(!entry)return null;
+    const object=/^blob:100(?:644|755):([0-9a-f]{40})$/.exec(entry)?.[1];
+    if(!object)throw Error('Review evidence must be a regular Git blob');
+    const blob=await api.request(`${prefix}/git/blobs/${object}`);
+    if(blob.sha!==object||blob.encoding!=='base64'||typeof blob.content!=='string'||
+      !Number.isSafeInteger(blob.size)||blob.size<0||blob.size>3*1024*1024)
+      throw Error('Cannot read exact Review evidence blob');
+    const bytes=Buffer.from(blob.content,'base64');
+    if(bytes.length!==blob.size)throw Error('Review evidence blob bytes differ');
+    return bytes.toString('utf8');
   });
 }
 
@@ -245,7 +262,7 @@ export async function finalStatus(api, plan, ref) {
   const proof=await proofForRun(api,run,plan,'final');
   const affected=await affectedEntriesFor(api,plan);
   const hosted=await hostedReviewFor(api,plan,affected);
-  const affectedReceipt=affected.active||hosted ? await verifyHostedAffected(api,run,plan,affected.selected,hosted?reviewDigest(hosted):undefined) : null;
+  const affectedReceipt=affected.active||hosted ? await verifyHostedAffected(api,run,plan,affectedCasesWithReview(affected.selected,hosted),hosted?reviewDigest(hosted):undefined) : null;
   return {state: 'approved', ref, ...proof, ...(affectedReceipt?{affectedReceipt}:{})};
 }
 
@@ -267,7 +284,7 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
   const affected = await affectedEntriesFor(api,snapshot.plan);
   const hosted = await hostedReviewFor(api,snapshot.plan,affected);
   if(hosted&&hosted.reviewedHead!==review.commit_sha)throw Error('Hosted Review and operator Review differ');
-  const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review,affected.selected);
+  const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review,affectedCasesWithReview(affected.selected,hosted));
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR base/mode changed before the final request');

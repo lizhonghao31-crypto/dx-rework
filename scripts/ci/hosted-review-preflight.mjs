@@ -1,9 +1,9 @@
 import {createHash} from 'node:crypto';
 import {appendFileSync, readFileSync, writeFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {posix, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {REPOSITORY, REVIEW_BOT, gateKind, requireSha, trustedReview} from './pr-gate-protocol.mjs';
-import {AFFECTED_PREFIX, affectedEntryPlan, affectedReceipt, hostedTuple, pinnedInputs, revisionPaths, runSelectedCases} from './affected-entry-preflight.mjs';
+import {AFFECTED_PREFIX, affectedEntryPlan, affectedReceipt, hostedTuple, pinnedInputs, revisionPaths, revisionText, mergeAffectedCases, runSelectedCases} from './affected-entry-preflight.mjs';
 
 export const HOSTED_REVIEW_POLICY = 'scripts/ci/hosted-review-preflight.mjs';
 const prefix = '/repos/' + REPOSITORY;
@@ -39,10 +39,10 @@ export function readOnlyReviewApi(token, fetcher = fetch) {
   return {request,pages};
 }
 
-const threadQuery='query($number:Int!,$cursor:String){repository(owner:"lizhonghao31-crypto",name:"dx-rework"){nameWithOwner pullRequest(number:$number){number headRefOid reviewThreads(first:100,after:$cursor){totalCount nodes{id isResolved} pageInfo{hasNextPage endCursor}}}}}';
+const threadQuery='query($number:Int!,$cursor:String){repository(owner:"lizhonghao31-crypto",name:"dx-rework"){nameWithOwner pullRequest(number:$number){number headRefOid reviewThreads(first:100,after:$cursor){totalCount nodes{id isResolved comments(first:1){nodes{databaseId}}} pageInfo{hasNextPage endCursor}}}}}';
 async function readThreads(api,plan){
   let cursor=null, total=null;
-  const ids=new Set(), cursors=new Set();
+  const ids=new Set(), roots=new Map(), cursors=new Set();
   for(let page=1;page<=100;page++){
     const result=await api.request('/graphql',{method:'POST',body:{query:threadQuery,variables:{number:plan.pr,cursor}}});
     const repository=result.data?.repository, pr=repository?.pullRequest, t=pr?.reviewThreads;
@@ -52,11 +52,14 @@ async function readThreads(api,plan){
     total=t.totalCount;
     for(const node of t.nodes){
       if(!node?.id||ids.has(node.id)||node.isResolved!==true)throw Error('Review has unreadable, duplicate or unresolved threads');
+      const commentId=node.comments?.nodes?.[0]?.databaseId;
+      if(!Number.isSafeInteger(commentId)||commentId<=0||roots.has(commentId))throw Error('Cannot bind Review finding to its resolved thread');
       ids.add(node.id);
+      roots.set(commentId,node.id);
     }
     if(!t.pageInfo.hasNextPage){
       if(ids.size!==total)throw Error('GraphQL Review thread count differs');
-      return [...ids].sort();
+      return {ids:[...ids].sort(),roots};
     }
     cursor=t.pageInfo.endCursor;
     if(!cursor||cursors.has(cursor))throw Error('Review thread cursor did not advance');
@@ -73,31 +76,103 @@ async function verifyTuple(api,plan){
     base.commit?.sha!==plan.base)throw Error('Hosted Review PR/Head/Base tuple moved or is not Full');
 }
 
-function bindings(registry){
-  const all=registry ? affectedEntryPlan(registry, registry.entries.flatMap(entry=>entry.paths)) : [];
-  const allIds=new Set(all.map(c=>c.id));
-  const map=new Map();
-  const data=registry?.reviewBindings??[];
-  if(!Array.isArray(data))throw Error('Invalid pinned Review coverage');
-  for(const item of data){
-    const key=item?.path+'\0'+item?.findingSha256;
-    if(typeof item?.path!=='string'||!item.path||!/^[0-9a-f]{64}$/.test(item.findingSha256??'')||
-      !Array.isArray(item.repairPaths)||!item.repairPaths.length||
-      item.repairPaths.some(path=>typeof path!=='string'||!path||path.startsWith('/')||path.split('/').some(p=>!p||p==='.'||p==='..'))||
-      !Array.isArray(item.caseIds)||!item.caseIds.length||
-      new Set(item.caseIds).size!==item.caseIds.length||item.caseIds.some(id=>!allIds.has(id))||
-      map.has(key))throw Error('Invalid pinned Review coverage for '+item?.path);
-    map.set(key,item);
+// Static, named canonical tests only. Use Git contents on the two exact
+// revisions rather than a claim in PR text or a candidate-supplied case map.
+// Other registration styles can use a named regression in the same suite.
+const nativeSuite=/^tests\/integration\/[A-Za-z0-9-]+-postgres\.test\.ts$/;
+const staticTest=/^([ \t]*)(?:it|test)\(\s*(['"])([^\r\n]{1,300}?)\2\s*,\s*(?:async\s*)?\([^\r\n]*?\)\s*=>\s*\{/;
+const meaning=text=>text.split(/\r?\n/).map(line=>line.trim()).filter(line=>line&&!/^(?:\/\/|\/\*|\*|\*\/)/.test(line)).join('\n');
+const safeReviewPath=path=>typeof path==='string'&&/^[A-Za-z0-9_.@/-]{1,400}$/.test(path)&&path.split('/').every(part=>part&&part!=='.'&&part!=='..');
+
+function namedCases(text){
+  const result=new Map(), lines=(text??'').split(/\r?\n/);
+  for(let line=0;line<lines.length;line++){
+    const match=staticTest.exec(lines[line]);
+    if(!match)continue;
+    const [,indent,quote,name]=match;
+    if(!name.trim()||name.includes(quote)||name.includes('\\')||[...name].some(c=>c.codePointAt(0)<32))continue;
+    let end=line+1;
+    while(end<lines.length&&(!lines[end].trim()||lines[end].startsWith(indent)&&
+      /^[ \t]/.test(lines[end].slice(indent.length))))end++;
+    if(!/^}\s*(?:,[^;]*)?\)\s*;?\s*$/.test(lines[end]?.slice(indent.length)??''))continue;
+    result.set(name,result.has(name)?null:meaning(lines.slice(line+1,end).join('\n')));
+    line=end;
   }
-  return map;
+  return result;
 }
 
-/** Map authentic exact findings, not a PR author's test list. A path alone is
- * not proof that a test addresses the specific issue reported on that path. */
-export async function readHostedReview(api,plan,registry,changedPaths,compare){
+// Read only the leading static import declarations, before any executable
+// suite body. Never look for apparent imports inside that body or its strings.
+const importTrivia=/^(?:\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/)*/;
+const bareImport=/^import\s*(['"])([^"'\\\r\n]+)\1\s*;/;
+const valueImport=/^import\s+(?:(type)\s+)?([A-Za-z0-9_$,\s*{}]+?)\s+from\s*(['"])([^"'\\\r\n]+)\3\s*;/;
+const identifier=/^[A-Za-z_$][\w$]*$/;
+const namespaceBinding=/^\*\s+as\s+[A-Za-z_$][\w$]*$/;
+const nameBinding=/^(?:type\s+)?[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?$/;
+
+function runtimeBinding(text){
+  const bindings=text.trim();
+  if(identifier.test(bindings)||namespaceBinding.test(bindings))return true;
+  const named=bindings.indexOf('{');
+  if(named<0||!bindings.endsWith('}'))return null;
+  const prefix=bindings.slice(0,named).trim();
+  if(prefix&&(!prefix.endsWith(',')||!identifier.test(prefix.slice(0,-1).trim())))return null;
+  const entries=bindings.slice(named+1,-1).trim().replace(/,$/,'').split(',').map(item=>item.trim());
+  if(entries.some(item=>item&&!nameBinding.test(item)))return null;
+  return Boolean(prefix)||entries.some(item=>item&&!/^type\s+/.test(item));
+}
+function directlyConsumes(text,file,reviewPath){
+  while(text.length){
+    text=text.slice(importTrivia.exec(text)[0].length);
+    const literal=bareImport.exec(text),binding=literal?null:valueImport.exec(text),matched=literal??binding;
+    if(!matched)break;
+    let use=Boolean(literal);
+    if(binding){
+      const valid=runtimeBinding(binding[2]);
+      if(valid===null)break;
+      use=!binding[1]&&valid;
+    }
+    const specifier=literal?.[2]??binding[4];
+    text=text.slice(matched[0].length);
+    if(!use||!specifier.startsWith('.'))continue;
+    const resolved=posix.normalize(posix.join(posix.dirname(file),specifier));
+    const stem=resolved.replace(/\.(?:m?js|tsx?)$/,'');
+    if(reviewPath===resolved||['.ts','.tsx','.mjs'].some(ext=>reviewPath===stem+ext))return true;
+  }
+  return false;
+}
+
+async function evidenceCases(registry,item,earlier,head,changed,readText){
+  const files=changed.filter(file=>nativeSuite.test(file));
+  if(files.length>25)throw Error('REVIEW_PROOF_SCOPE_TOO_LARGE: finding '+item.id);
+  const result=[];
+  for(const file of files){
+    const text=await readText(head,file);
+    if(!text?.includes('TEST_DATABASE_URL')||!(directlyConsumes(text,file,item.path)||
+      registry?.entries.some(entry=>entry.file===file&&entry.paths.includes(item.path))))continue;
+    const previous=namedCases(await readText(earlier,file));
+    for(const [name,body] of namedCases(text)){
+      if(body&&body!==previous.get(name)){
+        const pinned=registry?.entries.find(entry=>entry.file===file&&(entry.name===name||entry.name.endsWith(' '+name)));
+        result.push(pinned?{id:pinned.id,file,name:pinned.name}:
+          {id:'review-'+sha(JSON.stringify([file,name])).slice(0,24),file,name,leaf:true});
+      }
+    }
+  }
+  if(!result.length)throw Error('REVIEW_CASE_EVIDENCE_MISSING: finding '+item.id+' '+item.path);
+  if(result.length>20)throw Error('REVIEW_PROOF_SCOPE_TOO_LARGE: finding '+item.id);
+  return result.sort((a,b)=>a.id.localeCompare(b.id));
+}
+
+export const affectedCasesWithReview=(pinned,review)=>mergeAffectedCases(pinned,
+  review?.findings.flatMap(item=>item.proofs??[])??[]);
+
+/** Match real changed regression bodies to the repaired, reviewed code and
+ * resolved GitHub finding. Closing a thread is not the execution proof. */
+export async function readHostedReview(api,plan,registry,compare,readText){
   await verifyTuple(api,plan);
   const prPath=prefix+'/pulls/'+plan.pr;
-  const [comments,reviews,inline,threadIds]=await Promise.all([
+  const [comments,reviews,inline,threads]=await Promise.all([
     api.pages(prefix+'/issues/'+plan.pr+'/comments'),api.pages(prPath+'/reviews'),
     api.pages(prPath+'/comments'),readThreads(api,plan)
   ]);
@@ -112,13 +187,19 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare){
     return comparisons.get(key);
   };
   await after(review.commit_sha);
-  const policy=bindings(registry);
-  const selected=affectedEntryPlan(registry,changedPaths);
-  const selectedIds=new Set(selected.map(entry=>entry.id)), seen=new Set();
+  const seen=new Set();
+  const texts=new Map();
+  const read=async(commit,file)=>{
+    const key=commit+':'+file;
+    if(!texts.has(key))texts.set(key,Promise.resolve().then(()=>readText(commit,file)));
+    return texts.get(key);
+  };
   const findings=[];
   for(const item of inline.filter(knownFinding).sort((a,b)=>a.id-b.id)){
     if(!Number.isSafeInteger(item.id)||item.id<=0||seen.has(item.id))throw Error('Duplicate or unreadable GitHub Review finding');
     seen.add(item.id);
+    const threadId=threads.roots.get(item.id);
+    if(!threadId||!safeReviewPath(item.path))throw Error('Cannot bind Review finding to its resolved thread: '+item.id);
     const submission=reviews.find(r=>r.id===item.pull_request_review_id&&r.user?.login===REVIEW_BOT);
     if(!submission||submission.commit_id!==(item.original_commit_id??item.commit_id)||submission.state==='PENDING')throw Error('Review finding original submission cannot be confirmed: '+item.id);
     const digest=findingDigest(item);
@@ -133,18 +214,17 @@ export async function readHostedReview(api,plan,registry,changedPaths,compare){
         continue;
       }
     }
-    const binding=policy.get(item.path+'\0'+digest);
-    if(!binding)throw Error('REVIEW_CASE_MAPPING_MISSING: finding '+item.id+' '+item.path+' sha256='+digest);
-    const actual=new Set(await after(submission.commit_id));
-    if(!binding.repairPaths.some(path=>actual.has(path)))throw Error('REVIEW_FIX_NOT_ON_HEAD: finding '+item.id+' '+item.path);
-    if(binding.caseIds.some(id=>!selectedIds.has(id)))throw Error('REVIEW_CASE_NOT_APPLICABLE_ON_FROZEN_DIFF: finding '+item.id);
-    findings.push({id:item.id,path:item.path,digest,reviewedHead:submission.commit_id,cases:[...binding.caseIds].sort()});
+    const actual=await after(submission.commit_id);
+    if(!actual.includes(item.path)||meaning((await read(submission.commit_id,item.path))??'')===meaning((await read(plan.head,item.path))??''))
+      throw Error('REVIEW_FIX_NOT_ON_HEAD: finding '+item.id+' '+item.path);
+    const proofs=await evidenceCases(registry,item,submission.commit_id,plan.head,actual,read);
+    findings.push({id:item.id,path:item.path,digest,reviewedHead:submission.commit_id,threadId,cases:proofs.map(test=>test.id),proofs});
   }
   // Even a fix submitted after round two does not need a new bot summary.
-  // The recorded reviewed revision, trusted mapping, actual fix and same-run
+  // The recorded reviewed revision, actual fix and same-run
   // named passing tests supply the evidence for its descendant.
   await verifyTuple(api,plan);
-  return {reviewedHead:review.commit_sha,reviewCommentId:review.commentId,threadIds,findings};
+  return {reviewedHead:review.commit_sha,reviewCommentId:review.commentId,threadIds:threads.ids,findings};
 }
 
 export const reviewDigest = review => sha(JSON.stringify(review));
@@ -157,7 +237,7 @@ export function hostedPlan(plan,run,review,selected){
 export function readPlannedReview(raw,expectedDigest,plan,run,selected){
   if(!/^[0-9a-f]{64}$/.test(expectedDigest??'')||sha(raw)!==expectedDigest)throw Error('Missing or changed pre-test hosted Review plan');
   const result=JSON.parse(raw);
-  const expected=hostedPlan(plan,run,result.review,selected);
+  const expected=hostedPlan(plan,run,result.review,affectedCasesWithReview(selected,result.review));
   if(!result.review||JSON.stringify(result)!==JSON.stringify(expected))throw Error('Hosted Review plan belongs to another tuple or selected cases');
   return result.review;
 }
@@ -168,14 +248,16 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const selected=affectedEntryPlan(registry,paths);
   const planned=resolve(process.env.RUNNER_TEMP,'dx-hosted-review-plan.json');
   if(process.argv[2]==='authorize'){
-    const review=await readHostedReview(readOnlyReviewApi(process.env.REVIEW_READ_TOKEN),plan,registry,paths,revisionPaths);
-    const raw=JSON.stringify(hostedPlan(plan,run,review,selected));
+    const review=await readHostedReview(readOnlyReviewApi(process.env.REVIEW_READ_TOKEN),plan,registry,revisionPaths,revisionText);
+    const cases=affectedCasesWithReview(selected,review);
+    const raw=JSON.stringify(hostedPlan(plan,run,review,cases));
     writeFileSync(planned,raw,{flag:'wx',mode:0o600});
-    appendFileSync(process.env.GITHUB_OUTPUT,'required='+String(selected.length>0)+'\nplan_sha256='+sha(raw)+'\n');
-    console.log('Frozen hosted Review '+review.reviewedHead+'; mapped findings: '+review.findings.map(f=>f.id).join(',')+'; affected cases: '+selected.map(t=>t.id).join(','));
+    appendFileSync(process.env.GITHUB_OUTPUT,'required='+String(cases.length>0)+'\nplan_sha256='+sha(raw)+'\n');
+    console.log('Frozen hosted Review '+review.reviewedHead+'; verified findings: '+review.findings.map(f=>f.id).join(',')+'; affected cases: '+cases.map(t=>t.id).join(','));
   }else if(process.argv[2]==='verify'){
     const review=readPlannedReview(readFileSync(planned),process.env.HOSTED_REVIEW_PLAN_SHA256,plan,run,selected);
-    const hash=selected.length?runSelectedCases(selected,resolve(process.env.RUNNER_TEMP,'dx-affected-entry.json')):null;
-    console.log(AFFECTED_PREFIX+JSON.stringify(affectedReceipt(plan,run,selected,hash,reviewDigest(review))));
+    const cases=affectedCasesWithReview(selected,review);
+    const hash=cases.length?runSelectedCases(cases,resolve(process.env.RUNNER_TEMP,'dx-affected-entry.json')):null;
+    console.log(AFFECTED_PREFIX+JSON.stringify(affectedReceipt(plan,run,cases,hash,reviewDigest(review))));
   }else throw Error('Expected hosted Review authorize or verify');
 }
