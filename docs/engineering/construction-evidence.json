@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "64a6dbd3d39eebfa6897c98c405ccb1e9d935106",
-  "sourceFingerprint": "0ee70da22bc8be3cce9c934e5f47f2e03bff1a84c31e1f16014de061085a08fd",
+  "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
   "risk": "full",
   "rules": [
     {
@@ -159,6 +159,57 @@
         "wh02-unit",
         "wh02-static"
       ]
+    },
+    {
+      "rule": "第二轮 Review P1：旧无 PO 字段验布报告按确切原批发料",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
+      "writes": [
+        "apps/api/src/production-platform/warehouse-material-issue.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/warehouse-issue-allocation.ts#restrictWarehouseIssueLots",
+        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts#warehouseFabricReportLots",
+        "apps/api/src/production-platform/bulk-preparation-service.ts#dispatchMaterials"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts#X3 uses the same assigned warehouse report"
+      ],
+      "initialization": "未切换组正常读取已验布版本，原报告未存可选PO时由当前确切批号和版本定位，不写或重出报告。",
+      "dateAndPermission": "显式PO范围继续卡原值；旧格式按本PO的原批和当前质检状态核定，另一PO不能冒充。",
+      "expectation": "经原入口投料、登记、报告及发料；A和B各有原批，错批409，正确从A发100后只扣A。对应 4717665081。",
+      "checks": [
+        "wh02-pg",
+        "wh02-unit",
+        "wh02-static"
+      ]
+    },
+    {
+      "rule": "第二轮 Review P2：旧收布待续逐行完成，末行才记整笔原回执",
+      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
+      "writes": [
+        "apps/api/src/production-platform/warehouse-receipt-continuation.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "packages/contracts/src/production-readiness.ts",
+        "apps/web/src/warehouse-receipt-batch-panel.tsx",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/warehouse-receipt-work.ts#readWarehouseReceiptWork",
+        "apps/api/src/production-platform/preparation-material-repository.ts#appendPreparationMaterial"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts#WH-02 uses the real 104m PO receipt",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#submits the original report at 93.6m"
+      ],
+      "initialization": "不改原输入，原命令表另追加每行回执和对应正本原批请求，最后一行写最终原命令。单行或缺行待补的原路沿用第一行。",
+      "dateAndPermission": "本人原请求、精确物料PO/范围/原始量、凭证明细或替换依据与原事务锁，未完成不得成功、不得用已办行换凭证重登。",
+      "expectation": "真仓库路由原两行先选2米，旧标识仍返回待续，列表只留待办第2行，同请求重放和跨行无重复；后续5米成功才恢复旧整笔回执。对应 4717665094。",
+      "checks": [
+        "wh02-pg",
+        "wh02-static"
+      ]
     }
   ],
   "checks": [
@@ -167,20 +218,20 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8077c6f1a3defcae275dfb9bf3a09cd80038a08c",
-      "sourceFingerprint": "0ee70da22bc8be3cce9c934e5f47f2e03bff1a84c31e1f16014de061085a08fd",
-      "startedAt": "2026-11-27T09:22:58Z",
-      "endedAt": "2026-11-27T09:23:43Z",
-      "log": "/workspace/scratch/wh02-review1-evidence/pg.log",
-      "logSha256": "a01d42517957eefd38962213da60b11235c407659efe80cd9236430f242e83ea",
+      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
+      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
+      "startedAt": "2026-11-27T09:30:13Z",
+      "endedAt": "2026-11-27T09:31:11Z",
+      "log": "/workspace/scratch/wh02-review2-evidence/pg.log",
+      "logSha256": "b233ef6bcb7a1bdbf858d9243ce68155f9372a2e26bd01b93812b00538c22b98",
       "cwd": "/workspace/scratch/wh02-inspection-cutover",
-      "passed": 8,
+      "passed": 9,
       "failed": 0,
       "skipped": 95,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e0dcfebc552b61d346916166883b8a5ae1b5201744cc503c0c3744054fffa7fd"
+          "sha256": "6c5c6e5ac3818fc23d51755502a8d6c9946e64e7ff6713a89d3cf4c46b418357"
         }
       ],
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --testNamePattern \"WH-02|submits the original report at 93.6m|uses the same assigned warehouse report|guards native accessory issues|preserves the same preorder accessory lot|separates 90% inspection|resumes an unnumbered draft\" --reporter=default --reporter=json",
@@ -191,12 +242,12 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8077c6f1a3defcae275dfb9bf3a09cd80038a08c",
-      "sourceFingerprint": "0ee70da22bc8be3cce9c934e5f47f2e03bff1a84c31e1f16014de061085a08fd",
-      "startedAt": "2026-11-27T09:23:54Z",
-      "endedAt": "2026-11-27T09:23:58Z",
-      "log": "/workspace/scratch/wh02-review1-evidence/unit.log",
-      "logSha256": "90b091dbfcbbae728043e928826896b10be7f80d6cef6d68e9cc5c0936a09f1b",
+      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
+      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
+      "startedAt": "2026-11-27T09:29:49Z",
+      "endedAt": "2026-11-27T09:29:52Z",
+      "log": "/workspace/scratch/wh02-review2-evidence/unit.log",
+      "logSha256": "61769d8e3c510e209d37468873e9cb15e1b5e5a28d7725644fe79a11e656fdb4",
       "cwd": "/workspace/scratch/wh02-inspection-cutover",
       "passed": 41,
       "failed": 0,
@@ -204,7 +255,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8e681f72994699ce9ab259bb453b281fd88f1ca42e6e14f2c450b4a77157cdec"
+          "sha256": "1f1d20f6c7693d5dfc5c9ec6e93e32292811d752e8b45fc351ef99d48b48b255"
         }
       ],
       "command": "npx vitest run --config vitest.config.ts tests/unit/warehouse-issue-allocation.test.ts tests/unit/warehouse-material-balance.test.ts tests/unit/warehouse-receipt-status.test.ts tests/unit/production-readiness-contract.test.ts --reporter=default --reporter=json",
@@ -215,12 +266,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8077c6f1a3defcae275dfb9bf3a09cd80038a08c",
-      "sourceFingerprint": "0ee70da22bc8be3cce9c934e5f47f2e03bff1a84c31e1f16014de061085a08fd",
-      "startedAt": "2026-11-27T09:22:00Z",
-      "endedAt": "2026-11-27T09:23:56Z",
-      "log": "/workspace/scratch/wh02-review1-evidence/static.log",
-      "logSha256": "f188eeeba7f1248829ee7b8c12ec995609a1e954fabe6f946728ffa222050ef0",
+      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
+      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
+      "startedAt": "2026-11-27T09:29:59Z",
+      "endedAt": "2026-11-27T09:30:58Z",
+      "log": "/workspace/scratch/wh02-review2-evidence/static.log",
+      "logSha256": "6e2f17fed3b165979d2d3361ce00952872d3f36e5312165a24ca687c5e3fdd78",
       "cwd": "/workspace/scratch/wh02-inspection-cutover",
       "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node scripts/acceptance/time-site-inventory.mjs; node --test (release/main migration contract and timing/responsibility sources); bash -n and node --check (fixed Acceptance operator entry); eslint --max-warnings=0 (all changed TS/TSX); git diff --check",
       "context": "Local validation against current actual release base and edited source. CLI syntax and registered migration/manifest only; no installed root-controller command or deployment executed."

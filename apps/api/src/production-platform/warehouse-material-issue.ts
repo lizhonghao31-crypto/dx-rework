@@ -67,7 +67,7 @@ export function ledgerForMaterialIssue(item:WarehouseReceiptWorkItem,history:rea
  const legacy=legacyMaterialIssueMovements(item);
  const ledger=projectWarehouseIssueAllocation(item.basis.unit,[...movements,...legacy],issues);
  return ledger&&usableFabricLots?restrictWarehouseIssueLots(ledger,usableFabricLots
-  .filter(lot=>lot.materialId===item.materialId&&(lot.lineId??null)===item.lineId)
+  .filter(lot=>lot.materialId===item.materialId&&(lot.lineId===undefined||lot.lineId===item.lineId))
   .map(lot=>({...lot.receipt,...(lot.quantityRowKey?{quantityRowKey:lot.quantityRowKey}:{})}))):ledger;
 }
 

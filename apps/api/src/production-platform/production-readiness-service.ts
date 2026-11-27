@@ -1,6 +1,6 @@
 import {readWarehouseFabricReceiptBasis} from './warehouse-fabric-report-lots.js';
 import {readWarehouseCutover,warehouseCutoverPaused,warehouseCutoverResources,warehouseCutoverScopeKey,warehouseCutoverScopesCurrent} from './warehouse-receipt-cutover-repository.js';
-import {originalReceiptCommand,pendingWarehouseReceiptOrigin,preserveLegacyWarehouseReceipt} from './warehouse-receipt-continuation.js';
+import {originalReceiptCommand,pendingWarehouseReceiptOrigin,preserveLegacyWarehouseReceipt,recordWarehouseContinuationRow} from './warehouse-receipt-continuation.js';
 import {WarehouseReceiptAttestationSchema,WarehouseReceiptReconciliationSchema,WarehouseReceiptBatchSchema,type WarehouseReceiptBatchEvidence,type WarehouseReceiptPageQuery} from '@dx-rework/contracts/production-readiness';
 import {appendWarehouseReceiptReconciliation,readWarehouseReceiptReconciliations,reconciliationResourceKey,warehouseReceiptReconciliationAvailable} from './warehouse-receipt-reconciliation-repository.js';
 import {createWarehouseOperatorAttestation,findWarehouseReceiptReconciliationItem,originalWarehouseReconciliationPair,
@@ -272,7 +272,7 @@ export class ProductionReadinessService{
    ranges:ranges.map(r=>({rangeId:r.range_id,preparationId:r.preparation_id,kind:r.kind,version:r.version,lineIds:r.line_ids,complete:r.complete,pendingMaterialIds:r.pending_material_ids,note:r.note,recordedAt:preparationIso(r.occurred_at)!,evidenceIds:r.evidence_ids,basis:r.basis_json}))};
  }
  private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void|
-  {pending:{resource:PreparationResource;key:string}}|{settled:{resource:PreparationResource;key:string;hash:string}}>){
+  {pending:{resource:PreparationResource;key:string}}|{continued:{resource:PreparationResource;key:string;hash:string;rowIndex:number;last:boolean}}>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
   const db=this.transactionClient??await this.database.connect();try{
    if(!this.transactionClient)await db.query('BEGIN');
@@ -322,11 +322,14 @@ export class ProductionReadinessService{
    }
    if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);await new BulkPreparationService(this.database).sync(db,actor,a.context.orderId);}
    const response=await this.read(actor,resource,db);
-   if(effect&&'settled' in effect){
-    const old=effect.settled;
-    const originalResponse=old.resource.kind===resource.kind&&old.resource.id===resource.id?response:await this.read(actor,old.resource,db);
-    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',
-     [actor.actorId,originalReceiptCommand(old.resource),old.key,old.hash,JSON.stringify(originalResponse)]);
+   if(effect&&'continued' in effect){
+    const old=effect.continued;
+    await recordWarehouseContinuationRow(db,actor.actorId,old,{resource,key});
+    if(old.last){
+     const originalResponse=old.resource.kind===resource.kind&&old.resource.id===resource.id?response:await this.read(actor,old.resource,db);
+     await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',
+      [actor.actorId,originalReceiptCommand(old.resource),old.key,old.hash,JSON.stringify(originalResponse)]);
+    }
    }
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`preparation_${action}`,resource.id,JSON.stringify(input)]);
@@ -461,14 +464,17 @@ export class ProductionReadinessService{
    if(continuation&&(continuation.key===key||!(continuation.resource.kind===resource.kind&&continuation.resource.id===resource.id||
      continuation.resource.kind==='source'&&continuation.resource.id===a.context.sourceId)))conflict('继续办理的原提交不属于本单');
    const pending=continuation?await pendingWarehouseReceiptOrigin(db,actor.actorId,continuation.resource,continuation.key):null;
+   const rowIndex=continuation?.rowIndex??0;
    if(pending){
+    if(pending.original.quantities.length>1&&continuation?.rowIndex===undefined)conflict('原提交有多条数量行，请选择要继续的原明细');
+    if(!pending.remainingRows.includes(rowIndex))conflict('该原数量行已办理或不存在，请读取原提交剩余明细');
     if(!input.receiptEvidenceLine&&!input.replaces)conflict('原提交须补齐可核对的独立凭证明细或准确订正原批');
     const original=pending.original;
     if(!['ready','partial'].includes(original.state)||original.scopeRef!==input.scopeRef||
      original.occurredAt&&Date.parse(original.occurredAt)!==occurred)conflict('原未过账实收的范围或已填写时间不同，请核对原请求');
-    const exact=original.quantities.filter(row=>(!row.materialId||row.materialId===input.materialId)&&
-     (!row.lineId||row.lineId===input.lineId)&&row.unit===input.unit);
-    if(original.quantities.length&&!exact.length||exact.length===1&&!input.replaces&&exact[0]!.quantity!==Number(input.quantity))
+    const row=original.quantities[rowIndex];
+    if(row&&(row.materialId&&row.materialId!==input.materialId||row.lineId&&row.lineId!==input.lineId||
+     row.unit!==input.unit||!input.replaces&&row.quantity!==Number(input.quantity)))
      conflict('实收的物料、PO、单位或原已填写数量不符，请核对原数量行');
    }
    const item=items.find(row=>row.kind===input.kind&&row.scopeRef===input.scopeRef&&
@@ -533,7 +539,7 @@ export class ProductionReadinessService{
    await appendPreparationMaterial(db,a.context,actor.actorId,{kind:input.kind,scopeRef,expectedVersion:input.expectedReceiptVersion,
     state:'partial',occurredAt:input.occurredAt,note:input.note,quantities:quantity?[{lineId:input.lineId,materialId:input.materialId,
      name:item.name,quantity,unit:input.unit}]:[],evidenceIds:input.evidenceIds,sourceDocumentVersion:null,recipientId:null},{target,evidence});
-   return pending?{settled:pending}:undefined;
+   return pending?{continued:{resource:pending.resource,key:pending.key,hash:pending.hash,rowIndex,last:pending.remainingRows.length===1}}:undefined;
   });
  }
  async record(actor:TrustedActorContext,resource:PreparationResource,raw:PreparationMaterialRecord,key:string){

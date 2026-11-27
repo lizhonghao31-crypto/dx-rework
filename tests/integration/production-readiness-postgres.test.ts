@@ -2104,8 +2104,101 @@ async function originalWarehouseReadiness(db:Pool){
      expect.objectContaining({ref:correctedA,quantity:{quantity:'1',unit:'米'},occurredAt:second}),
      expect.objectContaining({ref:{recordId:batchB.recordId,version:updated.version+1},quantity:{quantity:'4',unit:'米'},occurredAt:second}),
     ])});
+    const multipart={...oldRequest,note:'TEST one original submission with two physical delivery lines',quantities:[
+     {materialId,lineId:(await work()).lineId,name:'原单第 1 行',quantity:2,unit:'米'},
+     {materialId,lineId:(await work()).lineId,name:'原单第 2 行',quantity:5,unit:'米'},
+    ]};
+    const multipartKey=randomUUID(),continuedLine={resource,key:multipartKey};
+    const oldSubmit=()=>post(rd+'/materials',multipart,'warehouse',multipartKey);
+    const postedRows=async()=> (await work()).pendingReceipts?.find(row=>row.key===multipartKey)?.remainingRows;
+    const doLine=(quantity:string,rowIndex:number|undefined,evidenceLine:string,key=randomUUID(),expectedReceiptVersion?:number)=>take(quantity,second,{
+     ...(expectedReceiptVersion===undefined?{}:{expectedReceiptVersion}),
+     continuesReceipt:{...continuedLine,...(rowIndex===undefined?{}:{rowIndex})},
+     receiptEvidenceLine:{...proof,line:evidenceLine},evidenceIds:[attachmentId],
+    },key);
+    expect((await oldSubmit()).statusCode).toBe(409);
+    expect(await postedRows()).toEqual([0,1]);
+    expect((await doLine('2',undefined,'4')).statusCode).toBe(409);
+    expect((await doLine('5',0,'4')).statusCode).toBe(409);
+    const replayKey=randomUUID(),beforeFirstLine=(await work()).receiptVersion;
+    const half=await doLine('2',0,'4',replayKey,beforeFirstLine);
+    expect(half.statusCode,half.body).toBe(200);
+    expect(await postedRows()).toEqual([1]);
+    expect((await oldSubmit()).statusCode).toBe(409);
+    expect((await doLine('2',0,'4',replayKey,beforeFirstLine)).json()).toEqual(half.json());
+    expect((await doLine('2',0,'5')).statusCode).toBe(409);
+    expect((await work()).received).toEqual({quantity:'100.6',unit:'米'});
+    const completed=await doLine('5',1,'5');
+    expect(completed.statusCode,completed.body).toBe(200);
+    expect(await postedRows()).toBeUndefined();
+    expect((await oldSubmit()).statusCode).toBe(200);
+    expect((await work()).received).toEqual({quantity:'105.6',unit:'米'});
    });
   }finally{await app.close();}
+ });
+ it('WH-02 dispatches a PO-specific receipt referenced by an older inspection without field lineId',async()=>{
+  const own=await businessAnchorFixture(url!),app=Fastify();
+  try{
+   const primary=own.people.merchandiser!;
+   const {scene,id,warehouse,bulk,now}=await warehouseOriginalIssueFixture(own,{fabricPurchase:true,exerciseFabric:async({service,bulk,warehouse,orderId})=>{
+    const resource={kind:'order' as const,id:orderId},occurredAt=businessNow().toISOString();
+    const old=await service.read(primary,resource);
+    const purchase=old.facts.find(row=>row.kind==='material_investment')!;
+    const shared=(await service.warehouseReceiptWork(warehouse,resource)).find(row=>row.kind==='fabric_receipt')!;
+    const previous=purchase.quantities.find(row=>row.materialId===shared.materialId)!;
+    const [poA,poB]=old.lines;
+    const basics={kind:'material_investment' as const,scopeRef:shared.scopeRef,state:'partial' as const,occurredAt,
+     note:'TEST exact separate original purchase PO scope',evidenceIds:[],recipientId:null,sourceDocumentVersion:null};
+    const changed=await service.record(primary,resource,{...basics,expectedVersion:purchase.version,
+     investmentQuantityCorrection:{index:purchase.quantities.indexOf(previous),previous},
+     quantities:[{...previous,lineId:poA!.lineId,quantity:310}]},randomUUID());
+    const updated=changed.facts.find(row=>row.kind==='material_investment')!;
+    await service.record(primary,resource,{...basics,expectedVersion:updated.version,
+     quantities:[{...previous,lineId:poB!.lineId,quantity:210}]},randomUUID());
+    const scoped=(await service.warehouseReceiptWork(warehouse,resource)).filter(row=>row.kind==='fabric_receipt');
+    expect(scoped.map(row=>[row.lineId,row.purchase.invested.quantity])).toEqual([[poA!.lineId,'310'],[poB!.lineId,'210']]);
+    const lots=[];
+    for(const item of scoped){
+     const result=await service.recordWarehouseReceiptBatch(warehouse,resource,{kind:'fabric_receipt',scopeRef:item.scopeRef,lineId:item.lineId,
+      materialId:item.materialId,supplierId:item.basis.supplierId,unit:item.basis.unit,investment:item.purchase.original,
+      materialFingerprint:item.basis.adoptedRef,expectedReceiptVersion:item.receiptVersion,
+      quantity:item.purchase.invested.quantity,occurredAt,note:'TEST actual receipt for this PO'},randomUUID());
+     const row=result.history.find(row=>row.warehouseReceipt?.lineId===item.lineId&&row.warehouseReceipt?.materialId===item.materialId)!;
+     lots.push({materialId:item.materialId,receipt:{recordId:row.recordId,version:row.version}});
+    }
+    const report=await bulk.reportFabric(warehouse,orderId,{expectedReportId:null,expectedReceiptVersion:0,material:shared.name,
+     arrivedAt:occurredAt,inspectedAt:occurredAt,result:'合格',note:'TEST original report records exact batches, without optional PO field',
+     receiptBatches:lots},randomUUID());
+    expect(report.fabric?.report?.receiptBatches).toEqual(lots);
+    expect(report.fabric?.warehouseInspection?.cutover).toBeUndefined();
+   }});
+   registerBulkPreparationRoutes(app,{service:new DigitalProductionIdentityService(own.db,true),creationEnabled:true,workbenchNumberedCreation:true,
+    root:new RootAuthority(own.db,'anchor-test','uat-root'),authenticate:async(token:string|undefined)=>{
+     if(token!=='warehouse')throw new ApplicationError('UNAUTHORIZED','TEST assigned warehouse role',401);
+     return {id:warehouse.actorId,displayName:'TEST assigned warehouse',businessRoles:warehouse.actorRoles,capabilities:['digital_production:view']};
+    }},bulk);
+   app.setErrorHandler((error,_request,reply)=>reply.code((error as ApplicationError).statusCode??500).send({message:error.message}));
+   const base='/digital-production/orders/'+id+'/bulk-preparation',headers={cookie:'dx_rework_session=warehouse'};
+   await own.runtime.run(scene,own.root,async()=>{
+    const get=await app.inject({method:'GET',url:base,headers});
+    expect(get.statusCode,get.body).toBe(200);
+    const sheet=get.json<BulkPreparationSheet>();
+    expect(sheet.fabric).toMatchObject({usable:true,warehouseCoverageCurrent:true});
+    const material=sheet.materials!.items.find(row=>row.kind==='fabric')!;
+    expect(material.issueOptions?.map(row=>row.remaining)).toEqual(['300','200']);
+    const [poA,poB]=material.issueOptions!;
+    expect(poA!.lineId).not.toBe(poB!.lineId);
+    const dispatch=(receipt:NonNullable<typeof poA>['lots'][number]['receipt'])=>app.inject({method:'POST',url:base+'/materials-dispatch',
+     headers:{...headers,'idempotency-key':randomUUID()},payload:{instructionVersion:sheet.instructionVersion,supplierId:own.supplierId,
+      occurredAt:now,note:'TEST dispatch the actual first PO',items:[{materialId:material.id,quantity:100,unit:'米',
+       scope:{scopeRef:poA!.scopeRef,lineId:poA!.lineId,allocations:[{receipt,quantity:'100'}]}}]}});
+    expect((await dispatch(poB!.lots[0]!.receipt)).statusCode).toBe(409);
+    const posted=await dispatch(poA!.lots[0]!.receipt);
+    expect(posted.statusCode,posted.body).toBe(200);
+    expect(posted.json<BulkPreparationSheet>().materials!.items.find(row=>row.id===material.id)?.issueOptions?.map(row=>row.remaining))
+     .toEqual(['200','200']);
+   });
+  }finally{await app.close();await own.dispose();}
  });
  it('WH-02 certifies and issues two independently reconciled quantity rows from one original receipt',async()=>{
   const own=await businessAnchorFixture(url!),sha='f'.repeat(40),app=Fastify();

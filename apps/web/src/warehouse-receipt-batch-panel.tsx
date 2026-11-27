@@ -36,7 +36,7 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   [correction,setCorrection]=useState(''),[quantity,setQuantity]=useState(''),[occurredAt,setOccurredAt]=useState(''),[note,setNote]=useState('');
  const [busy,setBusy]=useState(false),[reading,setReading]=useState(true),[readError,setReadError]=useState<Error|null>(null);
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[file,setFile]=useState<File|null>(null),[evidence,setEvidence]=useState<string[]>([]);
- const [legacy,setLegacy]=useState<WarehouseReceiptContinuation|null>(null),[documentNumber,setDocumentNumber]=useState(''),
+ const [legacy,setLegacy]=useState<(WarehouseReceiptContinuation&{rowIndex:number})|null>(null),[documentNumber,setDocumentNumber]=useState(''),
   [documentLine,setDocumentLine]=useState(''),[proofAttachment,setProofAttachment]=useState('');
  const [reconciliationPending,setReconciliationPending]=useState(false);
  const active=useRef(true),inflight=useRef<AbortController|null>(null),operation=useRef(new SubmissionAttempt()),writing=useRef(false);
@@ -67,7 +67,7 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
   const attachmentId=proofAttachment||(evidence.length===1?evidence[0]:undefined);
   const parsed=WarehouseReceiptBatchSchema.safeParse({kind:current.kind,scopeRef:current.scopeRef,materialId:current.materialId,lineId:current.lineId,
    supplierId:current.basis.supplierId,unit:current.basis.unit,investment:current.purchase.original,materialFingerprint:current.basis.adoptedRef,expectedReceiptVersion:current.receiptVersion,
-   ...(prior?{replaces:prior.ref}:{}),...(legacy?{continuesReceipt:{resource:legacy.resource,key:legacy.key}}:{}),
+   ...(prior?{replaces:prior.ref}:{}),...(legacy?{continuesReceipt:{resource:legacy.resource,key:legacy.key,rowIndex:legacy.rowIndex}}:{}),
    ...(documentNumber&&documentLine&&attachmentId?{receiptEvidenceLine:{attachmentId,documentNumber,line:documentLine}}:{}),
    quantity,occurredAt:when,note,evidenceIds:evidence});
   if(!retry&&!parsed.success){setError(parsed.error.issues[0]?.message??'请填写实际收料数量、时间和说明');return;}
@@ -100,11 +100,15 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
  };
  const readOrWriteDisabled=busy||pending||reading||Boolean(readError);
  const paused=current?.cutover?.mode==='safe_read',disabled=readOrWriteDisabled||Boolean(paused)||reconciliationPending;
- const continueFrom=(request:WarehouseReceiptContinuation)=>{
-  const exact=request.input.quantities.filter(row=>row.unit===current?.basis.unit&&(!row.materialId||row.materialId===current?.materialId)&&
-    (!row.lineId||row.lineId===current?.lineId));
-  clearInput();setLegacy(request);setAtLegacy(request,exact.length===1?String(exact[0]!.quantity):'');
+ const continueFrom=(request:WarehouseReceiptContinuation,rowIndex:number)=>{
+  const row=request.input.quantities[rowIndex];
+  clearInput();setLegacy({...request,rowIndex});setAtLegacy(request,row?String(row.quantity):'');
  };
+ const pendingRows=current?.pendingReceipts?.flatMap(request=>request.remainingRows.flatMap(rowIndex=>{
+  const row=request.input.quantities[rowIndex];
+  return request.input.scopeRef===current.scopeRef&&(!row||row.unit===current.basis.unit&&
+   (!row.materialId||row.materialId===current.materialId)&&(!row.lineId||row.lineId===current.lineId))?[{request,row,rowIndex}]:[];
+ }))??[];
  const setAtLegacy=(request:WarehouseReceiptContinuation,qty:string)=>{
   setQuantity(qty);setOccurredAt(request.input.occurredAt?asBeijingLocal(request.input.occurredAt):'');
   setNote(request.input.note);setEvidence(request.input.evidenceIds);
@@ -128,11 +132,13 @@ export function WarehouseReceiptBatchPanel({resource,onClose}:{resource:Preparat
    <p>生产需用：{current.productionRequired?`${current.productionRequired.quantity} ${current.productionRequired.unit}`:'待核'} · 生产欠料：{current.balance.productionShortage??'待核'}</p>
    <p>原验布、预缩及质量放行保持原办理入口。</p>
    {paused&&<p role="status">本采购范围暂停新增或订正，原批和原提交仍可查看。</p>}
-   {current.pendingReceipts?.length?<section aria-label="原未过账收布">
+   {pendingRows.length>0?<section aria-label="原未过账收布">
     <h3>原未过账收布</h3>
-    {current.pendingReceipts.map(request=><div key={request.resource.id+':'+request.key}>
-     <p>{request.input.occurredAt?asBeijingLocal(request.input.occurredAt).replace('T',' '):'实际时间待核'} · {request.input.note}</p>
-     <Button type="button" label="继续这笔原提交" variant="secondary" isDisabled={disabled||dirty} onClick={()=>continueFrom(request)}/>
+    {pendingRows.map(({request,row,rowIndex})=><div key={request.resource.id+':'+request.key+':'+rowIndex}>
+     <p>{request.input.occurredAt?asBeijingLocal(request.input.occurredAt).replace('T',' '):'实际时间待核'} · {request.input.note}
+      {row&&` · 原第 ${rowIndex+1} 行 ${row.name} ${row.quantity} ${row.unit}`}</p>
+     <Button type="button" label={request.input.quantities.length>1?`继续原第 ${rowIndex+1} 行`:'继续这笔原提交'} variant="secondary"
+      isDisabled={disabled||dirty} onClick={()=>continueFrom(request,rowIndex)}/>
     </div>)}
     {legacy&&<p role="status">已带回原填写内容，核准本物料和实际批次后补齐凭证明细或选择准确订正目标。</p>}
    </section>:null}

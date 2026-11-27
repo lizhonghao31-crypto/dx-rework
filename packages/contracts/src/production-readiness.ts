@@ -52,7 +52,7 @@ export const WarehouseReceiptBatchSchema=z.object({
  replaces:WarehouseReceiptRefSchema.optional(),
  receiptEvidenceLine:z.object({attachmentId:z.uuid(),documentNumber:z.string().trim().min(1).max(120),line:z.string().trim().min(1).max(120)}).strict().optional(),
  continuesReceipt:z.object({resource:z.object({kind:z.enum(['source','order']),id:z.uuid()}).strict(),
-  key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/)}).strict().optional(),
+  key:z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/),rowIndex:z.number().int().min(0).max(399).optional()}).strict().optional(),
  quantity:z.string().regex(/^(?:0|[1-9][0-9]{0,7})(?:\.[0-9]{1,6})?$/).refine(value=>Number(value)<=10000000,'实收数量超出允许范围'),
  occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),
  evidenceIds:z.array(z.uuid()).max(40).refine(ids=>new Set(ids).size===ids.length,'凭证不可重复').default([]),
@@ -111,7 +111,7 @@ export type WarehouseReceiptReconciliationProjection={
  nativeNeedsReview:boolean;activeBatches:ReconciledWarehouseBatch[];firstArrival:ReconciledWarehouseBatch|null;
  procurementRemaining:string|null;eligibleForInspection:boolean;
 };
-export type WarehouseReceiptContinuation={resource:PreparationResource;key:string;input:PreparationMaterialRecord};
+export type WarehouseReceiptContinuation={resource:PreparationResource;key:string;input:PreparationMaterialRecord;remainingRows:number[]};
 export type WarehouseReceiptMode={generation:number;mode:'active'|'safe_read'};
 export type WarehouseReceiptWorkItem={
  cutover?:WarehouseReceiptMode;

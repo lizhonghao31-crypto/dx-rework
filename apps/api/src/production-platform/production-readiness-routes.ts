@@ -54,7 +54,7 @@ export function registerProductionReadinessRoutes(app:FastifyInstance,deps:Digit
   }
   app.post(`${base}/materials`,async r=>{
    const result=await service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r));
-   if(result.warehouseReceiptPending)throw new ApplicationError('WAREHOUSE_RECEIPT_NOT_POSTED','未登记，请从原物料的仓库批次面板继续，原输入已保留',409);
+   if(result.warehouseReceiptPending)throw new ApplicationError('WAREHOUSE_RECEIPT_NOT_POSTED','原提交尚未登记完毕，请从原物料的仓库批次面板继续，未办明细已保留',409);
    return result;
   });
   app.put(`${base}/responsibility`,async r=>service.assign(await actor(r),resource(r),parse(PreparationResponsibilitySchema,r.body),key(r)));
