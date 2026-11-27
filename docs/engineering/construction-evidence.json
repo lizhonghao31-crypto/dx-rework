@@ -27,7 +27,8 @@
       ],
       "expectation": "同一真实报价中用量不符的主料缺资料，已采用同版技术的辅料继续显示已填有效，并精确计入已完成。现有资料、价格或审批的真实正式门槛仍为整单。原授权范围和技术角色不变。",
       "checks": [
-        "ui04-native"
+        "ui04-native",
+        "ui04-protocol"
       ]
     },
     {
@@ -76,6 +77,29 @@
         {
           "format": "vitest-json",
           "sha256": "538241be2e99a03fde69238e4783fe05d4347235fb40ffe92d8efca4cf94b10a"
+        }
+      ]
+    },
+    {
+      "id": "ui04-protocol",
+      "kind": "tests",
+      "command": "node --test '--test-name-pattern=cheap CI preflight includes|keeps the reviewed responsibility' scripts/ci/pr-gate-controller.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f62da5144efbd457d4995462119762dec97c2db6",
+      "sourceFingerprint": "82e144949ca27990a027266f8579f6fa484e3a4ce76f8556608009f60b717890",
+      "context": "Resolved the existing authorized quotation GET clock-inventory entry only; protocol regression scoped to the two exact failed assertions from first Light",
+      "startedAt": "2026-11-27T01:29:07.825745+00:00",
+      "endedAt": "2026-11-27T01:29:08.554428+00:00",
+      "log": "/workspace/scratch/ui04-current/ui04-protocol.log",
+      "logSha256": "3b90ba64e0b4a21b73aeb0b5cf0d3429715115b26f30a9e6e0e4ccb13569bf3f",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "3b90ba64e0b4a21b73aeb0b5cf0d3429715115b26f30a9e6e0e4ccb13569bf3f"
         }
       ]
     }
