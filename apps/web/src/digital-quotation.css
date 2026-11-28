@@ -13,3 +13,31 @@
  .dx-doc-budget .budget-detail-table.has-quotation-delta th:nth-child(10){width:64px}
 }
 .quotation-editor .quotation-read-fields{display:contents}
+.quotation-version-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dx-v2-space-2, 8px);
+}
+
+.quotation-detail-summary {
+  padding-block: var(--dx-v2-space-3, 12px);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.quotation-editor .dx-doc-status:empty {
+  display: none;
+}
+
+.quotation-editor .quotation-proposal-panel {
+  min-inline-size: 0;
+  padding: var(--dx-v2-space-4, 16px);
+  margin-block: var(--dx-v2-space-3, 12px);
+  border: 1px solid var(--dx-form-control-border, #c9ced6);
+  border-radius: 8px;
+}
+
+.quotation-editor .quotation-proposal-panel button + button {
+  margin-inline-start: var(--dx-v2-space-2, 8px);
+}

@@ -29,6 +29,7 @@ import {approvedSecondaryCraftRows,decideSecondaryCraft,hasUnmappedSecondaryCraf
 import {secondaryCraftDecisionAuthorityReady} from './secondary-craft-approval-authority.js';
 import type {SecondaryCraftDecision,SecondaryCraftQuoteInput} from '@dx-rework/contracts/secondary-craft-quotation';
 import {developmentSourceLifecycle} from './development-source-lifecycle.js';
+import {readIeQuotationStyleNames} from './ie-quotation-style-names.js';
 
 type Database=Pick<Pool|PoolClient,'query'>;
 type PriceSource={actorId:string;role:string;version:number;recordedAt:string;documentPriceHash?:string;unitCorrectionVersion?:number};
@@ -37,7 +38,7 @@ const conflict=(message:string,code='QUOTATION_CONFLICT'):never=>{throw new Appl
 const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker','ie_reviewer','embroidery_washing_merchandiser','owner_group','production_management'];
 const readRoles=[...enabledRoles,'pmc'];
 type QuoteDirectoryRow={source_id:string|null;production_order_id:string|null;rush_source_id:string|null;style_no:string;customer_code:string|null;
- source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;assignments:QuotationAssignment[]|null};
+ source_designer:string|null;primary_merchandiser_id:string|null;version:number|null;confirmed_version:number|null;confirmed_snapshot_version:number|null;assignments:QuotationAssignment[]|null};
 function quotationAuthority(actor:TrustedActorContext,roles:ReadonlySet<string>,designerId:string|null,primaryId:string|null,assignments:readonly QuotationAssignment[]){
  const root=isRootActor(actor),designer=roles.has('sample_designer')&&designerId===actor.actorId,merch=roles.has('order_merchandiser')&&primaryId===actor.actorId;
  const full=root||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
@@ -249,7 +250,14 @@ export class DigitalQuotationService{
     if(quoteUnit)(r.unit===quoteUnit?matchingUnits:unitMismatches).add(r.materialId);
    }
   }
+  const [styleName]=c.full&&version===undefined&&q?.source_id?await readIeQuotationStyleNames(db,[{
+   kind:'processing_quote',resourceId:q.production_order_id??q.source_id,quoteId:q.quote_id,
+   order:q.production_order_id!==null,round:q.assembly?.roundNumber??null,
+  }]):[];
+  const presentation=q&&c.full&&version===undefined
+   ?{styleName:styleName??null,round:q.assembly?.roundNumber??null,sourceVersion:q.assembly?.sourceVersion??null}:undefined;
   return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...((original?assembly:q?.assembly)?{automatic:true,complete:quotationComplete({...q!,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q!.price_sources,assembly:assembly!})}:{}),...(workbenchReadiness?{workbenchReadiness}:{}),...(designerStatus?{designerStatus,confirmedPricing}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
+   ...(presentation?{presentation}:{}),
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),...(requiresWorkbenchPricing?{requiresWorkbenchPricing:true as const}:{}),
@@ -283,7 +291,7 @@ export class DigitalQuotationService{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    const active=await quotationRoles(db,actor,readRoles);
    // Keep the original native candidate order and cap before resolving the exact scope.
-   const rows=(await db.query<QuoteDirectoryRow>(`WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at FROM digital_quotation_documents q
+   const rows=(await db.query<QuoteDirectoryRow>(`WITH candidates AS (SELECT q.quote_id,q.source_id,q.production_order_id,q.updated_at FROM digital_quotation_documents q
    WHERE (q.source_id IS NULL OR ${await wholeOrderActiveSql(db,'source','q.source_id')})
    AND ($1::boolean OR EXISTS(SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE ($5::boolean AND a->>'technicalAssigneeId'=$2::text) OR (a->>'priceAssigneeId'=$2::text AND a->>'priceRole'=ANY($6::text[])))
    OR EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.production_order_id=q.production_order_id AND (($3::boolean AND o.created_by=$2::uuid) OR ($4::boolean AND o.primary_merchandiser_id=$2::uuid)))
@@ -291,11 +299,11 @@ export class DigitalQuotationService{
    ORDER BY q.updated_at DESC LIMIT 100)
    SELECT c.source_id,c.production_order_id,s.source_id AS rush_source_id,CASE WHEN c.production_order_id IS NULL THEN s.design_style_no ELSE o.design_style_no END AS style_no,
     coalesce(o.customer_code,s.customer_code) AS customer_code,CASE WHEN s.source_id IS NULL THEN o.created_by ELSE s.created_by END AS source_designer,
-    o.primary_merchandiser_id,quote.version,quote.confirmed_version,quote.assignments
+    o.primary_merchandiser_id,quote.version,quote.confirmed_version,confirmed.version AS confirmed_snapshot_version,quote.assignments
    FROM candidates c LEFT JOIN digital_production_orders o ON o.production_order_id=c.production_order_id OR (c.production_order_id IS NULL AND o.source_id=c.source_id)
    LEFT JOIN digital_production_sources s ON s.source_id=CASE WHEN c.production_order_id IS NULL THEN c.source_id ELSE o.source_id END
-   LEFT JOIN LATERAL(SELECT q.version,q.confirmed_version,q.assignments FROM digital_quotation_documents q
-    WHERE q.production_order_id=o.production_order_id OR (s.source_id IS NOT NULL AND q.source_id=s.source_id) LIMIT 1) quote ON true
+   JOIN digital_quotation_documents quote ON quote.quote_id=c.quote_id
+   LEFT JOIN digital_quotation_versions confirmed ON confirmed.quote_id=quote.quote_id AND confirmed.version=quote.confirmed_version
    ORDER BY c.updated_at DESC`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management')||active.has('pmc'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser','pattern_room_worker'].includes(r))])).rows;
    const items=[],rushIdentities:RushIdentity[]=[];
    for(const row of rows){
@@ -303,7 +311,8 @@ export class DigitalQuotationService{
     if(!await acceptanceIncludesNative(this.database,resource.id,db))continue;
     try{await acceptanceBusinessContext()?.assertScope(resource);}catch(error){if(error instanceof ApplicationError&&error.statusCode===404)continue;throw error;}
     if(!quotationAuthority(actor,active,row.source_designer,row.primary_merchandiser_id,row.assignments??[]).allowed)continue;
-    items.push({resource,designStyleNo:row.style_no,customerCode:row.customer_code,version:row.version??0,status:row.version!==null&&row.version===row.confirmed_version?'confirmed' as const:'draft' as const});
+    items.push({resource,designStyleNo:row.style_no,customerCode:row.customer_code,version:row.version??0,
+     confirmedVersion:row.confirmed_snapshot_version,status:row.version!==null&&row.version===row.confirmed_version?'confirmed' as const:'draft' as const});
     if(row.rush_source_id)rushIdentities.push({sourceId:row.rush_source_id,orderId:resource.kind==='order'?resource.id:null});
    }
    // The original no-source directory path stays metadata-only. Read just the
@@ -331,6 +340,10 @@ export class DigitalQuotationService{
    const result=await readIeProcessingDirectory(db,this.database,input,viewer,target);
    if(target&&result.items.length===1){
     await acceptanceBusinessContext()?.assertScope(result.items[0]!.resource);
+    const entry=result.items[0]!;
+    const [styleName]=await readIeQuotationStyleNames(db,[{kind:'processing_quote',resourceId:entry.resource.id,
+     quoteId:entry.quoteId,order:entry.resource.kind==='order',round:entry.round}]);
+    entry.styleName=styleName??null;
     result.items[0]!.basis=await readIeProcessingBasis(db,result.items[0]!);
     result.items[0]!.priceReview=await readIeProcessingPriceReview(db,result.items[0]!,viewer);
    }

@@ -186,10 +186,13 @@ function quotationDatabase(roles: string[], assignee = OTHER) {
         consumption_sources: {}, price_sources: {},
       }];
     }
-    if (sql.startsWith('WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at ')) {
+    if (sql.startsWith('WITH candidates AS (SELECT q.quote_id,q.source_id,q.production_order_id,q.updated_at ')) {
+      expect(sql).toContain('JOIN digital_quotation_documents quote ON quote.quote_id=c.quote_id');
+      expect(sql).toContain('confirmed.version AS confirmed_snapshot_version');
+      expect(sql).toContain('confirmed.quote_id=quote.quote_id AND confirmed.version=quote.confirmed_version');
       return values[0] && values[1] === ACTOR ? [{source_id: null, production_order_id: ORDER,
         style_no: order().design_style_no, customer_code: order().customer_code, source_designer: OTHER,
-        primary_merchandiser_id: OTHER, version: 1, confirmed_version: null,
+        primary_merchandiser_id: OTHER, version: 1, confirmed_version: null, confirmed_snapshot_version: null,
         assignments: [{rowId: ROW, technicalAssigneeId: assignee, priceAssigneeId: OTHER, priceRole: 'sample_designer'}]}] : [];
     }
     if (sql.startsWith("SELECT to_regclass('digital_development_documents')::text AS development")) {
@@ -219,7 +222,7 @@ describe('PMC full quotation reads preserve original row and command permissions
     expect(result).toMatchObject({fullCost: true, document, canStructure: false, canConfirm: false, versions: [1]});
     expect(result.rows[0]).toMatchObject({unitPrice: '10', consumption: '1.2', canEditConsumption: false, canEditPrice: false});
     expect(await service.list(actor(role))).toEqual({items: [{resource: {kind: 'order', id: ORDER},
-      designStyleNo: result.designStyleNo, customerCode: result.customerCode, version: 1, status: 'draft'}]});
+      designStyleNo: result.designStyleNo, customerCode: result.customerCode, version: 1, status: 'draft', confirmedVersion: null}]});
   });
 
   it.each([{role: 'pmc', active: []}, {role: 'quality_control', active: ['quality_control']}])(

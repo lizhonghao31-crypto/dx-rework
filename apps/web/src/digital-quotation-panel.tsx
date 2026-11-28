@@ -20,6 +20,7 @@ import {useForegroundRead} from './use-foreground-read.js';
 import {registerSessionInvalidator} from './auth-session.js';
 import {QuotationWorkbenchPricing,quotationPercentageFraction} from './quotation-workbench-pricing.js';
 import {OrderRushBadge} from './order-rush-badge.js';
+import {designerAstryxCss} from './designer-astryx.js';
 import './digital-budget.css';
 import './digital-quotation.css';
 const urls=createWebUrls(import.meta.env.BASE_URL);
@@ -41,8 +42,14 @@ export async function quotationRequest(path:string,resource:QuotationResource,me
  }
  return value;
 }
-type QuotationListItem={resource:QuotationResource;designStyleNo:string;version:number;status:string;orderRush?:true};
+type QuotationListItem={resource:QuotationResource;designStyleNo:string;version:number;status:string;confirmedVersion?:number|null;orderRush?:true};
 const readQuotationList=(signal:AbortSignal)=>digitalRequest<{items:QuotationListItem[]}>('quotations','GET',undefined,undefined,{signal});
+function QuotationVersionLabels({version,confirmedVersion}:{version:number;confirmedVersion:number|null|undefined}){
+ return <div className="quotation-version-labels" aria-label="报价版本">
+  {confirmedVersion!=null&&<StatusBadge tone="success">已确认 v{confirmedVersion}</StatusBadge>}
+  {confirmedVersion!==version&&version>0&&<StatusBadge tone="neutral">{confirmedVersion!=null?'新协作稿':'协作稿'} v{version}</StatusBadge>}
+ </div>;
+}
 
 export function DigitalQuotationPage(){
  const query=new URLSearchParams(window.location.search),parsed=QuotationResourceSchema.safeParse({kind:query.get('kind'),id:query.get('id')});
@@ -52,7 +59,7 @@ export function DigitalQuotationPage(){
  const items=Array.isArray(list.value?.items)?list.value.items:[];
  const error=list.error?.message;
  if(query.has('id')||query.has('kind'))return parsed.success?<DigitalQuotationPanel key={`${parsed.data.kind}:${parsed.data.id}`} resource={parsed.data}/>:<Surface><p role="alert">报价来源编号无效，请从原单进入</p></Surface>;
- return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}<OrderRushBadge value={item.orderRush}/></td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
+ return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={list.retry}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>报价版本</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}<OrderRushBadge value={item.orderRush}/></td><td><QuotationVersionLabels version={item.version} confirmedVersion={item.confirmedVersion===undefined&&item.status==='confirmed'?item.version:item.confirmedVersion}/></td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&!list.waiting&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
 }
 export type QuotationWorkbenchHeadline={resource:QuotationResource,state:DesignerQuotationStatusCode,quoteId:string|null,version:number|null,roundNumber:number|null};
 
@@ -210,8 +217,15 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  const displayStatus=DESIGNER_QUOTATION_STATUS_DISPLAY[statusCode];
  const rowStates=new Map(sheet?.designerStatus?.rows.map(row=>[row.rowId,row.state]));
  const confirmedPricing=sheet?.status==='confirmed'?sheet.confirmedPricing:null;
+ const readinessReasons=sheet?.workbenchReadiness?.reasons??[];
+ const collaborationBlock=sheet?.fullCost&&sheet.status==='draft'&&!history&&!basisBlocked
+  ?readinessReasons.length?readinessReasons.join('、'):
+   sheet.craftApprovalState==='waiting'?'待工艺审批':
+   sheet.automatic&&sheet.rows.some(row=>row.assignment.priceRole==='ie_reviewer'&&(!row.unitPrice||!row.assignment.priceAssigneeId))?'待IE加工价':
+   sheet.workbenchReadiness?.canConfirm?'报价资料已齐，待客户确认。':
+   sheet.automatic&&sheet.complete===false?'仍有资料或负责人员待补齐。':null:null;
  const back=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get('returnTo'),import.meta.env.BASE_URL);
- return <Surface><section className="quotation-editor dx-doc-budget"><DocumentToolbar title={workbench?"对客户报价表":"客户报价表"} status={busy?'提交中':uncertain?'原提交结果待确认':dirty?'未保存修改':sheet?`v${sheet.version} · ${sheet.status==='confirmed'?'客户已确认':'协作草稿'}`:'读取中'}>
+ return <Surface><section className="quotation-editor dx-doc-budget"><DocumentToolbar title={workbench?"对客户报价表":"客户报价表"} status={busy?'提交中':uncertain?'原提交结果待确认':dirty?'未保存修改':sheet?workbench?`v${sheet.version} · ${sheet.status==='confirmed'?'客户已确认':'协作草稿'}`:'':'读取中'}>
   {!workbench&&<>{back&&<a className="dx-button dx-button--secondary" href={back}>返回原单</a>}<a href={urls.pageUrl('ui/digital-quotation')}>我的报价协作</a></>}{sheet?.canStructure&&<Button disabled={!canEditDisplayed||busy||uncertain||basisBlocked||editingRowId!==null} onClick={save}>保存报价</Button>}
  </DocumentToolbar>{error&&<p role="alert">{error}</p>}{uncertain?<><Button disabled={busy} onClick={()=>void recover()}>使用原内容核对报价提交</Button><Button disabled={busy} onClick={()=>void reload()}>仅核对当前版本</Button></>:<Button disabled={busy||refreshing} onClick={()=>void reload()}>{basisBlocked&&sheet?.canStructure?'同步并重新读取报价':'重新读取报价'}</Button>}
  {previousInputs.length>0&&<details><summary>核对上次未保存的输入</summary><p>仅供核对，不会自动覆盖当前报价。</p><ul>{previousInputs.map((value,index)=><li key={index}>{value}</li>)}</ul></details>}
@@ -220,7 +234,15 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
    {sheet?.designerStatus&&canEditDisplayed&&!basisBlocked&&sameRound&&<><span>已完成 {sheet.designerStatus.completed}/{sheet.designerStatus.applicable} 项</span>
     {sheet.designerStatus.reasons.length>0&&<p>{sheet.designerStatus.reasons.join('、')}</p>}</>}
  </div>}
- {sheet&&<>{!workbench&&sheet.automatic&&!basisBlocked&&<p>材料、用量与工艺按本单资料自动汇集。{sheet.status==='confirmed'?'':sheet.workbenchReadiness?.canConfirm?'报价资料已齐，待客户确认。':sheet.workbenchReadiness?.reasons.length?sheet.workbenchReadiness.reasons.join('、')+'。':'仍有资料或负责人员待补齐。'}</p>}<div className="budget-heading"><p>设计编号：<strong>{sheet.designStyleNo}</strong></p><p>客户：{sheet.customerCode??'通用开发'}</p><p>{workbench&&sheet.status==='draft'&&sheet.confirmedVersion!==null?'客户上次确认版':'客户当前确认版'}：{sheet.confirmedVersion??'尚未确认'}</p></div>
+ {sheet&&<>{workbench?<div className="budget-heading"><p>设计编号：<strong>{sheet.designStyleNo}</strong></p><p>客户：{sheet.customerCode??'通用开发'}</p><p>{sheet.status==='draft'&&sheet.confirmedVersion!==null?'客户上次确认版':'客户当前确认版'}：{sheet.confirmedVersion??'尚未确认'}</p></div>:
+ <header className="quotation-detail-summary" aria-label="报价摘要">
+  <h2>{sheet.designStyleNo}{sheet.presentation?.styleName&&<> · {sheet.presentation.styleName}</>}</h2>
+  <p>{[sheet.customerCode??'通用开发',sheet.presentation?.round?`第 ${sheet.presentation.round} 轮`:'',
+   sheet.presentation?.sourceVersion?`开发资料 v${sheet.presentation.sourceVersion}`:'',
+   sheet.rows.find(row=>row.assignment.priceRole==='ie_reviewer'&&row.priceAssigneeName)?.priceAssigneeName].filter(Boolean).join(' · ')}</p>
+  <QuotationVersionLabels version={sheet.version} confirmedVersion={sheet.status==='confirmed'?sheet.version:sheet.confirmedVersion}/>
+  {collaborationBlock&&<p aria-label="当前协作稿办理状态">{collaborationBlock}</p>}
+ </header>}
  {sheet.priorCraftRows?.length&&<details><summary>历史工艺报价（不计入本版金额）</summary><table><thead><tr><th>阶段</th><th>工艺</th><th>单位</th><th>原单价</th></tr></thead><tbody>{sheet.priorCraftRows.map(({row,stage})=><tr key={row.rowId}><td>{stage==='development'?'开发':'大货'}</td><td>{row.name}</td><td>{row.unit}</td><td>{quotationAmountDisplay(row.unitPrice,'未填写')}</td></tr>)}</tbody></table></details>}
  <label>查看报价版本<select aria-label="查看报价版本" disabled={Boolean(originalSnapshot)||busy||uncertain} value={history??''} onChange={async e=>{const next=e.target.value?Number(e.target.value):undefined;if((dirty||confirmationDirty)&&!await confirmInApp('切换版本将丢弃未保存修改，继续？'))return;setHistory(next);}}><option value="">当前协作资料</option>{sheet.versions.map(v=><option key={v} value={v}>客户确认版 {v}</option>)}</select></label>
  <fieldset className="quotation-read-fields" disabled={!canEditDisplayed||basisBlocked}>
@@ -243,9 +265,11 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  {!history&&sheet.rows.some(row=>row.secondaryCraftEntry)&&<DocumentSection id="quote-secondary-craft" title="二次工艺报价">
   {sheet.rows.filter(row=>row.secondaryCraftEntry).map(row=><p key={row.rowId}><a href={urls.pageUrl(`ui/secondary-craft-quotation?kind=${resource.kind}&id=${resource.id}&craft=${row.rowId}`)}>{row.name}报价与选厂</a></p>)}
  </DocumentSection>}
- {workbenchPricing?<QuotationWorkbenchPricing key={workbenchPricing} path={base} quoteId={workbenchPricing} version={sheet.version}
+ {workbenchPricing?<div className={workbench?undefined:'dx-designer-astryx quotation-proposal-panel'}>
+  {!workbench&&<><style data-designer-style="astryx-v0.7.16">{designerAstryxCss}</style><h3>报价测算 · 拟对客金额</h3></>}
+  <QuotationWorkbenchPricing key={workbenchPricing} path={base} quoteId={workbenchPricing} version={sheet.version}
   refresh={retry} internalStatus={!workbench} disabled={busy||uncertain||dirty} rowNames={new Map(sheet.rows.map(row=>[row.rowId,row.name]))}
-  onAdopt={(input,price)=>{setAdoptedPrice({version:sheet.version,input,price});setConfirmedTotal(price);setScope('per_piece');setTaxBasis('excludes_tax');setConfirmationDirty(true);}}/>
+  onAdopt={(input,price)=>{setAdoptedPrice({version:sheet.version,input,price});setConfirmedTotal(price);setScope('per_piece');setTaxBasis('excludes_tax');setConfirmationDirty(true);}}/></div>
   :workbench&&sheet.fullCost&&sheet.status==='confirmed'?<DocumentSection id="quote-cost-reference" title="客户确认时采用的报价">
    <dl className="budget-heading"><div><dt>原成本价（元/件）</dt><dd>{quotationAmountDisplay(confirmedPricing?.cost,'未登记')}</dd></div>
     <div><dt>报价倍率（%）</dt><dd>{confirmedPricing?.status==='zero_cost'?<span title="成本为零，倍率不可计算">—</span>

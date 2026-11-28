@@ -49,6 +49,7 @@ export const IeProcessingBasisSchema=z.object({
 export const IeProcessingEntrySchema=z.object({resource:QuotationResourceSchema,quoteId:z.string().uuid(),rowId:z.string().uuid(),
  version:z.number().int().positive(),round:z.number().int().positive(),styleNo:z.string(),customerCode:z.string().nullable(),
  assigneeId:z.string().uuid().nullable(),assigneeName:z.string().nullable(),state:IeProcessingStateSchema,canEditPrice:z.boolean(),orderRush:z.literal(true).optional(),
+ styleName:z.string().nullable().optional(),
  basis:IeProcessingBasisSchema.nullable().optional(),
  priceReview:z.object({reviewId:z.uuid(),reason:z.string(),status:z.enum(['returned','resubmitted']),
   resubmitFieldVersion:z.number().int().positive().nullable(),canResubmit:z.boolean()}).strict().nullable().optional()}).strict();
@@ -62,7 +63,7 @@ export const UnifiedIeDirectoryQuerySchema=z.object({kind:z.union([z.literal('al
  state:z.union([z.literal('all'),UnifiedIeDirectoryStateSchema]).optional(),
  page:z.coerce.number().int().min(1).max(100_000).default(1),search:z.string().trim().max(100).default('')}).strict();
 export const UnifiedIeDirectoryEntrySchema=z.object({kind:UnifiedIeDirectoryKindSchema,objectId:z.uuid(),entryId:z.uuid(),
- resourceId:z.uuid(),orderId:z.string().nullable(),styleNo:z.string().nullable(),customerCode:z.string().nullable(),
+ resourceId:z.uuid(),orderId:z.string().nullable(),styleNo:z.string().nullable(),customerCode:z.string().nullable(),styleName:z.string().nullable().optional(),
  version:z.number().int().positive(),round:z.number().int().positive().nullable(),nativeStatus:z.string(),state:UnifiedIeDirectoryStateSchema,orderRush:z.literal(true).optional(),sortAt:z.iso.datetime({offset:true}),
  assigneeName:z.string().nullable().optional(),pricing:z.discriminatedUnion('kind',[
   z.object({kind:z.literal('single'),amount:QuotationDecimalSchema,unit:z.string()}),z.object({kind:z.literal('multiple')}),
@@ -110,6 +111,7 @@ export type QuotationSheet={
   craftApprovalState?:'waiting'|'complete';
   complete?:boolean;
   workbenchReadiness?:QuotationReadiness;
+  presentation?:{styleName:string|null;round:number|null;sourceVersion:number|null};
   designerStatus?:DesignerQuotationStatus;
   confirmedPricing?:QuotationConfirmedPricingSnapshot|null;
   technicalConsumptionOptions?:Array<{artifactSetId:string;artifactVersion:number;materialId:string;name:string;unit:string;consumption:string}>;

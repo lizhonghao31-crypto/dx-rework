@@ -1,0 +1,61 @@
+.ie-quotation-detail,
+.ie-quotation-card,
+.ie-quotation-heading > div {
+  min-inline-size: 0;
+}
+
+.ie-quotation-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--dx-v2-space-3, 12px);
+  margin-block: var(--dx-v2-space-3, 12px);
+}
+
+.ie-quotation-heading h2,
+.ie-quotation-name,
+.ie-quotation-card dd {
+  overflow-wrap: anywhere;
+}
+
+.ie-quotation-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+  gap: var(--dx-v2-space-4, 16px);
+}
+
+.ie-quotation-card {
+  border: 1px solid var(--production-border, #dce3eb);
+  border-radius: var(--production-radius-md, 8px);
+  padding: var(--dx-v2-space-4, 16px);
+  background: var(--dx-form-control-background, #fff);
+}
+
+.ie-quotation-price {
+  background: var(--production-surface-muted, #f5f7fa);
+}
+
+.ie-quotation-unit {
+  color: var(--production-text-muted, #506278);
+}
+
+.ie-quotation-basis-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  align-items: start;
+  gap: var(--dx-v2-space-3, 12px);
+}
+
+@media (max-width: 960px) {
+  .ie-quotation-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .ie-quotation-heading,
+  .ie-quotation-basis-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
