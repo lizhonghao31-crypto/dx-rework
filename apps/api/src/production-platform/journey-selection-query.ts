@@ -51,7 +51,14 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   AND nullif($3::jsonb->>'stage','') IS NULL AND nullif($3::jsonb->>'node','') IS NULL
   AND nullif($3::jsonb->>'state','') IS NULL AND nullif($3::jsonb->>'risk','') IS NULL)`;
  const selection=`CASE WHEN ${fullView} THEN m.selection_full_json ELSE m.selection_json END`;
- type Row={creationKind:'source'|'order'|null;creationId:string|null;cockpitRangeComplete:boolean;sourcePublished:boolean;sourceReserved:boolean;sourceCreationId:string|null;orderCreationId:string|null;legacyPublishedAt:string|null;legacyOrderAt:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
+ // A published preorder has a real publication but not a formal SLA origin.
+ // Check it in this same batch and at the candidate's observed business time.
+ const preorderTable=Boolean((await db.query("SELECT to_regclass('digital_development_preorder_publications') AS relation")).rows[0]?.relation);
+ const preorderPublished=preorderTable?`r."sourceAccess" AND EXISTS (
+  SELECT 1 FROM digital_development_preorder_publications pre
+  WHERE pre.source_id=s.source_id AND (pre.business_time->>'now')::timestamptz<=r.now)`:'false';
+
+ type Row={creationKind:'source'|'order'|null;cockpitRangeComplete:boolean;sourceAccess:boolean;sourcePublished:boolean;sourceReserved:boolean;sourceCreationId:string|null;orderCreationId:string|null;legacyPublishedAt:string|null;legacyOrderAt:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
   merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;specialClosed:boolean;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
  const rows=(await db.query<Row>(`WITH requested AS (
   SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(kind text,id uuid,"sourceAccess" boolean,"orderAccess" boolean,"fullOrder" boolean,timing boolean,budget boolean,now timestamptz,scenario uuid,revision bigint)
@@ -77,6 +84,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    CASE WHEN coalesce(round.round_number,1)>1 THEN round.document->>'template' ELSE document.document->>'template' END AS category_template,
    CASE WHEN document.status='published' THEN document.published_at END AS legacy_published_at,
    coalesce(document.status='published',false) AS source_published,
+   (${preorderPublished}) AS preorder_published,
    coalesce((to_jsonb(s)->>'draft_reserved')::boolean,false) AS source_reserved,
    EXISTS(SELECT 1 FROM audit_events e WHERE e.entity_type='digital_production' AND e.entity_id=o.production_order_id::text AND e.action='digital_source_attached' AND e.after_state->>'sourceId'=s.source_id::text) AS attached,
    EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.task_kind<>'factory_material_count' AND (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$6 AND a.required_role=ANY($5::text[])) AS direct
@@ -177,9 +185,9 @@ flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND complet
   (CASE WHEN n."orderAccess" AND n.primary_merchandiser_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('id',n.primary_merchandiser_id,'name',n.primary_name)) ELSE '[]'::jsonb END)
    ||coalesce(n.secondary_merchandisers,'[]'::jsonb) AS merchandisers,
   CASE WHEN n.erp_order_no IS NOT NULL AND n.erp_order_no<>'' THEN ARRAY[n.erp_order_no] ELSE ARRAY[]::text[] END AS "orderNumbers",
-  CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN 'source' END WHEN n."orderAccess" AND n.order_managed THEN 'order' END AS "creationKind",
-  CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN n.sid::text END WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "creationId",
-  n.source_published AS "sourcePublished",n.source_reserved AS "sourceReserved",
+  CASE WHEN n."orderAccess" AND n.oid IS NOT NULL THEN CASE WHEN n.order_managed THEN 'order' END
+       WHEN n."sourceAccess" AND n.source_managed AND NOT n.preorder_published THEN 'source' END AS "creationKind",
+  n."sourceAccess",n.source_published AS "sourcePublished",n.source_reserved AS "sourceReserved",
   (n."fullOrder" OR n.oid IS NULL AND n."sourceAccess") AND (n.sid IS NULL OR n."sourceAccess") AS "cockpitRangeComplete",
   CASE WHEN n."sourceAccess" AND n.source_managed THEN n.sid::text END AS "sourceCreationId",
   CASE WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "orderCreationId",
@@ -231,16 +239,21 @@ flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed' AND complet
  ]));
  const items:JourneySelectionRead[]=rows.map(row=>{
   const resource={kind:row.kind,id:row.resource_id},clock=clocks.get(businessScopeKey(resource))!;
+  const sourceClock=created.get('source:'+row.sourceCreationId),orderClock=created.get('order:'+row.orderCreationId);
+  const requiredClock=row.creationKind==='source'?sourceClock:orderClock;
   const cockpitCreation={
-   developmentCreatedAt:cockpitCreationTime(row.sourcePublished||row.sourceReserved?created.get('source:'+row.sourceCreationId)?.at:null,row.legacyPublishedAt,clock.now),
-   orderCreatedAt:cockpitCreationTime(created.get('order:'+row.orderCreationId)?.at,row.legacyOrderAt,clock.now)
+   developmentCreatedAt:cockpitCreationTime(row.sourcePublished||row.sourceReserved?sourceClock?.at:null,row.legacyPublishedAt,clock.now),
+   orderCreatedAt:cockpitCreationTime(orderClock?.at,row.legacyOrderAt,clock.now)
   };
   const cockpitActivated=cockpitIsActivated(row.orderId,cockpitCreation);
+  // The list's creation-date filter is not an SLA gate. Keep its existing
+  // authorized source-first date without substituting it for an order clock.
+  const creationDate=(row.sourceAccess?sourceClock:orderClock)?.at;
   const selection:JourneySelection={cockpitRangeComplete:row.cockpitRangeComplete,cockpitActivated,cockpitAsOf:clock.now,id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
-   merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:created.get(row.creationKind+':'+row.creationId)?.at??new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
+   merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:creationDate??new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
    ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,specialClosed:row.specialClosed,activated:filter.scope?cockpitActivated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
-  return {resource,status:row.creationKind&&!created.get(row.creationKind+':'+row.creationId)?'failed':row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
+  return {resource,status:row.creationKind&&!requiredClock?'failed':row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });
  return {items,clocks,observationMode};
 }

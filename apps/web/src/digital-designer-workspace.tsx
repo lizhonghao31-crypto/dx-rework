@@ -1,3 +1,4 @@
+import type {ExistingDevelopmentConfirmation} from './digital-development-create-form.js';
 import {designerWorkspaceSection} from './digital-workspace-navigation.js';
 import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
@@ -47,7 +48,7 @@ type DraftCount={scope:string;total:number|null;error?:true};
 const draftApproval={pending:{label:'审批中',tone:'warning'},returned:{label:'已退回',tone:'danger'},
  withdrawn:{label:'已撤回',tone:'neutral'},needs_designer:{label:'待设计师处理',tone:'info'}} as const satisfies Record<DraftApprovalState,{label:string;tone:'warning'|'danger'|'neutral'|'info'}>;
 type DraftReceiptResolution={page:SavedDevelopmentDraftPage;keys:string;resolvedSourceIds:Set<string>;unverified:boolean};
-const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
+const viewLabel = (item: DevelopmentWorkspaceItem) => item.business?.kind==='preorder'?'预下单已发布 · 待正式确认':DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
   const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "businessView", "designer", "startDate", "endDate"].includes(key))));
   return parsed.success ? parsed.data : DevelopmentWorkspaceFilterSchema.parse({});
@@ -64,7 +65,7 @@ function DigitalDesignerWorkspaceContent() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
   const [appliedListQuery,setAppliedListQuery]=useState<string|null>(null);
   const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;orderTimeEnabled?:boolean;workbenchNumberedCreation?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
-  const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
+  const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<ExistingDevelopmentConfirmation | null>(null);
   const [choosingType,setChoosingType]=useState(false);
   const [newType,setNewType]=useState<DevelopmentWizardKind|null>(null);
   const [newGarment,setNewGarment]=useState<DevelopmentDocument['template']|null>(null);
@@ -223,9 +224,12 @@ function DigitalDesignerWorkspaceContent() {
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
   const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
   const editorItem=result?.items.find(item=>item.journey.sourceId===editor),editorSheet=openedSheet?.refresh===refresh&&openedSheet.sheet.sourceId===editor&&openedSheet.requestedRound===round?openedSheet.sheet:undefined;
-  const canConfirm=Boolean(editorItem&&!editorItem.journey.orderId&&editorSheet&&!editorSheet.productionOrderId
-    &&(editorSheet.preorderPublication?options?.workbenchNumberedCreation&&editorSheet.canEdit:editorItem.canConfirm&&editorSheet.status==='published')
-    &&(!workbench||editorSheet.canEdit&&(editorSheet.roundNumber??1)===(editorSheet.latestRoundNumber??1))&&options?.creationEnabled&&access?.create&&!confirmedOrderId);
+  const canConfirmSheet=(sheet:DevelopmentSheet|undefined)=>Boolean(sheet&&!sheet.productionOrderId&&
+    (sheet.preorderPublication?options?.workbenchNumberedCreation&&sheet.canConfirmPublishedPreorder:
+      editorItem&&!editorItem.journey.orderId&&editorItem.canConfirm&&sheet.status==='published'&&
+      (!workbench||sheet.canEdit&&(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)))&&
+    options?.creationEnabled&&access?.create&&!confirmedOrderId);
+  const canConfirm=canConfirmSheet(editorSheet);
   const openCreation=async(action:()=>ReturnType<typeof creation.open>,selectedView?:string)=>{
     if(openingCreation.current)return;
     openingCreation.current=true;setCreationBusy(true);setCreationMessage('');
@@ -322,15 +326,20 @@ function DigitalDesignerWorkspaceContent() {
     finally{openingCreation.current=false;setCreationBusy(false);}
   };
   const beginConfirmation=async()=>{
-    if(preparing.current||!canConfirm||!editorItem||!editor)return;
+    if(preparing.current||!canConfirm||!editor)return;
     preparing.current=true;setPreparingConfirm(true);setConfirmError("");
     try{
       if(detailLeaveCheck.current&&!await detailLeaveCheck.current())return;
       // Read the selected round again before restoring its published, locked PO draft.
       const currentRound=new URLSearchParams(window.location.search).get("round");
       const current=await digitalRequest<DevelopmentSheet>(`sources/${editor}/development${currentRound?`?round=${encodeURIComponent(currentRound)}`:""}`);
-      if(current.productionOrderId||!(current.preorderPublication?options?.workbenchNumberedCreation&&current.canEdit:current.status==='published')){setRefresh(value=>value+1);throw new Error(current.productionOrderId?"此开发单已有客户订单，请核对最新关联订单。":"请先沿原流程发布开发单，再确认客户订单。");}
-      setConfirmSheet(current);setConfirm(editorItem);setIntent("confirm_order");
+      if(current.sourceId!==editor||new URLSearchParams(window.location.search).get('development')!==editor)return;
+      if(!canConfirmSheet(current)){setRefresh(value=>value+1);throw new Error(current.productionOrderId?
+        "此开发单已有客户订单，请核对最新关联订单。":"当前单据或轮次不能确认客户订单，请核对最新原档。");}
+      setConfirmSheet(current);setConfirm(current.preorderPublication?{
+        sourceId:current.sourceId,designStyleNo:current.designStyleNo,temporaryStyleNo:current.temporaryStyleNo,
+        customer:current.customerCode,designer:current.designerName,selectedRound:current.roundNumber??1,
+      }:editorItem!.journey);setIntent("confirm_order");
     }catch(reason){setConfirmError(reason instanceof Error?reason.message:"订购资料读取失败，请重试；开发资料仍保留。");}
     finally{preparing.current=false;setPreparingConfirm(false);}
   };
@@ -365,7 +374,7 @@ function DigitalDesignerWorkspaceContent() {
       <p role="status">自动发号尚未启用，当前使用原建单流程。</p>}
     {creation.problem&&!confirm&&<p role="alert">{creation.problem} <DevelopmentEntryAction type="button" onClick={()=>{try{creation.retry();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'本页记录仍未保留');}}}>重试保留本页资料</DevelopmentEntryAction></p>}{creationMessage&&<p role="status">{creationMessage}</p>}
     {creatingPage&&!confirm&&creationTypeDialog}
-    <DevelopmentCreateForm key={confirm?.journey.id ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} initialChoices={creation.visibleView?.choices} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} workbenchNumberedCreation={options.workbenchNumberedCreation===true} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?openCreationChoices:undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
+    <DevelopmentCreateForm key={confirm?.sourceId ?? creation.viewId??"new-development"} intent={displayedIntent} guidedCreation={creatingPage&&!confirm} initialPreorder={creation.visibleView?.preorder??false} initialChoices={creation.visibleView?.choices} {...(confirm ? {source: confirm,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {...(creation.sourceSheet?{existingDraft:creation.sourceSheet}:{}),...(creation.viewId&&access?{creation:{viewId:creation.viewId,actorId:access.actorId,snapshot:creation.restored?.snapshot,onSnapshot:creation.snapshot,started:creation.started,acknowledged:creation.acknowledged,refused:creation.refused}}:{})})} contained={workbench} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} orderTimeEnabled={options.orderTimeEnabled} workbenchNumberedCreation={options.workbenchNumberedCreation===true} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onChooseCreationType={creatingPage&&!confirm?openCreationChoices:undefined} onCancel={canReturnToServer => {if(!confirm)try{creation.close(canReturnToServer);setDraftLocation();}catch(reason){setCreationMessage(reason instanceof Error?reason.message:'原资料尚未保留');return;}setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
       if(!confirm)try{if(!creation.completed(sourceId,creation.viewId))return;}catch(reason){setCreationMessage('原办理已完成；本页恢复记录尚未清理。'+(reason instanceof Error?reason.message:''));return;}
       if(confirm&&editor===sourceId){setConfirmedOrderId(orderId);setIntent(null);setConfirm(null);setConfirmSheet(undefined);quietListRefresh.current=true;
         if(workbench)updateEditorFacts();else setRefresh(value=>value+1);}
@@ -384,7 +393,9 @@ function DigitalDesignerWorkspaceContent() {
     {confirmedOrderId&&<><p role="status">客户订单已确认。{confirmedOrder?`已读取关联订单：${confirmedOrder.designStyleNo}。`:!confirmedOrderError?"正在读取关联客户订单…":""} <a href={`${urls.pageUrl("ui/digital-production")}?order=${confirmedOrderId}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}>查看关联客户订单</a></p>{confirmedOrderError&&<p role="alert">订单确认已成功，关联订单读取失败：{confirmedOrderError} <Button onClick={()=>setOrderRetry(value=>value+1)}>重试读取关联订单</Button></p>}</>}
     {confirmError&&<p role="alert">{confirmError}</p>}
     {workbench?<DesignerOrderWorkbench key={`${editor}:${round??'current'}:${editorSession}`} sourceId={editor} round={round} actorId={access?.actorId} item={editorItem} sheet={editorSheet}
-      image={editorItem&&<StyleImage item={editorItem}/>} document={document} confirmation={confirm?creationForm:confirmButton} onClose={close} onChanged={updateEditorFacts}/>:document}
+      image={editorItem&&<StyleImage item={editorItem}/>} document={document}
+      confirmationAction={editorSheet?.preorderPublication&&!confirm?confirmButton:null}
+      confirmation={confirm?creationForm:editorSheet?.preorderPublication?null:confirmButton} confirming={Boolean(confirm)} onClose={close} onChanged={updateEditorFacts}/>:document}
    </div>;
   }
   const unresolved=pendingDevelopmentCommands(ownLocal);
@@ -518,7 +529,7 @@ function DigitalDesignerWorkspaceContent() {
       <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>订单状态<select value={filter.businessView??''} onChange={event=>update({view:'all',
           businessView:(event.target.value||undefined) as DevelopmentWorkspaceFilter['businessView']})}>
           <option value="">全部订单</option>{DESIGNER_BUSINESS_VIEWS.map(view=><option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label></FilterBar>
-      {(error||accessError) && <p role="alert">{error||accessError}</p>}{result?.freshness&&<p role="status">本页有部分明细未能读取。 <Button onClick={retryList}>重新读取</Button></p>}{result?.detailFailures?.length? <p role="status">{result.detailFailures.map(item=>item.designStyleNo).join("、")} 的详情读取失败。<Button onClick={retryList}>重新读取本页</Button></p>:null}
+      {(error||accessError) && <p role="alert">{error||accessError}</p>}{result?.freshness&&<p role="status">当前筛选结果不完整，数量待核对。 <Button onClick={retryList}>重新读取</Button></p>}{result?.detailFailures?.length? <p role="status">{result.detailFailures.map(item=>item.designStyleNo).join("、")} 的详情读取失败。<Button onClick={retryList}>重新读取本页</Button></p>:null}
       <>
       <div className="development-view-cards">{DESIGNER_BUSINESS_VIEWS.map((view,index)=><KpiCard key={view.key}
        icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"}/>}
@@ -530,7 +541,23 @@ function DigitalDesignerWorkspaceContent() {
       <div className="development-table-scroll development-list-viewport" role="region" aria-label="开发工作区列表，可横向查看全部列" tabIndex={0}>
         <BusinessTable>
           <thead><tr><th>序号</th><th>款图 / 款号</th><th>款式（品名）</th><th>客户</th><th>设计师</th><th>订单ID</th><th>订单类型</th><th>当前轮次</th><th>当前待办理 / 状态</th><th>样衣寄出</th><th>要求完成</th><th>创建日期</th></tr></thead>
-          <tbody>{result?.items.map((item,index)=>{
+          <tbody>{(()=>{
+            const slots=new Map(result?.unavailableRows?.map(row=>[row.position,row]));
+            const details=result?.items??[];let next=0;
+            return Array.from({length:details.length+slots.size},(_,index)=>({index,unavailable:slots.get(index),item:slots.has(index)?undefined:details[next++]}));
+          })().map(({item,index,unavailable})=>{
+            const position=((result?.page??filter.page)-1)*15+index+1;
+            if(unavailable){
+              const href=unavailable.orderId?`${urls.pageUrl("ui/digital-production")}?order=${unavailable.orderId}&returnTo=${encodeURIComponent(contextUrl())}`:
+                unavailable.sourceId?contextUrl({development:unavailable.sourceId},filter,unavailable.journeyId):null;
+              const type=DESIGNER_BUSINESS_VIEWS.find(view=>view.key===unavailable.businessKind)?.label;
+              return <tr key={unavailable.journeyId}>
+                <td>{position}</td><td>{href?<Link type="inherit" className="development-row-select" id={`development-open-${unavailable.journeyId}`} href={href}>{unavailable.designStyleNo}</Link>:unavailable.designStyleNo}</td>
+                <td>{unavailable.styleName??'未登记'}</td><td>{unavailable.customer??'通用开发'}</td><td>{unavailable.designer??'未登记'}</td>
+                <td>—</td><td>{type??'待核对'}</td><td>—</td><td>明细读取失败</td><td>—</td><td>—</td><td>{date(unavailable.createdAt)}</td>
+              </tr>;
+            }
+            if(!item)return null;
             const href=item.journey.sourceId?openUrl(item):null;
             const shipping=item.business?.shipping;
             const title=<><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong><OrderRushBadge value={item.orderRush}/></>;
@@ -542,7 +569,7 @@ function DigitalDesignerWorkspaceContent() {
               if(href)void navigateInternalPage(href);
               else select(item.journey.id);
             }}>
-              <td>{((result?.page??filter.page)-1)*15+index+1}</td>
+              <td>{position}</td>
               <td>{href?<Link type="inherit" className="development-row-select" id={`development-open-${item.journey.id}`} href={href}>{title}</Link>
                 :<button className="development-row-select development-text-action" type="button" onClick={()=>select(item.journey.id)}>{title}</button>}</td>
               <td>{item.journey.styleName??"未登记"}</td><td>{item.journey.customer??"通用开发"}</td>
@@ -561,7 +588,7 @@ function DigitalDesignerWorkspaceContent() {
           })}</tbody>
         </BusinessTable>
       {result && !result.freshness && !result.detailFailures?.length && !result.items.length && <p className="development-empty">当前视图暂无档案</p>}{!result && !error && <p role="status">正在读取开发档案…</p>}</div>
-      {!result?.freshness&&<Pagination page={filter.page} pageSize={15} total={!liveSearch.pending&&appliedListQuery===listQuery?result?.total??null:null} onPage={page => update({page})}/>}
+      {(!result?.freshness||result.total!==null)&&<Pagination page={filter.page} pageSize={15} total={!liveSearch.pending&&appliedListQuery===listQuery?result?.total??null:null} onPage={page => update({page})}/>}
       </>
     </section>
     {!intent && selected && <section className="dx-production-panel development-selected" aria-label="选中开发档案">

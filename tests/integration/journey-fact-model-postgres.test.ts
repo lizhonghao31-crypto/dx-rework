@@ -390,14 +390,20 @@ function reduceSelection(result:Omit<JourneyCompleteResult,'items'>&{items:reado
   const reliable=await query.list(f.root,filter); // same selected facts; only the target rich row is unavailable
   expect(reliable).toMatchObject({total:31,page:1,freshness:{failed:1,pending:0,detailsOnly:true,retryIds:[target]}});expect(reliable.items).toHaveLength(14);
   expect(reliable.summary).not.toBeNull();expect(reliable.summary!.all).toBe(31);
-  vi.restoreAllMocks();await f.db.query("UPDATE digital_journey_fact_models SET selection_fingerprint=repeat('0',64) WHERE resource_id=$1",[target]);
+  vi.restoreAllMocks();
+  const detail=await query.read(f.root,target),node=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.state==='completed')!;
+  const narrowed=JourneyFilterSchema.parse({...filter,search:target,node:node.key,state:node.state,...(node.risks.length?{risk:node.risks[0]}:{})});
+  expect(await query.list(f.root,narrowed)).toMatchObject({total:1,items:[{id:target}]});
+  await f.db.query("UPDATE digital_journey_fact_models SET selection_fingerprint=repeat('0',64) WHERE resource_id=$1",[target]);
   try{
    const corrupt=await query.list(f.root,filter);expect(corrupt).toMatchObject({total:null,summary:null,freshness:{failed:1,pending:0,retryIds:[target]}});expect(corrupt.items).toHaveLength(15);
+   const unknown=await query.list(f.root,narrowed);expect(unknown).toMatchObject({total:null,summary:null,items:[],freshness:{failed:1}});expect(unknown.freshness?.detailsOnly).toBeUndefined();
    const builds=vi.spyOn(repo,'buildOne');await query.refreshOne(f.root,target);await query.refreshOne(f.root,target);
    expect(builds).not.toHaveBeenCalled();expect((await f.db.query('SELECT DISTINCT resource_id FROM digital_journey_fact_changes')).rows).toEqual([{resource_id:target}]);
    await new JourneyFactUpdates(f.db,repo).runOnce();expect(builds.mock.calls.map(call=>call[0].id)).toEqual([target]);
   }finally{await repo.buildOne({kind:'order',id:target});}
   expect((await query.list(f.root,filter)).total).toBe(31);
+  expect((await query.list(f.root,narrowed)).total).toBe(1);
  }));
  it('P01 captures native cutting-gate readiness once and cancellation keeps its real business termination',async()=>{
   const ownScene=await f.scene('2026-11-09T08:00:00.123Z');

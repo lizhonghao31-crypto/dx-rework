@@ -52,13 +52,16 @@ import {customerPoDateLabel} from "./digital-workspace-copy.js";
 type CreatePicture = {id: string; file: File; preview: string; kind: DevelopmentDocument["files"][number]["kind"]; attachmentId?: string; error?: string | undefined};
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
+export type ExistingDevelopmentConfirmation=Pick<OrderJourney,'sourceId'|'customer'|'designStyleNo'|'temporaryStyleNo'|'designer'|'selectedRound'>
+  & Partial<Pick<OrderJourney,'adoptedRound'>>;
+
 type SubmissionPhase='preparing'|'publish_check'|'publish'|'confirm_check'|'confirm';
 export const developmentOrderOptionsPath=(sourceId:string|null)=>sourceId?`options?sourceId=${encodeURIComponent(sourceId)}`:'options';
 const newLine = (): DevelopmentOrderDraft["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: ""}]});
 // Before X1 assigns the order number, validate every formal field except that
 // number with the original PO refinements. This schema is never sent to an API.
 const UnnumberedOrderValidation=DigitalOrderCreateSchema.safeExtend({designStyleNo:z.literal("")});
-export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DevelopmentOrderDraft {
+export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: ExistingDevelopmentConfirmation): DevelopmentOrderDraft {
   return {customerCode: source?.customer ?? "", designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null,
     productGroup: initialDigitalProductGroup(customers, source?.customer ?? undefined),
     primaryMerchandiserId: customers.find(customer => customer.code === source?.customer)?.defaultMerchandiserId ?? null,
@@ -68,7 +71,7 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 /** A facade over the existing source and order commands; no sample approval or route writes. */
 export type DevelopmentCreationBridge={viewId:string;actorId:string;snapshot?:CreationDraftSnapshot|undefined;onSnapshot:(id:string,value:CreationDraftSnapshot)=>void;started:(id:string,outgoing:CreationOutgoing)=>void;acknowledged:(id:string,outgoing:CreationOutgoing,sourceId:string,version:number|null)=>void;refused:(id:string,outgoing:CreationOutgoing)=>void};
 export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, onChooseCreationType, existingDraft, independentCraftsEnabled=false, orderTimeEnabled=false, workbenchNumberedCreation=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表",creation,guidedCreation=false,initialPreorder=false,initialChoices}: {
-  independentCraftsEnabled?:boolean|undefined;orderTimeEnabled?:boolean|undefined;contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
+  independentCraftsEnabled?:boolean|undefined;orderTimeEnabled?:boolean|undefined;contained?:boolean; intent: DevelopmentCreateIntent; source?: ExistingDevelopmentConfirmation; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
   onCancel: (canReturnToServer?:boolean) => void; onCreated: (sourceId: string, orderId: string | null) => void; cancelLabel?:string;
   onIntentChange?: (intent: "development" | "certain_order") => void;
   onChooseCreationType?: (()=>void)|undefined;
@@ -278,7 +281,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     return () => {unregister(); documentGuards?.delete(guard); window.removeEventListener("beforeunload", unload);};
   }, [documentGuards]);
   const developmentPublished=published||Boolean(source);
-  const publishStatus=submissionUnknown?(pendingSubmission.current?.operation==='publish_preorder'?'预下单发布结果待核对':pendingSubmission.current?.operation==='publish'?'开发发布结果待核对':'客户订单确认结果待核对'):preorder&&!developmentPublished?`预下单草稿 · ${dirty.current?"有未保存修改":"可继续补充资料"}`:existingDraft?.preorderPublication?'预下单已发布 · 待正式确认':developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
+  const publishStatus=submissionUnknown?(pendingSubmission.current?.operation==='publish_preorder'?'预下单发布结果待核对':pendingSubmission.current?.operation==='publish'?'开发发布结果待核对':'客户订单确认结果待核对'):existingDraft?.productionOrderId?'已确认下单':existingDraft?.preorderPublication?'预下单已发布 · 待正式确认':preorder&&!developmentPublished?`预下单草稿 · ${dirty.current?"有未保存修改":"可继续补充资料"}`:developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
   const submitLabel=preorder&&!published?numberedCreation&&!preorderAlreadyPublished?"发布预下单":"保存预下单备料资料":guided?withOrder?"提交并确认订单":"提交开发单":intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):"发布开发单";
   const title = preorder&&!published?"预下单备料 · 资料可后补":existingDraft?.revisionSource?`复版 ${existingDraft.revisionSource.revisionNumber} · ${existingDraft.designStyleNo}`:intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DevelopmentOrderDraft["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));

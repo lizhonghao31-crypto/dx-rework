@@ -1,189 +1,502 @@
 {
   "version": 1,
-  "base": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
-  "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
+  "base": "134e3f3d054dc092220672c18b09d7e48859e4b8",
+  "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
   "risk": "full",
   "rules": [
     {
-      "rule": "普通与待审批分组独立于可删，原页签和旧流程边界不变",
-      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
+      "rule": "真实预下单发布凭证无需正式起算，正式母单核自己的真实起算，纯开发与旧兼容保留",
+      "source": "Eric 批准《设计开发第二步施工方案_列表分页与预下单转正式.md》Library libfile_fde3_f-221ccdc7ea7881918573760fe952b0ac_c8d3bf5d609c8191bce6411a30e94d44 v1（97 行完整）",
       "writes": [
-        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/development-workbench-business-roots.ts",
+        "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-created.ts",
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/identity-routes.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#applies a real manager approval",
+        "tests/integration/workspace-page-facts-postgres.test.ts#does not transfer unused node collections"
+      ],
+      "initialization": "既有索引、真实后台任务自然更新；不改 schema、生成器、启动条件或计算入口。旧发布基线用相同新单浏览器复现正常模型却 failed，不将预期失败计入通过。 同一库有多个时钟场景时，定向用正式集合读取使用已安装的逐单观察者，不在单个审批命令场景读取其它订单。",
+      "dateAndPermission": "原授权读取同一快照及发生时点，以有效预下单发布豁免来源起算；母单须为该身份授权，真实缺失不降级。日期筛选保留原单日期口径。",
+      "expectation": "真实发布后原生索引自动入列表，失效模型仍 failed，纯开发缺钟仍 failed，确有母单后以自己的钟。",
+      "checks": [
+        "development-step-two-preorder-native-final",
+        "development-step-two-workspace-pg-final",
+        "development-step-two-static"
+      ]
+    },
+    {
+      "rule": "当前选中分类的分页只受其成员或排序失败影响，精确页内的附加失败保留身份和位置",
+      "source": "Eric 批准《设计开发第二步施工方案_列表分页与预下单转正式.md》Library libfile_fde3_f-221ccdc7ea7881918573760fe952b0ac_c8d3bf5d609c8191bce6411a30e94d44 v1（97 行完整）",
+      "writes": [
+        "apps/api/src/production-platform/journey-workspace-facts.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/development-workspace-query.ts",
         "apps/web/src/digital-designer-workspace.tsx",
+        "packages/contracts/src/digital-development-workspace.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-projection.ts",
+        "apps/api/src/production-platform/development-workbench-shipping.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/web/src/digital-cockpit-page.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/workspace-page-facts-postgres.test.ts#keeps reliable counts and page2",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts#shows15 current native designer rows",
+        "tests/integration/journey-fact-model-postgres.test.ts#isolates one page object failure"
+      ],
+      "initialization": "先在读快照选出权限、客户、设计师、分类及筛选，再按原 15 条分页读取详情。原板房/非工作台对照保持，不改列表结构或切换配置。",
+      "dateAndPermission": "不能从有限 retryIds 反推范围或拿卡片总数代页总数。只读身份不加办理权限；不拿快照旧数据替补，不因为未知节点强行排除结果。",
+      "expectation": "不同开发/大货范围互不拖空，当前所需节点不明 total:null，页内补充失败保留原位/页码/总数，读回恢复。",
+      "checks": [
+        "development-step-two-preorder-native-final",
+        "development-step-two-workspace-pg-final",
+        "development-step-two-pages-exact",
+        "development-step-two-journey-pg-final",
+        "development-step-two-static"
+      ]
+    },
+    {
+      "rule": "原单顶部同源客户确认，守原办理资格，原500米投料与回执保持",
+      "source": "Eric 批准《设计开发第二步施工方案_列表分页与预下单转正式.md》Library libfile_fde3_f-221ccdc7ea7881918573760fe952b0ac_c8d3bf5d609c8191bce6411a30e94d44 v1（97 行完整）",
+      "writes": [
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/development-order-archive.tsx",
+        "packages/contracts/src/digital-development.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/development-draft-list.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/development-source-lifecycle.ts"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts#saves the actual chosen craft order",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#converts the original preorder"
       ],
-      "initialization": "已发布预下单、已发布开发单、正式来源、旧测试预下单不进箱。新草稿无正文保留，先按来源事实和跟进业务分组再计数。",
-      "dateAndPermission": "原角色和归属、客户端未确认写保护与原删除确认保持。只补显示后端已存在的拦截状态，无样式变化。",
-      "expectation": "签名设计师实际删除带结束历史的普通草稿，不因在办记录丢行，也不双计数；原正常跟单和转正式不变。",
+      "initialization": "原授权源档独立读，正式母单优先，否则发布凭据优于底层草稿状态。不发新号、不创建替代来源或第二份采购记录。",
+      "dateAndPermission": "只允许原角色、当前轮及活动范围；确认仍走原 POST、审批、时点、幂等和回执。保留旧表单与草稿箱。",
+      "expectation": "签名原入口在列表 503 时完成同源确认，一张母单，跟单实际投料 500 米 ID/版本/单位/时间不变且仍有效。现场原单待验。",
       "checks": [
-        "draft-policy-native-final",
-        "draft-policy-related-final",
-        "draft-policy-static"
+        "development-step-two-preorder-native-final",
+        "development-step-two-prior-native-final",
+        "development-step-two-static",
+        "development-step-two-affected-current-exact"
       ]
     },
     {
-      "rule": "0323 SQL 共享真草稿、在办阻断和准确审批/草稿版本，不因历史业务数据禁删",
-      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
+      "rule": "修复本 PR Full 选中的两条已在发布基线复现的仓库测试，不改变任何仓库生产逻辑",
+      "source": "Eric 要求修复 #1139 的两条仓库回归后推送并重跑 Full。原失败 Full 46149892975，发布基线 134e3f3d 的独立同用例日志 ci-base-four。",
       "writes": [
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/migrations/0323_development_draft_discard_policy.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-todos.ts",
-        "apps/api/migrations/0321_development_draft_review_inbox.sql"
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/bulk-materials-panel.tsx",
+        "apps/web/src/bulk-fabric-panel.tsx",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#recovers only the original eligible shell",
-        "tests/integration/order-time-requests-postgres.test.ts#deletes only the exact %s development draft"
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts#opens the assigned warehouse list by PO",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts#lets the assigned warehouse record a failed report"
       ],
-      "initialization": "0321/0322 不变，新迁移默认调用者权限、不数据回填，既有三参与触发器消费新五参。原基线另存 baseline-withdrawn，真实同结构样本在旧版撤回之后无按钮。",
-      "dateAndPermission": "pending 或 needs_designer 才因审批拦截，最新结束历史不覆盖其他在办申请。明确保留现行归属、源版本、审批版本、同事务锁、审计和幂等。",
-      "expectation": "实际浏览器软删且取消不写；原报价 v2、审批、附件、编号和物料原样保留；竞争、发布、错误版本、重提和重复请求受原规则约束。",
+      "initialization": "原夹具已收取并初验同一批主布，本次复验沿原页面更正，不重复收料；同时保留独立辅料的发料样本。",
+      "dateAndPermission": "原仓管角色、原 PO 和物料行、原批次 ID/版本、原报告版本及北京时间完整保留。",
+      "expectation": "只发出原辅料300米且只余200米。仓管复验原一批为不合格，等待原质量决定，不能发料，收料历史不重写。",
       "checks": [
-        "draft-policy-native-final",
-        "draft-policy-pg-final",
-        "draft-policy-static"
+        "development-step-two-warehouse-regressions-final",
+        "development-step-two-static"
       ]
     },
     {
-      "rule": "作废后报价、IE 及工艺活动入口和旧投料操作停办，保留只读原件",
-      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
+      "rule": "草稿重开后稳定打开原工艺下拉，实际选择并保存工艺顺序",
+      "source": "Full 46149892975 与 46153938622 在特种工艺原入口重开后的同一选择重复失败；按 Eric 要求在 #1139 原入口修正回归。",
       "writes": [
-        "apps/api/src/production-platform/whole-order-visibility.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/ie-processing-directory.ts",
-        "apps/api/src/production-platform/ie-directory-reader.ts",
-        "apps/api/src/production-platform/secondary-craft-quotation.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-routes.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/special-craft-quotation-todos.ts"
+        "apps/web/src/independent-craft-field.tsx",
+        "apps/web/src/digital-development-create-form.tsx"
       ],
       "oldTests": [
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts#paginates real assigned IE processing",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#lets the actual merchandiser enter from My Tasks",
-        "tests/integration/customer-quotation-postgres.test.ts#enforces scoped row authorization through HTTP"
+        "tests/integration/special-craft-browser-postgres.test.ts#keeps new managed drafts on the independent craft editor"
       ],
-      "initialization": "报价、IE、工艺和物料待办活动过滤在分页前执行，不删快照；原有仅正式单触发的批量报价通知照旧。",
-      "dateAndPermission": "报价与投料在原锁及认证角色内核来源活动状态，保持原历史权限。保留物料历史、非作废订单与正式预下单办理。",
-      "expectation": "原真实 IE 录价和跟单投料旧请求被服务端拒绝，报价与 IE 定点、投料待办取消活动投影，但原始报价及历史物料行内容不改。",
+      "initialization": "沿真实设计师草稿箱恢复保存的当前向导步骤，先等原工艺顺序和焦点目标就绪，再用支持的键盘打开操作；不替换环境、模拟组件或增加超时。",
+      "dateAndPermission": "仍沿原设计师和订单版本保存以及执行原板房人员的无权写入反例，不改变角色和时效规则。",
+      "expectation": "真实弹层和首站控件按 aria-controls 关联。选择后次站反向排序，保存后原草稿版本和排序均准确读回。",
       "checks": [
-        "draft-policy-native-final",
-        "draft-policy-pg-final",
-        "draft-policy-related-final",
-        "draft-policy-static"
+        "development-step-two-special-craft-reopen",
+        "development-step-two-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "draft-policy-native-final",
+      "id": "development-step-two-preorder-native-final",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
-      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
-      "startedAt": "2026-11-28T09:06:09Z",
-      "endedAt": "2026-11-28T09:09:17Z",
-      "log": "/workspace/scratch/draft-discard-correction-evidence/native-final.log",
-      "logSha256": "8333cf98e0a3508cc6719aec777be8c73e931ce6513b32453b393bfff68f3b41",
-      "cwd": "/workspace/scratch/draft-discard-correction",
-      "passed": 7,
+      "testedHead": "a4149275f784c874208cd8f999bf9a880fa5bb59",
+      "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
+      "startedAt": "2026-11-28T14:03:35Z",
+      "endedAt": "2026-11-28T14:05:33Z",
+      "log": "/workspace/scratch/development-step-two-evidence/candidate-affected-trio.log",
+      "logSha256": "ab96dbbcdfd25a8fc62ce0ebef8d71c4750fcd7456bc0bda6eaa5cc0daf56024",
+      "cwd": "/workspace/scratch/development-step-two",
+      "passed": 3,
       "failed": 0,
-      "skipped": 31,
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --maxWorkers=1 -t \"automatic quotation without deleting|normal draft with ended|retains original material records|discards ordinary drafts only|recovers only the original eligible shell|shows only one draft tab|resumes an unnumbered draft\" --reporter=default --reporter=json",
+      "skipped": 35,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts -t \"resumes an unnumbered draft|applies a real manager approval|shows only one draft tab\" --reporter=default --reporter=json",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0511bb83c841916a9d430c2c4f9cc4d38447677e124f19c5e5cafac6075feac0"
+          "sha256": "1913f62f3f8461921440ffb0ba9f5076a6391c90ad0b565951df060880c95e37"
         }
       ],
-      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes. This revision explicitly adds another live original scenario to the same schema to verify multi-scope collection reading without borrowing a command clock.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "b466f7549ce0f2d60040c5a97812b80345edbf29c6d31b9dc228a0af376aafc9"
     },
     {
-      "id": "draft-policy-pg-final",
+      "id": "development-step-two-pages-exact",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
-      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
-      "startedAt": "2026-11-28T09:07:06Z",
-      "endedAt": "2026-11-28T09:07:53Z",
-      "log": "/workspace/scratch/draft-discard-correction-evidence/pg-final.log",
-      "logSha256": "037085d65ccba821e8f9c516153d9ce377a1fc294ddfd33fa539cb94d2d93683",
-      "cwd": "/workspace/scratch/draft-discard-correction",
-      "passed": 21,
+      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
+      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
+      "startedAt": "2026-11-28T13:22:35Z",
+      "endedAt": "2026-11-28T13:24:19Z",
+      "log": "/workspace/scratch/development-step-two-evidence/pages-exact.log",
+      "logSha256": "c1de4d29c444b672509bd2da9d678fa4d97de6af01352e65e88af942eaa96f14",
+      "cwd": "/workspace/scratch/development-step-two",
+      "passed": 3,
       "failed": 0,
-      "skipped": 40,
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts --maxWorkers=1 -t \"customer-confirmed quotation|deletes only the exact|returns and withdraws the same saved proposal|newest terminal history\" --reporter=default --reporter=json",
+      "skipped": 0,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/workspace-page-native-browser-postgres.test.ts --reporter=default --reporter=json",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "88976a147b6a2a1a5f289fe51cda2d50c5592112046392f180cb55a6a7bea9ab"
+          "sha256": "bc756c352837ceb72a07f17ae9dd8ff3420dcba4fa8fb0a7ac199cfab81adfb1"
         }
       ],
-      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "4c4ef7c8c03276010c11df60d90aa40756d5c7e0cc4fa5283f0119a3f7e028c6"
     },
     {
-      "id": "draft-policy-related-final",
+      "id": "development-step-two-workspace-pg-final",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
-      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
-      "startedAt": "2026-11-28T09:07:06Z",
-      "endedAt": "2026-11-28T09:09:28Z",
-      "log": "/workspace/scratch/draft-discard-correction-evidence/related-final.log",
-      "logSha256": "8ca661f8950ba6c19266af52388ce36e13afa46e156dfa804d977c4bdd4d07c7",
-      "cwd": "/workspace/scratch/draft-discard-correction",
-      "passed": 4,
+      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
+      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
+      "startedAt": "2026-11-28T13:21:56Z",
+      "endedAt": "2026-11-28T13:22:29Z",
+      "log": "/workspace/scratch/development-step-two-evidence/workspace-pg-final.log",
+      "logSha256": "4116086b4e21ebaf4b2a2bc21d453b6dfd9e3258d63dbefcbf2aae10783f479d",
+      "cwd": "/workspace/scratch/development-step-two",
+      "passed": 10,
       "failed": 0,
-      "skipped": 12,
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --maxWorkers=1 -t \"paginates real assigned IE processing|filters three real IE candidate sets|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json",
+      "skipped": 0,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/workspace-page-facts-postgres.test.ts --reporter=default --reporter=json",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9651c02cccf35be8fe36d32c71d0131c4fa0e24f86d3c985cac449cba6be4e45"
+          "sha256": "5e756dd113a6243e71bc73f67618ea73d1140bd44b944ff986a8a0c0cd917b99"
         }
       ],
-      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "4d3d062450df530d414fdd094d10271282b0c39f464d1958bd382804383163ca"
     },
     {
-      "id": "draft-policy-static",
+      "id": "development-step-two-journey-pg-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
+      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
+      "startedAt": "2026-11-28T13:22:29Z",
+      "endedAt": "2026-11-28T13:23:08Z",
+      "log": "/workspace/scratch/development-step-two-evidence/journey-pg-final.log",
+      "logSha256": "e1b92ffbf10957d5d4d6027ec27bd3862c1cd7f78542d6e6cca56ee9b38dad47",
+      "cwd": "/workspace/scratch/development-step-two",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 18,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/journey-fact-model-postgres.test.ts -t \"isolates one page object failure\" --reporter=default --reporter=json",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "059b9097439f87a0c499ab4e0aea0a20d696237b23adaf2de1f9748fdca6f5d1"
+        }
+      ],
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "41a7670ba9cdd89acc4dc5fe87e341e8755f17f2874915503ec3df03be04a49e"
+    },
+    {
+      "id": "development-step-two-prior-native-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
+      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
+      "startedAt": "2026-11-28T13:24:01Z",
+      "endedAt": "2026-11-28T13:25:20Z",
+      "log": "/workspace/scratch/development-step-two-evidence/prior-native-final.log",
+      "logSha256": "8cecf21c2aa9355fba0a5f18a86e59cdf4d052526827a450d23ee996e7b79aa1",
+      "cwd": "/workspace/scratch/development-step-two",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 4,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts -t \"saves the actual chosen craft order|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "d2777f94281a8c9608fbb98eb55caefa1a2d97462431bac3124e3a93534874e5"
+        }
+      ],
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "251a052172e837f8efff4c0bdbfbd272ccd62dcf0b746444e399d60ce0a68530"
+    },
+    {
+      "id": "development-step-two-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
-      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
-      "startedAt": "2026-11-28T09:05:30Z",
-      "endedAt": "2026-11-28T09:07:51Z",
-      "log": "/workspace/scratch/draft-discard-correction-evidence/static.log",
-      "logSha256": "a27b6b5f231d0ea08cd228da8fb991e3c872fde2689c54751cf430b0c69749ff",
-      "cwd": "/workspace/scratch/draft-discard-correction",
-      "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on the changed TS/TSX, git diff --check",
-      "context": "Node 22.22.2 and checked dependency lock; no deployment or operation on field data."
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
+      "startedAt": "2026-11-28T14:52:47Z",
+      "endedAt": "2026-11-28T14:54:35Z",
+      "log": "/workspace/scratch/development-step-two-evidence/static-special.log",
+      "logSha256": "669675c187ebf6a17b129358d11a615d76693284c28fd795a4b9c21c4c1f72c5",
+      "cwd": "/workspace/scratch/development-step-two",
+      "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on touched TS/TSX, git diff --check",
+      "context": "Node 22.22.2 and exact dependency lock; no deployment."
+    },
+    {
+      "id": "development-step-two-warehouse-regressions-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 6,
+      "testedHead": "57b68f7b7e44eaa88f756a3fdf9208449c890189",
+      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+      "log": "/workspace/scratch/development-step-two-evidence/warehouse-regressions-final.log",
+      "logSha256": "7d51360f40b186b865dad406a3e4de16815cc5dc2cf0b015b2bc9e0f2987e4b7",
+      "cwd": "/workspace/scratch/development-step-two",
+      "startedAt": "2026-11-28T14:13:27Z",
+      "endedAt": "2026-11-28T14:14:18Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2192935790a5676af32702d1b77f4000164a03c6371b54833aad5d37ec6165cf"
+        }
+      ],
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts -t \"opens the assigned warehouse list by PO|lets the assigned warehouse record a failed report\" --reporter=default --reporter=json",
+      "context": "Original assigned warehouse actor, signed native pages through Chromium and isolated PostgreSQL. Only the two mapped warehouse cases are selected. Actual material, original lot identity, report and issue permissions are verified.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "b76977139c54ff9a686136ebf06ec1ff447c9d1179bd0cecb6ad8730d5d46cf5"
+    },
+    {
+      "id": "development-step-two-affected-current-exact",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 41,
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
+      "cwd": "/workspace/scratch/development-step-two",
+      "log": "/workspace/scratch/development-step-two-evidence/affected-exact-special-head.log",
+      "logSha256": "d43888602ed237e1ded4782352064e0cce0424d6184c7ec569fecd4848f8df4f",
+      "startedAt": "2026-11-28T14:53:43Z",
+      "endedAt": "2026-11-28T14:55:12Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ad33d9e285662329a3f22873640d861d8584535af51551e88b4c2616d7944eb9"
+        }
+      ],
+      "context": "Actual signed Chromium 141 build 1194 matching lock-pinned CI, and isolated PostgreSQL. The four original entry cases are rebound to the complete final source after the test-only special-craft fix.",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/{development-creation-draft-native-browser,fixed-timeline-native-browser,preorder-material-investment-native-browser}-postgres.test.ts -t \"resumes an unnumbered draft|saves the actual chosen craft order|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json"
+    },
+    {
+      "id": "development-step-two-special-craft-reopen",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "log": "/workspace/scratch/development-step-two-evidence/repaired-special-ci-browser.log",
+      "logSha256": "835b4ceddd01b8552ad50d697729d8453c5548d2141a6dd22cc710c280720f75",
+      "startedAt": "2026-11-28T14:52:32Z",
+      "endedAt": "2026-11-28T14:54:09Z",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "cwd": "/workspace/scratch/development-step-two",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "849d50763cde0afe4a6c14cca2ef7fefb15a12adfc5914ea053310e65969944c"
+        }
+      ],
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/special-craft-browser-postgres.test.ts --reporter=default --reporter=json",
+      "context": "Complete existing special-craft suite, actual signed Chromium 141 build 1194 installed from the lock-pinned Playwright package, and isolated PostgreSQL. No product changes or timeout changes."
     }
   ]
 }

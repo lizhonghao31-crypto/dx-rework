@@ -336,6 +336,7 @@ export type DevelopmentSheet = DevelopmentPrintDetails & {
   designerCorrectionEditable?:true;
   numberedSales?:{year:number;series:string|null};
   preorderPublication?:{at:string;documentVersion:number};
+  canConfirmPublishedPreorder?:true;
   numberedIdentity?:{orderNumber:string|null};
   orderTimeEnabled?:boolean;
   timelineSchemaVersion?:2;

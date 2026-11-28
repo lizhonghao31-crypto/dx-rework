@@ -87,7 +87,7 @@ export function DesignerHandlingItems({handling,hrefFor,limit=Infinity,showRetur
  </div>;
 }
 
-export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,document,confirmation,onClose,onChanged}:{sourceId:string;round?:number|undefined;actorId?:string|undefined;item?:DevelopmentWorkspaceItem|undefined;sheet?:DevelopmentSheet|undefined;image?:ReactNode;document:ReactNode;confirmation:ReactNode;onClose:()=>void;onChanged:()=>void}){
+export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,document,confirmationAction,confirmation,confirming,onClose,onChanged}:{sourceId:string;round?:number|undefined;actorId?:string|undefined;item?:DevelopmentWorkspaceItem|undefined;sheet?:DevelopmentSheet|undefined;image?:ReactNode;document:ReactNode;confirmationAction?:ReactNode;confirmation:ReactNode;confirming?:boolean;onClose:()=>void;onChanged:()=>void}){
  const [focus,setFocus]=useState<VisibleArea|null>(()=>{
   const area=new URLSearchParams(window.location.search).get('area');
   const prior=DESIGNER_ORDER_AREAS.find(key=>key===area);
@@ -98,6 +98,7 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
   if(current.has(area)===open)return current;
   const next=new Set(current);if(open)next.add(area);else next.delete(area);return next;
  });
+ useEffect(()=>{if(confirming){setAreaOpen('customer',true);setFocus('customer');}},[confirming]);
  const [commentIntent,setCommentIntent]=useState<RevisionCommentIntent|null>(null);
  const [recordRefresh,setRecordRefresh]=useState(0);
  const [records,setRecords]=useState<OrderJourney|null>(null),[recordError,setRecordError]=useState<Error|null>(null);
@@ -180,8 +181,10 @@ export function DesignerOrderWorkbench({sourceId,round,actorId,item,sheet,image,
      <div><dt>参考款 / 版型说明</dt><dd>{basicFields?.referenceNote||'—'}</dd></div>
      <div><dt>开发资料</dt><dd>{sheet?`第 ${sheet.roundNumber??1} 轮 · v${sheet.version}`:'—'}</dd></div>
      <div><dt>采用资料</dt><dd>{journey?.adoptedRound?`开发第 ${journey.adoptedRound} 轮`:'—'}{journey?.instructionVersion?` · 制单 v${journey.instructionVersion}`:''}</dd></div>
-     <div><dt>正式订单</dt><dd>{journey?.orderId?journey.orderNumbers.join('、')||'已确认下单':journey?'尚未确认下单':'—'}</dd></div>
+     <div><dt>正式订单</dt><dd>{sheet?.productionOrderId||journey?.orderId?journey?.orderNumbers.join('、')||'已确认下单':
+       sheet?.preorderPublication?'预下单已发布 · 待正式确认':sheet?.status==='published'?'尚未确认下单':sheet?'开发草稿':'待核对'}</dd></div>
     </dl>
+    {confirmationAction}
    </div></div>
    {journey?.orderId&&journey.lines.length>0&&<div className="development-table-scroll" role="region" aria-label="逐 PO 数量与交期" tabIndex={0}>
     <Table data={journey.lines} idKey="id" density="balanced" columns={[

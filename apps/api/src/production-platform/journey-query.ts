@@ -9,7 +9,7 @@ import {cockpitLegacyOrderBusinessTimeSql,cockpitLegacyOrderTimeSql,firstDevelop
 import {materialInvestmentRiskHistory} from './material-investment-risk-history.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import {cockpitStageDates} from './cockpit-stage-dates.js';
-import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
+import type {WorkspaceJourneyFact,WorkspaceSelectionFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
@@ -211,14 +211,14 @@ export class DigitalJourneyQuery {
   /** Read minimal authorized facts once, then hydrate only the objects the
    * workspace actually displays. No GET-side rebuild or stale-result fallback. */
   async workspace<T>(actor:TrustedActorContext,filter:JourneyFilter,patternBusiness:"development"|"bulk"|"all"|undefined,
-    select:(items:WorkspaceJourneyFact[],asOf:string,freshness:NonNullable<JourneyResult['freshness']>|undefined,db:PoolClient,authorized:WorkspaceJourneyFact[])=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
+    select:(items:WorkspaceJourneyFact[],asOf:string,freshness:NonNullable<JourneyResult['freshness']>|undefined,db:PoolClient,authorized:WorkspaceSelectionFact[])=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
     if(this.options.listReadMode!=='indexed')return null;
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf,transaction)=>{
       const patternKinds=patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>patternBusiness==="all"||(patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const candidates=await this.candidates(db,actor,null,patternKinds);
       const read=await readJourneySelections(this.database,db,actor,candidates,filter,asOf,{workspaceNodes:patternBusiness?'pattern':'designer',...(patternKinds?{workspaceKinds:patternKinds}:{})});
-      const byResource=new Map(read.items.map(row=>[businessScopeKey(row.resource),row])),facts:WorkspaceJourneyFact[]=[],authorized:WorkspaceJourneyFact[]=[],byId=new Map<string,Candidate>();let pending=0,failed=0;const retryIds:string[]=[];
+      const byResource=new Map(read.items.map(row=>[businessScopeKey(row.resource),row])),facts:WorkspaceJourneyFact[]=[],authorized:WorkspaceSelectionFact[]=[],byId=new Map<string,Candidate>();let pending=0,failed=0;const retryIds:string[]=[];
       for(const candidate of candidates){
         const scope:BusinessTimeScope=candidate.order?{kind:'order',id:candidate.order.production_order_id}:{kind:'source',id:candidate.source!.source_id};
         const row=byResource.get(businessScopeKey(scope));if(!row)continue;
@@ -226,7 +226,7 @@ export class DigitalJourneyQuery {
         if(time.scenarioId)this.observations.get(db)?.set(businessScopeKey(row.resource),{scope:row.resource,time});
         const metadata={...row.selection};if(patternBusiness)delete metadata.selectionSignals;
         if(!journeyMatchesMetadata(metadata,patternBusiness?{...filter,search:''}:filter))continue;
-        authorized.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});
+        authorized.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[],readStatus:row.status});
         if(row.status!=='ready'){if(row.status==='failed'){failed++;retryIds.push(row.selection.id);}else pending++;continue;}
         facts.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});byId.set(row.selection.id,candidate);
       }
@@ -286,7 +286,10 @@ export class DigitalJourneyQuery {
     const facets={customers:[...new Set(read.items.map(row=>row.selection.customer).filter((value):value is string=>Boolean(value)))].sort(),
       categories:[...new Set(read.items.map(row=>row.selection.category).filter((value):value is string=>Boolean(value)))].sort(),
       merchandisers:[...new Map(read.items.flatMap(row=>row.selection.merchandisers).map(person=>[person.id,person])).values()]};
-    const relevant=read.items.filter(row=>journeyMatchesMetadata(row.selection,filter));
+    const metadataMatches=read.items.filter(row=>journeyMatchesMetadata(row.selection,filter));
+    const inScope=(item:JourneySelection)=>!filter.scope||(filter.scope==='development'?!item.orderId:Boolean(item.orderId));
+    const relevant=metadataMatches.filter(row=>inScope(row.selection));
+    const crossScopeIncomplete=metadataMatches.some(row=>row.status!=='ready'&&!inScope(row.selection));
     let pending=relevant.filter(row=>['missing','pending','obsolete'].includes(row.status)).length,failed=relevant.filter(row=>row.status==='failed').length;
     const retryIds=relevant.filter(row=>row.status==='failed').map(row=>row.selection.id);
     const ready=read.items.filter(row=>row.status==='ready').map(row=>row.selection),incomplete=Boolean(pending||failed);
@@ -296,6 +299,7 @@ export class DigitalJourneyQuery {
     for(const item of ready){const fact=actions.get(item.id);if(fact)item.actionableTodo=fact;}
 
     const selected=selectJourneySelections(ready,incomplete?{...filter,page:1}:filter,asOf);
+    if(crossScopeIncomplete)delete selected.scopeCounts;
     const candidateByResource=new Map(candidates.map(row=>[row.order?businessScopeKey({kind:'order',id:row.order.production_order_id}):businessScopeKey({kind:'source',id:row.source!.source_id}),row]));
     const candidateById=new Map(read.items.map(row=>[row.selection.id,candidateByResource.get(businessScopeKey(row.resource))!]));
     if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[]));

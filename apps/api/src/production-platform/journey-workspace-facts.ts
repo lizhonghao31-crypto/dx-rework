@@ -4,3 +4,6 @@ import type {JourneySelection} from './journey-projection.js';
  * authorized native projection; these keys are never returned as full cards. */
 export type WorkspaceNodeFact=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'current'|'planningOnly'|'risks'|'countsInProgress'|'owner'>&{nativeTask:boolean};
 export type WorkspaceJourneyFact=JourneySelection&{asOf:string;nodes:WorkspaceNodeFact[]};
+
+/** Only real selection rows authorize current metadata. This flag never asserts completed detail. */
+export type WorkspaceSelectionFact=WorkspaceJourneyFact&{readStatus:'ready'|'missing'|'pending'|'obsolete'|'failed'};

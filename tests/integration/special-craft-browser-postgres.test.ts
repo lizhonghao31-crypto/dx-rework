@@ -287,8 +287,15 @@ async function submitCraftFromOriginalQuote(page:Page,name:string,amount:string,
    const secondStation=reopenedCraft.getByRole('combobox',{name:/^第 2 站工艺/});
    await expect.poll(()=>firstStation.innerText()).toContain('印花');
    await expect.poll(()=>secondStation.innerText()).toContain(craft.definition.name);
-   await firstStation.press('Enter');
-   await page.getByRole('option',{name:craft.definition.name,exact:true}).click();
+   // The restored step can be below the viewport. Open its own listbox
+   // with the keyboard's non-toggling open action before selecting by name.
+   await firstStation.scrollIntoViewIfNeeded();
+   await firstStation.press('ArrowDown');
+   await firstStation.and(page.locator('[aria-expanded="true"]')).waitFor();
+   const listboxId=await firstStation.getAttribute('aria-controls');
+   expect(listboxId).toBeTruthy();
+   await page.getByRole('listbox').and(page.locator(`[id=${JSON.stringify(listboxId)}]`))
+    .getByRole('option',{name:craft.definition.name,exact:true}).click();
    await expect.poll(()=>secondStation.innerText()).toContain('印花');
    await saveDraftAndReadReceipt(page,id,1);
    const reopened=await forms.read(designer,id);

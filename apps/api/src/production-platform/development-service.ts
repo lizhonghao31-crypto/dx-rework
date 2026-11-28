@@ -35,7 +35,7 @@ import {automaticOrderTime} from './order-time-automatic.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
-import {assertWholeOrderActive} from './whole-order-visibility.js';
+import {assertWholeOrderActive,wholeSourceActive} from './whole-order-visibility.js';
 import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cycle-evidence.js';
 import {captureDeferredDevelopmentRoute} from './development-native-route.js';
 import {digitalSlaDefaults} from '@dx-rework/contracts/digital-sla';
@@ -269,6 +269,11 @@ export class DigitalDevelopmentService {
        AND e.resource_kind='source' AND e.resource_id=m.source_id AND e.event_kind='development_material_recorded'
       WHERE m.source_id=$1 ${rounds?"AND m.route_version=$2":""} ORDER BY m.sequence`, rounds?[sourceId,row?.round_number??1]:[sourceId])).rows;
     const productionOrderId=source.can_view_order_draft?(await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1",[sourceId])).rows[0]?.production_order_id??null:null;
+    const revisionSource=await developmentRevisionSource(db,sourceId);
+    const canConfirmPublishedPreorder=Boolean(preorder&&source.can_edit&&!productionOrderId&&!revisionSource&&row?.document&&
+      (row.round_number??1)===(row.latest_round_number??1));
+    const confirmable=canConfirmPublishedPreorder&&await wholeSourceActive(db,sourceId)&&!(await db.query(`SELECT 1 FROM digital_production_resource_lifecycle
+      WHERE resource_kind='source' AND resource_id=$1 AND state<>'active'`,[sourceId])).rowCount;
     let document:DevelopmentDocument|null=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
     if(document&&!source.can_view_order_draft)document=withoutDevelopmentPrices(withoutDevelopmentAlternateSizeDraft(document));
@@ -289,11 +294,10 @@ export class DigitalDevelopmentService {
     const timelineSchemaVersion=adoptedPlan?.timeline_schema_version??(source.order_time_managed?2:undefined);
     const forecastOnly=!isRootActor(actor)&&(Boolean(adoptedPlan)||usesDevelopmentMaterialPlanning(document));
     const forecastState=forecastOnly&&source.can_edit&&row?.status==='published'?(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0]?.state:undefined;
-    const revisionSource=await developmentRevisionSource(db,sourceId);
     const details=includePrintDetails&&row?.status==='published'?await this.originalRevisionPrintDetails(db,actor,{
       sourceId,round:row.round_number??1,documentVersion:row.version,designerId:source.created_by,asOf:observedBusinessTime(this.now).now,
     },revisionSource):{};
-    return { ...details,...(preorder?{preorderPublication:{at:preorder.business_time.now,documentVersion:preorder.document_version}}:{}),...(source.workbench_generated_number?{numberedIdentity:{orderNumber:source.design_style_no??null}}:{}),...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource,independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no??'', temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    return { ...details,...(confirmable?{canConfirmPublishedPreorder:true as const}:{}),...(preorder?{preorderPublication:{at:preorder.business_time.now,documentVersion:preorder.document_version}}:{}),...(source.workbench_generated_number?{numberedIdentity:{orderNumber:source.design_style_no??null}}:{}),...(unavailableDraftAttachments.length?{unavailableDraftAttachments}:{}),orderTimeEnabled:Boolean(source.order_time_managed)||await acceptsNewOrderTime(db),...(timelineSchemaVersion===2?{timelineSchemaVersion:2 as const}:{}),revisionSource,independentRevisions:Boolean(adoptedPlan),...(draftDocumentDate?{draftDocumentDate}:{developmentCreatedDate:beijingCalendarDate(new Date(createdTime??source.created_at))}), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no??'', temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents,
