@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "134e3f3d054dc092220672c18b09d7e48859e4b8",
-  "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
+  "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
   "risk": "full",
   "rules": [
     {
@@ -26,7 +26,7 @@
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts#applies a real manager approval",
         "tests/integration/workspace-page-facts-postgres.test.ts#does not transfer unused node collections"
       ],
-      "initialization": "既有索引、真实后台任务自然更新；不改 schema、生成器、启动条件或计算入口。旧发布基线用相同新单浏览器复现正常模型却 failed，不将预期失败计入通过。",
+      "initialization": "既有索引、真实后台任务自然更新；不改 schema、生成器、启动条件或计算入口。旧发布基线用相同新单浏览器复现正常模型却 failed，不将预期失败计入通过。 同一库有多个时钟场景时，定向用正式集合读取使用已安装的逐单观察者，不在单个审批命令场景读取其它订单。",
       "dateAndPermission": "原授权读取同一快照及发生时点，以有效预下单发布豁免来源起算；母单须为该身份授权，真实缺失不降级。日期筛选保留原单日期口径。",
       "expectation": "真实发布后原生索引自动入列表，失效模型仍 failed，纯开发缺钟仍 failed，确有母单后以自己的钟。",
       "checks": [
@@ -110,12 +110,12 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
-      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
-      "startedAt": "2026-11-28T13:22:06Z",
-      "endedAt": "2026-11-28T13:24:01Z",
-      "log": "/workspace/scratch/development-step-two-evidence/preorder-native-final.log",
-      "logSha256": "346f9a2cf5dc906237e2bd8f9eb3ff53ba06bfda94040e28aac49cbd4d55cef1",
+      "testedHead": "a4149275f784c874208cd8f999bf9a880fa5bb59",
+      "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
+      "startedAt": "2026-11-28T14:03:35Z",
+      "endedAt": "2026-11-28T14:05:33Z",
+      "log": "/workspace/scratch/development-step-two-evidence/candidate-affected-trio.log",
+      "logSha256": "ab96dbbcdfd25a8fc62ce0ebef8d71c4750fcd7456bc0bda6eaa5cc0daf56024",
       "cwd": "/workspace/scratch/development-step-two",
       "passed": 3,
       "failed": 0,
@@ -124,10 +124,10 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a6d26ec601b60e4427305967325da98bd787e16c79b47fc4e7fbd3e5b4c845f6"
+          "sha256": "1913f62f3f8461921440ffb0ba9f5076a6391c90ad0b565951df060880c95e37"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes. This revision explicitly adds another live original scenario to the same schema to verify multi-scope collection reading without borrowing a command clock."
     },
     {
       "id": "development-step-two-pages-exact",
@@ -151,7 +151,30 @@
           "sha256": "bc756c352837ceb72a07f17ae9dd8ff3420dcba4fa8fb0a7ac199cfab81adfb1"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tests/integration/workspace-page-native-browser-postgres.test.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "4c4ef7c8c03276010c11df60d90aa40756d5c7e0cc4fa5283f0119a3f7e028c6"
     },
     {
       "id": "development-step-two-workspace-pg-final",
@@ -175,7 +198,30 @@
           "sha256": "5e756dd113a6243e71bc73f67618ea73d1140bd44b944ff986a8a0c0cd917b99"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tests/integration/workspace-page-facts-postgres.test.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "4d3d062450df530d414fdd094d10271282b0c39f464d1958bd382804383163ca"
     },
     {
       "id": "development-step-two-journey-pg-final",
@@ -199,7 +245,30 @@
           "sha256": "059b9097439f87a0c499ab4e0aea0a20d696237b23adaf2de1f9748fdca6f5d1"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "41a7670ba9cdd89acc4dc5fe87e341e8755f17f2874915503ec3df03be04a49e"
     },
     {
       "id": "development-step-two-prior-native-final",
@@ -223,19 +292,43 @@
           "sha256": "d2777f94281a8c9608fbb98eb55caefa1a2d97462431bac3124e3a93534874e5"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "251a052172e837f8efff4c0bdbfbd272ccd62dcf0b746444e399d60ce0a68530"
     },
     {
       "id": "development-step-two-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "134e3f3d054dc092220672c18b09d7e48859e4b8",
-      "sourceFingerprint": "405ddd7ab4bd2a2bcf48af5b963d3f66986205e6fb4efa3901c4c020a2b23860",
-      "startedAt": "2026-11-28T13:23:26Z",
-      "endedAt": "2026-11-28T13:25:21Z",
-      "log": "/workspace/scratch/development-step-two-evidence/static.log",
-      "logSha256": "f56556e1106d4fdba45b8f6d7b456353dedbb67cc742ac0572304c0fd6fd74eb",
+      "testedHead": "a4149275f784c874208cd8f999bf9a880fa5bb59",
+      "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
+      "startedAt": "2026-11-28T14:07:31Z",
+      "endedAt": "2026-11-28T14:08:54Z",
+      "log": "/workspace/scratch/development-step-two-evidence/static-after-collection.log",
+      "logSha256": "c66fd4e9e96609383b676aac892752e91d40b773172fac9eed44a19eee84e04a",
       "cwd": "/workspace/scratch/development-step-two",
       "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on touched TS/TSX, git diff --check",
       "context": "Node 22.22.2 and exact dependency lock; no deployment."

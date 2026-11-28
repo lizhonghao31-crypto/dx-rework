@@ -2338,7 +2338,11 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   expect(canonical?.records[0]).toMatchObject({domain:'source',id:sourceId});
   expect(detail.cockpitCreationDetails?.find(entry=>entry.subject==='order')?.record)
    .toMatchObject({domain:'order',id:orderId});
-  await h.f.runtime.run(scene,manager,async()=>{
+  const otherScene=await h.f.scene('2026-11-18T09:00:00.000Z');
+  await h.f.runtime.run(otherScene,manager,()=>identity.createSource(manager,{developmentType:'头版',designStyleNo:'TEST-OTHER-SCENE-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID()));
+  // A collection uses the installed per-resource clock reader, just as the
+  // original GET does. A single command scene cannot read its neighbors.
+  {
    const repo=new JourneyFactRepository(h.db),query=new DigitalJourneyQuery(h.db,{listReadMode:'indexed'});
    const filter=JourneyFilterSchema.parse({scope:'production',search:designStyleNo});
    await repo.buildOne({kind:'order',id:orderId});
@@ -2351,7 +2355,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(await read()).toMatchObject({total:null,items:[],freshness:{failed:1}});
    }finally{await h.db.query('UPDATE digital_order_time_subjects SET created_business_time=$2 WHERE production_order_id=$1',[orderId,original]);}
    expect((await read()).total).toBe(1);
-  });
+  }
  });
 
  it('reuses a legacy provisional identity without rewriting historical clocks and blocks an already frozen draft',async()=>{
