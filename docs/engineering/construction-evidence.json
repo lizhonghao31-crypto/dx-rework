@@ -100,7 +100,8 @@
       "checks": [
         "development-step-two-preorder-native-final",
         "development-step-two-prior-native-final",
-        "development-step-two-static"
+        "development-step-two-static",
+        "development-step-two-affected-current-exact"
       ]
     },
     {
@@ -404,6 +405,30 @@
       ],
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts -t \"opens the assigned warehouse list by PO|lets the assigned warehouse record a failed report\" --reporter=default --reporter=json",
       "context": "Original assigned warehouse actor, signed native pages through Chromium and isolated PostgreSQL. Only the two mapped warehouse cases are selected. Actual material, original lot identity, report and issue permissions are verified."
+    },
+    {
+      "id": "development-step-two-affected-current-exact",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 41,
+      "testedHead": "b4ebc1b99248d44fa0f0879fd14a95b5afcd435e",
+      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+      "cwd": "/workspace/scratch/development-step-two",
+      "log": "/workspace/scratch/development-step-two-evidence/affected-current-exact.log",
+      "logSha256": "e7ca19eaa53fe2947d4518fda8b6ea9f9a83c7f3702bd1775314648cfb24d877",
+      "startedAt": "2026-11-28T14:16:05Z",
+      "endedAt": "2026-11-28T14:17:33Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "6384723be9052c5745140d1bd9c28850b5cffacf28e28ec3e8ec233e6d611184"
+        }
+      ],
+      "context": "Original signed Chromium and isolated PostgreSQL. Required four cases are rerun on the complete current source because the Full admission check requires exact full-source binding, even for a test-only change.",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/{development-creation-draft-native-browser,fixed-timeline-native-browser,preorder-material-investment-native-browser}-postgres.test.ts -t \"resumes an unnumbered draft|saves the actual chosen craft order|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json"
     }
   ]
 }
