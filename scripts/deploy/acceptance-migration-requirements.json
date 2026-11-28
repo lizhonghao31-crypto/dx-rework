@@ -2909,5 +2909,51 @@
       "digital_whole_order_active"
     ],
     "sequences": []
+  },
+  "0322_development_draft_withdraw_discard": {
+    "checksum": "733cdac9dd5e11ba7a7a43c5d45ea35c7030fb40e9cae659900f1f798b7ffecf",
+    "tables": [
+      "audit_events",
+      "digital_development_amendment_drafts",
+      "digital_development_amendments",
+      "digital_development_artifact_heads",
+      "digital_development_cycle_rounds",
+      "digital_development_dispatch",
+      "digital_development_documents",
+      "digital_development_execution_facts",
+      "digital_development_final_comments",
+      "digital_development_material_events",
+      "digital_development_pattern_links",
+      "digital_development_revision_sources",
+      "digital_development_rounds",
+      "digital_development_route_facts",
+      "digital_development_sla_plans",
+      "digital_development_source_lifecycle",
+      "digital_development_technical_enrollments",
+      "digital_order_time_plan_versions",
+      "digital_order_time_requests",
+      "digital_order_time_subjects",
+      "digital_preparation_material_versions",
+      "digital_preparation_responsibilities",
+      "digital_preparation_rule_adoptions",
+      "digital_production_resource_lifecycle",
+      "digital_production_sources",
+      "digital_production_task_access",
+      "digital_quotation_documents",
+      "digital_short_lead_requests",
+      "digital_timeline_adoptions"
+    ],
+    "functions": [
+      "digital_development_draft_discardable"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "digital_development_draft_creation_shell",
+      "digital_whole_order_active"
+    ],
+    "sequences": []
   }
 }

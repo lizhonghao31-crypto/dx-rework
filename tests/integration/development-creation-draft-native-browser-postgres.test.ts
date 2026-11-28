@@ -1724,6 +1724,26 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(listed.filter(item=>item.path.includes('bucket=drafts'))).toHaveLength(1);
    expect(listed.filter(item=>item.path.includes('bucket=followup'))).toHaveLength(1);
    expect(listed.find(item=>item.path.includes('bucket=followup'))?.path).toContain('view=count');
+   const measured=[];
+   for(const width of [1165,1366]){
+    await page.setViewportSize({width,height:747});
+    for(const [selected,tabName] of [[approvals,'followup'],[ordinary,'drafts']] as const){
+     await selected.click();
+     await expect.poll(()=>selected.getAttribute('aria-selected')).toBe('true');
+     const edges=await page.evaluate(()=>{
+      const frame=(selector:string)=>document.querySelector(selector)!.getBoundingClientRect();
+      const search=frame('.development-draft-search-control'),left=frame('#development-draft-tab'),right=frame('#development-approval-tab');
+      return {viewport:innerWidth,vertical:Math.min(left.top,right.top)-search.bottom,horizontal:right.left-left.right,alignment:Math.abs(left.top-right.top)};
+     });
+     expect(edges.viewport).toBe(width);
+     expect(Math.abs(edges.vertical-12)).toBeLessThanOrEqual(1);
+     expect(Math.abs(edges.horizontal-8)).toBeLessThanOrEqual(1);
+     expect(edges.alignment).toBeLessThanOrEqual(1);
+     measured.push({tab:tabName,...edges});
+    }
+   }
+   await writeFile(join(h.evidence,'draft-toolbar-actual-edges.json'),JSON.stringify(measured,null,2));
+   await page.setViewportSize({width:1165,height:747});
    const search=page.getByRole('textbox',{name:'搜索草稿款号',exact:true});
    const delayed=prefix+'-过时',pattern=/\/sources\/drafts(?:\?|$)/;
    let restoreOld!:()=>void,oldArrived!:()=>void;
@@ -1788,6 +1808,84 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const history=(await h.db.query(`SELECT state,version,return_reason FROM digital_order_time_requests WHERE request_id=$1`,[prepared.approval.requestId])).rows;
    expect(history).toEqual([{state:'returned',version:prepared.approval.version+1,return_reason:'TEST 先核对真实交货日期'}]);
   }finally{await tab.close();h.setCollectionScene(undefined);}
+ });
+ it('submits, withdraws and discards an original development draft as its designer without deleting its history',async()=>{
+  const signed=h.f.people['sample-designer']!,prefix='TEST-DRAFT-WITHDRAW-'+randomUUID(),style=prefix+'-撤回';
+  const permissions=(await h.db.query<{capability:string}>(`SELECT DISTINCT c.capability FROM user_role_assignments a
+    JOIN role_capabilities c USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL`,[signed.actorId])).rows;
+  const actor={...signed,authorizationCapabilities:permissions.map(row=>row.capability)};
+  const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
+  const scene=await h.f.scene('2026-11-19T15:59:00.000Z');
+  const prepared=await h.f.runtime.run(scene,actor,async()=>{
+   await identity.createSource(actor,{developmentType:'头版',designStyleNo:prefix+'-普通',temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const category=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const attachmentId=await h.f.image(actor);
+   await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    templateConfirmed:true,sizeTableInitialized:true,returnDate:'2026-11-19',files:[{attachmentId,kind:'款图'}],
+    patternCategoryId:category.price_id}},randomUUID());
+   return {sourceId,attachmentId};
+  });
+  const entry='/ui/digital-production?workspace=designer&section=create&search='+encodeURIComponent(prefix);
+  h.setCollectionScene(scene);
+  const tab=await h.open(actor.actorId,1165,{},entry);
+  try{
+   const {page}=tab;
+   await page.getByRole('tab',{name:'草稿箱（2）',exact:true}).waitFor();
+   await page.getByRole('button',{name:style,exact:true}).click();
+   await page.getByRole('textbox',{name:'设计款号',exact:true}).waitFor();
+   await wizardNext(page);
+   await page.getByText(/^执行单价：/).waitFor();
+   await fillRequiredCraft(page);
+   await page.getByRole('button',{name:'提交开发单',exact:true}).click();
+   await page.getByLabel('本单时效申请说明',{exact:true}).fill('TEST 本轮原设计师提出时效申请');
+   const submit=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/order-time/requests'));
+   await page.getByRole('button',{name:'提交时效调整申请',exact:true}).click();
+   const submitted=await submit;expect(submitted.status(),await submitted.text()).toBe(200);
+   const review=await submitted.json();expect(review).toMatchObject({state:'pending',operation:{kind:'development_publish',sourceId:prepared.sourceId}});
+   const requestId:string=review.requestId,requestPath='/order-time/requests/'+requestId;
+   await page.waitForURL(url=>url.searchParams.get('timeRequest')===requestId);
+   const withdraw=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith(requestPath+'/withdraw'));
+   await page.getByRole('button',{name:'撤回申请',exact:true}).click();
+   const withdrawn=await withdraw;expect(withdrawn.status(),await withdrawn.text()).toBe(200);
+   const closed=await withdrawn.json();expect(closed).toMatchObject({state:'withdrawn',version:review.version+1});
+   await page.getByText('已保存本次处理。',{exact:true}).waitFor();
+
+   const before=async()=>(await h.db.query(`SELECT to_jsonb(s) AS source,to_jsonb(d) AS draft,to_jsonb(n) AS number,to_jsonb(r) AS request,
+    (SELECT jsonb_agg(to_jsonb(e) ORDER BY request_version) FROM digital_order_time_request_events e WHERE e.request_id=r.request_id) AS history,
+    (SELECT to_jsonb(a) FROM digital_development_attachment_bindings a WHERE a.source_id=s.source_id AND a.attachment_id=$3) AS attachment
+    FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
+    JOIN digital_design_code_registry n USING(source_id) JOIN digital_order_time_requests r ON r.request_id=$2 WHERE s.source_id=$1`,
+   [prepared.sourceId,requestId,prepared.attachmentId])).rows[0];
+   const original=await before();
+   expect(original).toMatchObject({draft:{status:'draft'},number:{code:style},attachment:{attachment_id:prepared.attachmentId},
+    history:expect.arrayContaining([expect.objectContaining({request_version:review.version}),expect.objectContaining({request_version:closed.version})])});
+
+   await page.goto(h.base+entry);
+   await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
+   await page.getByRole('tab',{name:'待审批-未发布（1）',exact:true}).click();
+   const row=page.getByRole('row').filter({hasText:style});
+   await row.getByText('已撤回',{exact:true}).waitFor();
+   const discard=row.getByRole('button',{name:'删除草稿 '+style,exact:true});
+   const confirm=page.getByRole('alertdialog',{name:'删除开发草稿',exact:true});
+   await discard.click();await confirm.getByRole('button',{name:'取消',exact:true}).click();
+   await confirm.waitFor({state:'hidden'});
+   expect(h.requests.filter(item=>item.session===tab.session&&item.method==='DELETE')).toEqual([]);
+   await row.getByText('已撤回',{exact:true}).waitFor();
+   await discard.click();
+   const deleted=page.waitForResponse(response=>response.request().method()==='DELETE'&&response.url().endsWith('/sources/'+prepared.sourceId+'/draft'));
+   await confirm.getByRole('button',{name:'删除',exact:true}).click();
+   const response=await deleted;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toEqual({expectedVersion:original.draft.version,approvalRequestId:requestId,approvalVersion:closed.version});
+   await page.getByText('开发草稿已删除。',{exact:true}).waitFor();
+   await page.reload();
+   await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
+   await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).click();
+   expect(await row.count()).toBe(0);
+   expect((await tab.context.request.get(h.base+'/api/digital-production'+requestPath)).status()).toBe(404);
+   expect(await before()).toEqual(original);
+  }catch(error){await writeFile(join(h.evidence,'withdrawn-draft-failure.txt'),await tab.page.locator('body').innerText());throw error;}
+  finally{await tab.close();h.setCollectionScene(undefined);}
  });
  it('starts one effective clock at successful publication, rolls back a failed native pattern write, and preserves it through later order confirmation',async()=>{
   const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);

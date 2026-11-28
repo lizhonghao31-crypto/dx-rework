@@ -306,7 +306,7 @@ export class DigitalProductionIdentityService {
     if(countOnly)return {items:[],page,total,hasNext:page*15<total};
     const approvalColumns=followup?`approval.state AS "approvalState",approval.request_id AS "approvalRequestId",
       approval.version AS "approvalVersion",approval.return_reason AS "approvalReturnReason",
-      approval.updated_at AS "updatedAt",CASE WHEN approval.state='returned' THEN
+      approval.updated_at AS "updatedAt",CASE WHEN approval.state IN ('returned','withdrawn') THEN
         digital_development_draft_discardable(s.source_id,s.created_by,${version},approval.request_id,approval.version)
         ELSE false END AS "canDiscard"`:`NULL AS "approvalState",coalesce(d.updated_at,s.created_at) AS "updatedAt",true AS "canDiscard"`;
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",

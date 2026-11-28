@@ -429,14 +429,17 @@ function DigitalDesignerWorkspaceContent() {
       <div className="development-creation-columns">
       <section className="development-creation-drafts" aria-label="开发草稿箱">
         <h2>开发草稿箱</h2>
-        {canCreate&&<div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel value={search} maxLength={100}
-          onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={setSearch}
-          onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>}
-        {canCreate&&<div className="development-draft-tabs" role="tablist" aria-label="草稿分类">
-          <AstryxButton id="development-draft-tab" role="tab" aria-selected={draftBucket==='drafts'} aria-controls="development-draft-panel"
-            label={`草稿箱（${tabCount('drafts')}）`} variant={draftBucket==='drafts'?'primary':'secondary'} onClick={()=>setDraftBucket('drafts')}/>
-          <AstryxButton id="development-approval-tab" role="tab" aria-selected={draftBucket==='followup'} aria-controls="development-draft-panel"
-            label={`待审批-未发布（${tabCount('followup')}）`} variant={draftBucket==='followup'?'primary':'secondary'} onClick={()=>setDraftBucket('followup')}/>
+        {canCreate&&<div className="development-draft-toolbar">
+          <div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel
+            controlClassName="development-draft-search-control" value={search} maxLength={100}
+            onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={setSearch}
+            onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>
+          <div className="development-draft-tabs" role="tablist" aria-label="草稿分类">
+            <AstryxButton id="development-draft-tab" role="tab" aria-selected={draftBucket==='drafts'} aria-controls="development-draft-panel"
+              label={`草稿箱（${tabCount('drafts')}）`} variant={draftBucket==='drafts'?'primary':'secondary'} onClick={()=>setDraftBucket('drafts')}/>
+            <AstryxButton id="development-approval-tab" role="tab" aria-selected={draftBucket==='followup'} aria-controls="development-draft-panel"
+              label={`待审批-未发布（${tabCount('followup')}）`} variant={draftBucket==='followup'?'primary':'secondary'} onClick={()=>setDraftBucket('followup')}/>
+          </div>
         </div>}
         {canCreate&&countFor(inactiveDraftBucket)?.error&&<p role="alert">草稿计数未能读取
           <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>重试计数</DevelopmentEntryAction></p>}
