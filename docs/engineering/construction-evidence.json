@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "134e3f3d054dc092220672c18b09d7e48859e4b8",
-  "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+  "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
   "risk": "full",
   "rules": [
     {
@@ -126,6 +126,27 @@
       "expectation": "只发出原辅料300米且只余200米。仓管复验原一批为不合格，等待原质量决定，不能发料，收料历史不重写。",
       "checks": [
         "development-step-two-warehouse-regressions-final",
+        "development-step-two-static"
+      ]
+    },
+    {
+      "rule": "草稿重开后稳定打开原工艺下拉，实际选择并保存工艺顺序",
+      "source": "Full 46149892975 与 46153938622 在特种工艺原入口重开后的同一选择重复失败；按 Eric 要求在 #1139 原入口修正回归。",
+      "writes": [
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/independent-craft-field.tsx",
+        "apps/web/src/digital-development-create-form.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/special-craft-browser-postgres.test.ts#keeps new managed drafts on the independent craft editor"
+      ],
+      "initialization": "沿真实设计师草稿箱恢复保存的当前向导步骤，先等原工艺顺序和焦点目标就绪，再用支持的键盘打开操作；不替换环境、模拟组件或增加超时。",
+      "dateAndPermission": "仍沿原设计师和订单版本保存以及执行原板房人员的无权写入反例，不改变角色和时效规则。",
+      "expectation": "真实弹层和首站控件按 aria-controls 关联。选择后次站反向排序，保存后原草稿版本和排序均准确读回。",
+      "checks": [
+        "development-step-two-special-craft-reopen",
         "development-step-two-static"
       ]
     }
@@ -372,12 +393,12 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "57b68f7b7e44eaa88f756a3fdf9208449c890189",
-      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
-      "startedAt": "2026-11-28T14:13:36Z",
-      "endedAt": "2026-11-28T14:15:08Z",
-      "log": "/workspace/scratch/development-step-two-evidence/static-wh.log",
-      "logSha256": "b9076060898c9b778616fc83261aa5fe1297b5245c33c72d1101f0805e643b17",
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
+      "startedAt": "2026-11-28T14:52:47Z",
+      "endedAt": "2026-11-28T14:54:35Z",
+      "log": "/workspace/scratch/development-step-two-evidence/static-special.log",
+      "logSha256": "669675c187ebf6a17b129358d11a615d76693284c28fd795a4b9c21c4c1f72c5",
       "cwd": "/workspace/scratch/development-step-two",
       "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on touched TS/TSX, git diff --check",
       "context": "Node 22.22.2 and exact dependency lock; no deployment."
@@ -404,7 +425,30 @@
         }
       ],
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts -t \"opens the assigned warehouse list by PO|lets the assigned warehouse record a failed report\" --reporter=default --reporter=json",
-      "context": "Original assigned warehouse actor, signed native pages through Chromium and isolated PostgreSQL. Only the two mapped warehouse cases are selected. Actual material, original lot identity, report and issue permissions are verified."
+      "context": "Original assigned warehouse actor, signed native pages through Chromium and isolated PostgreSQL. Only the two mapped warehouse cases are selected. Actual material, original lot identity, report and issue permissions are verified.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "b76977139c54ff9a686136ebf06ec1ff447c9d1179bd0cecb6ad8730d5d46cf5"
     },
     {
       "id": "development-step-two-affected-current-exact",
@@ -414,21 +458,45 @@
       "passed": 4,
       "failed": 0,
       "skipped": 41,
-      "testedHead": "b4ebc1b99248d44fa0f0879fd14a95b5afcd435e",
-      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
       "cwd": "/workspace/scratch/development-step-two",
-      "log": "/workspace/scratch/development-step-two-evidence/affected-current-exact.log",
-      "logSha256": "e7ca19eaa53fe2947d4518fda8b6ea9f9a83c7f3702bd1775314648cfb24d877",
-      "startedAt": "2026-11-28T14:16:05Z",
-      "endedAt": "2026-11-28T14:17:33Z",
+      "log": "/workspace/scratch/development-step-two-evidence/affected-exact-special-head.log",
+      "logSha256": "d43888602ed237e1ded4782352064e0cce0424d6184c7ec569fecd4848f8df4f",
+      "startedAt": "2026-11-28T14:53:43Z",
+      "endedAt": "2026-11-28T14:55:12Z",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6384723be9052c5745140d1bd9c28850b5cffacf28e28ec3e8ec233e6d611184"
+          "sha256": "ad33d9e285662329a3f22873640d861d8584535af51551e88b4c2616d7944eb9"
         }
       ],
-      "context": "Original signed Chromium and isolated PostgreSQL. Required four cases are rerun on the complete current source because the Full admission check requires exact full-source binding, even for a test-only change.",
+      "context": "Actual signed Chromium 141 build 1194 matching lock-pinned CI, and isolated PostgreSQL. The four original entry cases are rebound to the complete final source after the test-only special-craft fix.",
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/{development-creation-draft-native-browser,fixed-timeline-native-browser,preorder-material-investment-native-browser}-postgres.test.ts -t \"resumes an unnumbered draft|saves the actual chosen craft order|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json"
+    },
+    {
+      "id": "development-step-two-special-craft-reopen",
+      "sourceFingerprint": "27ebe47d02f60f282bb35dc03617f6b133d64d0a612517cf24c482a3bd81de3b",
+      "testedHead": "05810aab7405d1b6612ee7421c2eae1246762691",
+      "log": "/workspace/scratch/development-step-two-evidence/repaired-special-ci-browser.log",
+      "logSha256": "835b4ceddd01b8552ad50d697729d8453c5548d2141a6dd22cc710c280720f75",
+      "startedAt": "2026-11-28T14:52:32Z",
+      "endedAt": "2026-11-28T14:54:09Z",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "cwd": "/workspace/scratch/development-step-two",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "849d50763cde0afe4a6c14cca2ef7fefb15a12adfc5914ea053310e65969944c"
+        }
+      ],
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/special-craft-browser-postgres.test.ts --reporter=default --reporter=json",
+      "context": "Complete existing special-craft suite, actual signed Chromium 141 build 1194 installed from the lock-pinned Playwright package, and isolated PostgreSQL. No product changes or timeout changes."
     }
   ]
 }
