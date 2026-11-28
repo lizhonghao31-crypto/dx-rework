@@ -284,40 +284,25 @@ export class DigitalProductionIdentityService {
     const root=isRootActor(actor);
     if(root?!(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed
       :!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'sample_designer'))digitalForbidden();
-    const followup=bucket==='followup';
-    const from=`FROM digital_production_sources s JOIN digital_development_source_lifecycle lifecycle USING(source_id)
-      LEFT JOIN digital_development_documents d USING(source_id)
-      ${followup?`JOIN LATERAL (
-        SELECT state,request_id,version,updated_at,return_reason FROM digital_order_time_requests request
-        WHERE request.source_id=s.source_id AND request.operation_json->>'kind'='development_publish'
-        ORDER BY request.created_at DESC,request.request_id DESC LIMIT 1
-      ) approval ON true`:''}`;
-    const version='coalesce(d.version,0)';
-    const ordinary=`digital_development_draft_discardable(s.source_id,s.created_by,${version})
-      AND (coalesce(s.workbench_generated_number,false) OR d.document#>>'{customerOrderDraft,stage}' IS DISTINCT FROM 'preorder')`;
-    const scope=`WHERE lifecycle.is_draft AND ${await wholeOrderActiveSql(db,"source","s.source_id")}
-      AND ($1 OR s.created_by=$2) AND ($3='' OR strpos(lower(coalesce(s.design_style_no,'')),lower($3))>0
-        OR strpos(lower(coalesce(s.temporary_style_no,'')),lower($3))>0)
-      AND ${followup?`d.status='draft' AND d.published_at IS NULL
-        AND d.document#>>'{customerOrderDraft,stage}' IS DISTINCT FROM 'preorder'
-        AND approval.state IN ('pending','returned','withdrawn','needs_designer')`:ordinary}`;
-    const params=[root,actor.actorId,search];
+    const from=`FROM digital_production_sources s
+      JOIN LATERAL digital_development_draft_box_snapshot(s.source_id) box ON true
+      LEFT JOIN digital_development_documents d USING(source_id)`;
+    const scope=`WHERE ($1 OR s.created_by=$2) AND ($3='' OR strpos(lower(coalesce(s.design_style_no,'')),lower($3))>0
+        OR strpos(lower(coalesce(s.temporary_style_no,'')),lower($3))>0) AND box.in_followup=$4`;
+    const params=[root,actor.actorId,search,bucket==='followup'];
     const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total ${from} ${scope}`,params)).rows[0]!.total;
     if(countOnly)return {items:[],page,total,hasNext:page*15<total};
-    const approvalColumns=followup?`approval.state AS "approvalState",approval.request_id AS "approvalRequestId",
-      approval.version AS "approvalVersion",approval.return_reason AS "approvalReturnReason",
-      approval.updated_at AS "updatedAt",CASE WHEN approval.state IN ('returned','withdrawn') THEN
-        digital_development_draft_discardable(s.source_id,s.created_by,${version},approval.request_id,approval.version)
-        ELSE false END AS "canDiscard"`:`NULL AS "approvalState",coalesce(d.updated_at,s.created_at) AS "updatedAt",true AS "canDiscard"`;
     const result=await db.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",
       s.design_style_no AS "designStyleNo",s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",
       coalesce(s.workbench_generated_number,false) AS "numbered",s.created_by=$2 AS "ownedByRequester",
-      ${version}::int AS version,${approvalColumns},
+      box.draft_version AS version,box.updated_at AS "updatedAt",box.can_discard AS "canDiscard",
+      box.approval_state AS "approvalState",box.approval_id AS "approvalRequestId",box.approval_version AS "approvalVersion",
+      box.return_reason AS "approvalReturnReason",
       CASE WHEN d.document->'customerOrderDraft'->>'withOrder'='false' THEN 'development'
        WHEN d.document->'customerOrderDraft'->>'withOrder'='true' THEN
         CASE WHEN d.document->'customerOrderDraft'->>'stage'='preorder' AND d.document->'customerOrderDraft'->>'wizardConfirmPreorder' IS DISTINCT FROM 'true'
          THEN 'preorder' ELSE 'certain_order' END END AS "kind"
-      ${from} ${scope} ORDER BY "updatedAt" DESC,s.source_id DESC LIMIT 15 OFFSET $4`,[...params,(page-1)*15]);
+      ${from} ${scope} ORDER BY "updatedAt" DESC,s.source_id DESC LIMIT 15 OFFSET $5`,[...params,(page-1)*15]);
     return {items:result.rows,page,total,hasNext:page*15<total};
     });
   }
@@ -331,7 +316,7 @@ export class DigitalProductionIdentityService {
         [...args,approval.approvalRequestId,approval.approvalVersion]):
         await db.query('SELECT digital_development_draft_discardable($1,$2,$3) AS allowed',args);
       if(!allowed.rows[0]?.allowed)
-        fail(approval?'单据状态已更新，请刷新后重试':'仅可删除未发布、未关联且没有执行记录的当前版本草稿，请刷新核对');
+        fail('草稿状态或版本已变化，或时效申请仍在办理，请刷新后核对');
       const eventId=await this.audit(db,actor,'digital_development_draft_discarded',sourceId,{version:expectedVersion,...approval},{discarded:true,historyRetained:true,ownerId:source.created_by});
       await db.query('INSERT INTO digital_development_draft_discards(source_id,actor_id,draft_version,audit_event_id) VALUES($1,$2,$3,$4)',
         [sourceId,actor.actorId,expectedVersion,eventId]);

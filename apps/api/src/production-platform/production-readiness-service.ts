@@ -1,3 +1,4 @@
+import {wholeSourceActive} from './whole-order-visibility.js';
 import {readWarehouseFabricReceiptBasis} from './warehouse-fabric-report-lots.js';
 import {readWarehouseCutover,warehouseCutoverPaused,warehouseCutoverResources,warehouseCutoverScopeKey,warehouseCutoverScopesCurrent} from './warehouse-receipt-cutover-repository.js';
 import {originalReceiptCommand,pendingWarehouseReceiptOrigin,preserveLegacyWarehouseReceipt,recordWarehouseContinuationRow} from './warehouse-receipt-continuation.js';
@@ -121,6 +122,8 @@ export class ProductionReadinessService{
   await this.assertPreparationActive(db,context);
  }
  private async preparationWriteBlock(db:PreparationDB,{orderId,sourceId,source}:Awaited<ReturnType<typeof preparationContext>>){
+  if(sourceId&&!await wholeSourceActive(db,sourceId))
+   return '开发来源已作废，不能新增办理事实';
   if(!orderId&&sourceId&&source?.workbench_generated_number&&(await developmentSourceLifecycle(db,sourceId))?.is_draft)
    return '开发草稿尚未发布，请先发布后再交接或投面辅料';
   const {rows:[state]}=await db.query<{inactive:boolean;closed:boolean}>(`SELECT
@@ -138,6 +141,7 @@ export class ProductionReadinessService{
   return (await this.access(db,actor,resource)).responsibility;
  }
  private async sampleHandoverActive(db:PreparationDB,sourceId:string,orderId:string|null){
+  if(!await wholeSourceActive(db,sourceId))return false;
   const inactive=await db.query(`SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1)
    OR (resource_kind='source' AND resource_id=$2)) AND state<>'active'`,[orderId,sourceId]);
   return !inactive.rowCount&&(!orderId||!(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[orderId])).rowCount);

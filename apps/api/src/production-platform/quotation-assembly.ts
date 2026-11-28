@@ -1,4 +1,5 @@
 import {developmentSourceLifecycle} from './development-source-lifecycle.js';
+import {wholeSourceActive} from './whole-order-visibility.js';
 import {quotationMaterialConsumptionBasis,quotationMaterialPriceBasis,quotationMaterialPricingUnit} from './quotation-material-unit.js';
 import {notifySpecialCraftQuotes} from './special-craft-quotation-todos.js';
 import {craftStepIdentity,craftStepLabel,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
@@ -21,6 +22,9 @@ function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return
  * Re-read current source state rather than applying a potentially late event payload.
  * No GET invokes this writer; confirmed snapshots and budgets are never updated here. */
 export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>):Promise<AssembledQuotation|undefined>{
+ // This writer is called under the caller's original lifecycle lock; a late
+ // event must not rebuild or notify from a discarded source.
+ if(!await wholeSourceActive(db,sourceId))return;
  const saved=await developmentDocumentRow(db,sourceId);
  if(saved?.document?.quotationMode!=='automatic_v1'||(await developmentSourceLifecycle(db,sourceId))?.is_draft)return;
  const document=saved.document as DevelopmentDocument,round=saved.round_number??1;

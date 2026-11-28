@@ -433,9 +433,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
      bases:[{kind:'materials',id:linked.row.sourceId,version:1,content:'TEST 原历史电子交接'}],
     })]);
    expect((await identity.developmentDrafts(linked.row.actor,1,linked.temporary,false,'followup')).items)
-    .toMatchObject([{sourceId:linked.row.sourceId,approvalState:stateName,canDiscard:false}]);
-   await expect(identity.discardDevelopmentDraft(linked.row.actor,linked.row.sourceId,1,randomUUID(),linked.approval))
-    .rejects.toMatchObject({statusCode:409});
+    .toMatchObject([{sourceId:linked.row.sourceId,approvalState:stateName,canDiscard:true}]);
+   expect(await identity.discardDevelopmentDraft(linked.row.actor,linked.row.sourceId,1,randomUUID(),linked.approval))
+    .toEqual({discarded:true});
+   expect((await f.db.query("SELECT 1 FROM audit_events WHERE entity_id=$1 AND action='design_electronic_documents_shared'",
+    [linked.row.sourceId])).rowCount).toBe(1);
+  });
+ });
+ it('does not let the newest terminal history mask a different open application on the same draft',async()=>{
+  const scene=await f.scene('2027-02-06T15:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const temporary='TEST-DRAFT-APPROVAL-HISTORY-'+randomUUID(),row=await make('2027-02-06',false,'免洗',true,temporary);
+   const pending=await submit(row),historicalId=randomUUID();
+   // Reproduce a retained independent terminal request from an earlier import.
+   // It sorts after the open request but does not consume the open-source key.
+   await f.db.query(`INSERT INTO digital_order_time_requests(request_id,source_id,state,version,requested_by,designer_id,
+    operation_json,company_snapshot,submitted_versions,submitted_fingerprint,reason,created_at,updated_at)
+    SELECT $2,source_id,'withdrawn',2,requested_by,designer_id,operation_json,company_snapshot,submitted_versions,submitted_fingerprint,
+     'TEST retained terminal request',created_at+interval '1 second',updated_at+interval '1 second'
+    FROM digital_order_time_requests WHERE request_id=$1`,[pending.requestId,historicalId]);
+   const token={approvalRequestId:historicalId,approvalVersion:2};
+   const read=()=>identity.developmentDrafts(row.actor,1,temporary,false,'followup');
+   expect((await read()).items).toMatchObject([{sourceId:row.sourceId,approvalState:'pending',canDiscard:false}]);
+   await expect(identity.discardDevelopmentDraft(row.actor,row.sourceId,1,randomUUID(),token)).rejects.toMatchObject({statusCode:409});
+   await requests.close(row.actor,pending.requestId,{expectedVersion:pending.version},randomUUID(),'withdrawn');
+   expect((await read()).items).toMatchObject([{sourceId:row.sourceId,approvalState:'withdrawn',canDiscard:true,...token}]);
+   expect(await identity.discardDevelopmentDraft(row.actor,row.sourceId,1,randomUUID(),token)).toEqual({discarded:true});
+   expect((await f.db.query('SELECT 1 FROM digital_order_time_requests WHERE source_id=$1',[row.sourceId])).rowCount).toBe(2);
   });
  });
  it('lets only one current manager finish a pending request while another stale decision cannot duplicate native business',async()=>{

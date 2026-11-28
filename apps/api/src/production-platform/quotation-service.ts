@@ -1,3 +1,4 @@
+import {assertWholeOrderActive,wholeOrderActiveSql,wholeSourceActive} from './whole-order-visibility.js';
 import {DigitalBudgetService} from './budget-service.js';
 import {quotationMaterialConsumptionBasis,quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
 import {isDeepStrictEqual} from 'node:util';
@@ -86,6 +87,7 @@ export class DigitalQuotationService{
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    const context=await this.context(db,actor,resource,true);
+   if(context.sourceId)await assertWholeOrderActive(db,'source',context.sourceId);
    if(context.designerId!==actor.actorId||!context.roles.has('sample_designer'))digitalNotFound();
    const quote=context.quote??digitalNotFound();
    if(quote.version===quote.confirmed_version)digitalNotFound();
@@ -101,6 +103,8 @@ export class DigitalQuotationService{
   try{
    await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
    const context=await this.context(db,actor,resource,true);
+   const active=!context.sourceId||await wholeSourceActive(db,context.sourceId);
+   if(!active&&query.supplierSearch!==undefined)digitalForbidden();
    const result=await secondaryCraftDetail(db,actor,context.quote??digitalNotFound(),context.roles,rowId,query,
     context.designerId===actor.actorId&&context.roles.has('sample_designer'));
    if('target' in result&&result.target){
@@ -108,7 +112,7 @@ export class DigitalQuotationService{
     const ownSource=target.stage==='development'&&target.scopeId===context.sourceId?context.sourceId:null;
     const snapshot=ownSource?await developmentDocumentSnapshot(db,ownSource,target.round,target.sourceVersion,true):undefined;
     await db.query('COMMIT');
-    return {...result,display:{orderNumber:context.row.design_style_no??context.row.temporary_style_no??'',customerCode:context.customerCode,
+    return {...result,...(!active?{canEdit:false,canDecide:false}:{}),display:{orderNumber:context.row.design_style_no??context.row.temporary_style_no??'',customerCode:context.customerCode,
      styleImage:snapshot?quotationStyleImage(snapshot.sourceId,snapshot.documentVersion,snapshot.document):null}};
    }
    await db.query('COMMIT');
@@ -167,6 +171,7 @@ export class DigitalQuotationService{
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number,original=false):Promise<QuotationSheet>{
   const c=await this.context(db,actor,resource,true),q=c.quote;
+  const active=!c.sourceId||await wholeSourceActive(db,c.sourceId);
   const snapshot=version===undefined?null:(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q?.quote_id,version])).rows[0]??digitalNotFound();
   const doc=(snapshot?.document??q?.document) as BudgetDocument|undefined;
   const assignments=(snapshot?.assignments??q?.assignments??[]) as QuotationAssignment[];
@@ -179,9 +184,9 @@ export class DigitalQuotationService{
   const confirmedBy=c.full&&c.workbenchPolicy&&confirmed?.confirmed_by_internal
    ?(await db.query('SELECT display_name FROM app_users WHERE id=$1',[confirmed.confirmed_by_internal])).rows[0]?.display_name:undefined;
   const budget=c.orderId?(await db.query('SELECT version,quote_id,quote_version,status FROM digital_budget_documents WHERE production_order_id=$1',[c.orderId])).rows[0]:null;
-  const requiresWorkbenchPricing=Boolean(c.confirm&&q&&version===undefined&&await newWorkbenchQuotation(db,actor,resource,c));
-  const canConfirm=c.confirm&&(!requiresWorkbenchPricing||c.designerId===actor.actorId&&c.roles.has('sample_designer'));
-  const workbench=c.full&&q&&q.version!==q.confirmed_version&&version===undefined&&(requiresWorkbenchPricing||c.workbenchPolicy)
+  const requiresWorkbenchPricing=Boolean(active&&c.confirm&&q&&version===undefined&&await newWorkbenchQuotation(db,actor,resource,c));
+  const canConfirm=active&&c.confirm&&(!requiresWorkbenchPricing||c.designerId===actor.actorId&&c.roles.has('sample_designer'));
+  const workbench=active&&c.full&&q&&q.version!==q.confirmed_version&&version===undefined&&(requiresWorkbenchPricing||c.workbenchPolicy)
     ?await readWorkbenchQuotation(db,q,resource,actor.actorId,c.customerCode):undefined;
   const workbenchReadiness=requiresWorkbenchPricing||c.workbenchPolicy&&Boolean(q?.assembly)?workbench?.readiness:undefined;
   const displayVersion=version??q?.version??0,isConfirmed=Boolean(confirmed)&&(version!==undefined||q?.version===q?.confirmed_version);
@@ -226,7 +231,7 @@ export class DigitalQuotationService{
    return [{...row,...(priceBasis?{priceBasis}:{}),...(secondaryCraft&&(price||secondaryHistory)?{secondaryCraftEntry:true}:{}),...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
     technicalUsage:basis?.kind==='material'?'required' as const:basis?.kind==='ie'||basis?.kind==='craft'?'not_applicable' as const:a.technicalAssigneeId||row.section!=='外发工序'&&!assembly?'required' as const:'unknown' as const,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
-    canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&!secondaryCraft&&(isRootActor(actor)||price),canEditPricingUnit:version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
+    canEditConsumption:active&&version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:active&&version===undefined&&!secondaryCraft&&(isRootActor(actor)||price),canEditPricingUnit:active&&version===undefined&&this.creationEnabled&&c.structure&&basis?.kind==='material'&&c.sourceDocument?.status==='published'&&c.sourceDocument.document.materials.some((m:DevelopmentMaterial)=>m.materialId===basis.sourceRef),...(c.full&&assembly?.materialPricingUnits?.[row.rowId]?{pricingUnitSource:{sourceUnit:assembly.materialPricingUnits[row.rowId]!.sourceUnit,version:assembly.materialPricingUnits[row.rowId]!.version,recordedAt:assembly.materialPricingUnits[row.rowId]!.recordedAt}}:{}),consumptionSource:sources[row.rowId]??null}];
   });
   const technicalConsumptionOptions:NonNullable<QuotationSheet['technicalConsumptionOptions']>=[];
   const canReadOptions=rows.some(row=>row.canEditConsumption);
@@ -246,7 +251,7 @@ export class DigitalQuotationService{
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows:rows.map(row=>unitMismatches.has(row.rowId)&&!matchingUnits.has(row.rowId)?{...row,technicalConsumptionIssue:'unit_mismatch' as const}:row),assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation:null,...(confirmedBy?{confirmedBy}:{}),...(craftApprovalState?{craftApprovalState}:{}),...(requiresWorkbenchPricing?{requiresWorkbenchPricing:true as const}:{}),
-   canStructure:version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&canConfirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
+   canStructure:active&&version===undefined&&c.structure&&this.creationEnabled,canConfirm:version===undefined&&canConfirm&&Boolean(c.customerCode)&&Boolean(q)&&q?.version!==q?.confirmed_version&&this.creationEnabled,fullCost:c.full,
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null,...(workbenchBudget?{workbench:workbenchBudget}:{})}};
  }
  async originalVersions(actor:TrustedActorContext,resource:QuotationResource,page:number,q:string){
@@ -277,9 +282,10 @@ export class DigitalQuotationService{
    const active=await quotationRoles(db,actor,readRoles);
    // Keep the original native candidate order and cap before resolving the exact scope.
    const rows=(await db.query<QuoteDirectoryRow>(`WITH candidates AS (SELECT q.source_id,q.production_order_id,q.updated_at FROM digital_quotation_documents q
-   WHERE $1::boolean OR EXISTS(SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE ($5::boolean AND a->>'technicalAssigneeId'=$2::text) OR (a->>'priceAssigneeId'=$2::text AND a->>'priceRole'=ANY($6::text[])))
+   WHERE (q.source_id IS NULL OR ${await wholeOrderActiveSql(db,'source','q.source_id')})
+   AND ($1::boolean OR EXISTS(SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE ($5::boolean AND a->>'technicalAssigneeId'=$2::text) OR (a->>'priceAssigneeId'=$2::text AND a->>'priceRole'=ANY($6::text[])))
    OR EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.production_order_id=q.production_order_id AND (($3::boolean AND o.created_by=$2::uuid) OR ($4::boolean AND o.primary_merchandiser_id=$2::uuid)))
-   OR ($3::boolean AND EXISTS(SELECT 1 FROM digital_production_sources s WHERE s.source_id=q.source_id AND s.created_by=$2::uuid))
+   OR ($3::boolean AND EXISTS(SELECT 1 FROM digital_production_sources s WHERE s.source_id=q.source_id AND s.created_by=$2::uuid)))
    ORDER BY q.updated_at DESC LIMIT 100)
    SELECT c.source_id,c.production_order_id,s.source_id AS rush_source_id,CASE WHEN c.production_order_id IS NULL THEN s.design_style_no ELSE o.design_style_no END AS style_no,
     coalesce(o.customer_code,s.customer_code) AS customer_code,CASE WHEN s.source_id IS NULL THEN o.created_by ELSE s.created_by END AS source_designer,
@@ -335,6 +341,7 @@ export class DigitalQuotationService{
   const db=await this.database.connect();try{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const c=await this.context(db,actor,resource);
+   if(c.sourceId)await assertWholeOrderActive(db,'source',c.sourceId);
    // Read access never permits a pricing save or its receipt. Reject these
    // requests before competing with a session refresh for unrelated role rows.
    if(action==='workbench-pricing-draft'&&(c.designerId!==actor.actorId||!c.roles.has('sample_designer')))digitalForbidden();

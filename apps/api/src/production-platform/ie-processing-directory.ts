@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import type {PoolClient} from 'pg';
 import {acceptanceBusinessContext,acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import type {IeProcessingEntry,IeProcessingQuery} from '@dx-rework/contracts/digital-quotation';
@@ -19,8 +20,8 @@ export async function ieProcessingViewer(db:Pick<PoolClient,'query'>,actor:Trust
  return canReadAll||canPrice?{id:actor.actorId,canPrice,canReadAll,isRoot}:null;
 }
 
-function processingSource({id,readAll,price,search,clockEnabled,scene,target}:Readonly<{
- id:string;readAll:string;price:string;search:string;clockEnabled:boolean;scene:string;target?:{quote:string;row:string};
+function processingSource({id,readAll,price,search,clockEnabled,scene,sourceActive,target}:Readonly<{
+ id:string;readAll:string;price:string;search:string;clockEnabled:boolean;scene:string;sourceActive:string;target?:{quote:string;row:string};
 }>){
  const clockRestriction=clockEnabled?`AND (
   SELECT b.scenario_id FROM acceptance_sla_clock_resources b
@@ -43,6 +44,7 @@ function processingSource({id,readAll,price,search,clockEnabled,scene,target}:Re
    ON lifecycle.resource_kind=CASE WHEN q.production_order_id IS NULL THEN 'source' ELSE 'order' END
    AND lifecycle.resource_id=COALESCE(q.production_order_id,q.source_id)
   WHERE (q.production_order_id IS NULL OR o.production_order_id IS NOT NULL)
+   AND ${sourceActive}
    AND (${readAll}::boolean OR ${price}::boolean AND assignment->>'priceAssigneeId'=${id}::text)
    ${target?`AND (${target.quote}::uuid IS NULL OR q.quote_id=${target.quote} AND ref.key=${target.row}::text)`:''}
    AND (${search}::text='' OR position(lower(${search}::text) in lower(coalesce(o.design_style_no,s.design_style_no)))>0
@@ -55,10 +57,11 @@ function processingSource({id,readAll,price,search,clockEnabled,scene,target}:Re
    ${clockRestriction}`;
 }
 
-export function processingIeCandidates(database:object,viewer:IeProcessingViewer):NonNullable<IeAuthorizedCandidates['processing_quote']>{
+export async function processingIeCandidates(db:PoolClient,database:object,viewer:IeProcessingViewer):Promise<NonNullable<IeAuthorizedCandidates['processing_quote']>>{
+ const sourceActive=await wholeOrderActiveSql(db,'source','q.source_id');
  return ({bind,search})=>{
   const clockEnabled=acceptanceClockReaderEnabled(database);
-  const source=processingSource({id:bind(viewer.id),readAll:bind(viewer.canReadAll),price:bind(viewer.canPrice),search,
+  const source=processingSource({id:bind(viewer.id),readAll:bind(viewer.canReadAll),price:bind(viewer.canPrice),search,sourceActive,
    clockEnabled,scene:bind(clockEnabled?acceptanceBusinessContext()?.scenarioId??null:null)});
   return `SELECT quote_id AS object_id,row_id::uuid AS entry_id,coalesce(production_order_id,source_id) AS resource_id,production_order_id::text AS order_id,
    style_no,customer_code,version,round,lifecycle_state AS native_status,order_created_at AS sort_at,
@@ -98,7 +101,7 @@ export async function readIeProcessingPriceReview(db:Pick<PoolClient,'query'>,en
 export async function readIeProcessingDirectory(db:PoolClient,database:object,input:IeProcessingQuery,viewer:IeProcessingViewer,
  target?:{quoteId:string;rowId:string}){
  const clockEnabled=acceptanceClockReaderEnabled(database);
- const source=processingSource({id:'$1',readAll:'$2',price:'$3',search:'$4',clockEnabled,scene:'$6',target:{quote:'$10',row:'$11'}});
+ const source=processingSource({id:'$1',readAll:'$2',price:'$3',search:'$4',clockEnabled,scene:'$6',sourceActive:await wholeOrderActiveSql(db,'source','q.source_id'),target:{quote:'$10',row:'$11'}});
  const {rows}=await db.query<{total:number;items:IeProcessingEntry[]}>(`WITH candidates AS (
   ${source}
  ), classified AS (

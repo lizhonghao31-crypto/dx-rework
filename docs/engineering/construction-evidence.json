@@ -1,106 +1,189 @@
 {
   "version": 1,
-  "base": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
-  "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
+  "base": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
+  "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
   "risk": "full",
   "rules": [
     {
-      "rule": "仅创建页草稿箱搜索下沿至页签上沿12px，页签可见边缘间8px",
-      "source": "审定《开发草稿箱间距与撤回草稿删除施工方案》Library libfile_fde3_f-e7fe87d8f0ac8191ac1ffbf46beb0487_c8d3bf5d609c8191bce6411a30e94d44 v0（完整47行），关联原图 draft_toolbar_gap_12px.png",
+      "rule": "普通与待审批分组独立于可删，原页签和旧流程边界不变",
+      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
       "writes": [
+        "apps/api/src/production-platform/identity-service.ts",
         "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-development-workspace.css",
-        "docs/ui/ASTRYX_UI_SPEC.md",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/development-entry-controls.tsx",
-        "apps/web/src/use-development-creation-draft.ts"
+        "apps/web/src/development-draft-list.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/development-source-lifecycle.ts"
       ],
       "oldTests": [
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#lets the actual merchandiser enter from My Tasks",
         "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#converts the original preorder"
       ],
-      "initialization": "复用原 Astryx 搜索控件与按钮，仅局部按 16px 参考字号补偿 rem，保留列表上方原余量。",
-      "dateAndPermission": "两页签只显示当前选择，原角色与计数授权不变。不改全局排版、搜索或预下单。",
-      "expectation": "两种宽度和两种选中态逐一实测可见矩形距离，维持原退回入口、草稿分组、跟单及转正。",
+      "initialization": "已发布预下单、已发布开发单、正式来源、旧测试预下单不进箱。新草稿无正文保留，先按来源事实和跟进业务分组再计数。",
+      "dateAndPermission": "原角色和归属、客户端未确认写保护与原删除确认保持。只补显示后端已存在的拦截状态，无样式变化。",
+      "expectation": "签名设计师实际删除带结束历史的普通草稿，不因在办记录丢行，也不双计数；原正常跟单和转正式不变。",
       "checks": [
-        "draft-followup-targeted",
-        "draft-followup-static"
+        "draft-policy-native-final",
+        "draft-policy-related-final",
+        "draft-policy-static"
       ]
     },
     {
-      "rule": "同一服务与数据库门禁允许精确的已撤回或已退回申请软删除",
-      "source": "审定《开发草稿箱间距与撤回草稿删除施工方案》Library libfile_fde3_f-e7fe87d8f0ac8191ac1ffbf46beb0487_c8d3bf5d609c8191bce6411a30e94d44 v0（完整47行），关联原图 draft_toolbar_gap_12px.png",
+      "rule": "0323 SQL 共享真草稿、在办阻断和准确审批/草稿版本，不因历史业务数据禁删",
+      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
       "writes": [
         "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/migrations/0322_development_draft_withdraw_discard.sql",
+        "apps/api/migrations/0323_development_draft_discard_policy.sql",
         "apps/api/src/platform/migration-manifest.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/api/migrations/0321_development_draft_review_inbox.sql"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#recovers only the original eligible shell",
+        "tests/integration/order-time-requests-postgres.test.ts#deletes only the exact %s development draft"
+      ],
+      "initialization": "0321/0322 不变，新迁移默认调用者权限、不数据回填，既有三参与触发器消费新五参。原基线另存 baseline-withdrawn，真实同结构样本在旧版撤回之后无按钮。",
+      "dateAndPermission": "pending 或 needs_designer 才因审批拦截，最新结束历史不覆盖其他在办申请。明确保留现行归属、源版本、审批版本、同事务锁、审计和幂等。",
+      "expectation": "实际浏览器软删且取消不写；原报价 v2、审批、附件、编号和物料原样保留；竞争、发布、错误版本、重提和重复请求受原规则约束。",
+      "checks": [
+        "draft-policy-native-final",
+        "draft-policy-pg-final",
+        "draft-policy-static"
+      ]
+    },
+    {
+      "rule": "作废后报价、IE 及工艺活动入口和旧投料操作停办，保留只读原件",
+      "source": "Eric 审定《达兴开发草稿箱删除纠偏 · 施工方案》Library libfile_fde3_f-d7811101d0b48191ac266ae762e8332f_c8d3bf5d609c8191bce6411a30e94d44 v0（62 行完整）",
+      "writes": [
+        "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/ie-processing-directory.ts",
+        "apps/api/src/production-platform/ie-directory-reader.ts",
+        "apps/api/src/production-platform/secondary-craft-quotation.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/production-readiness-service.ts",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-todos.ts",
-        "apps/web/src/order-time-request-page.tsx"
+        "apps/api/src/production-platform/quotation-routes.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/special-craft-quotation-todos.ts"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts#returns and withdraws the same saved proposal",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts#paginates real assigned IE processing",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#lets the actual merchandiser enter from My Tasks",
+        "tests/integration/customer-quotation-postgres.test.ts#enforces scoped row authorization through HTTP"
       ],
-      "initialization": "只增0322，替换现有五参数函数本体，不改0321及原触发器，不回填历史，不添加授权。",
-      "dateAndPermission": "申请ID、当前申请版本、草稿版本、原主体权限、未发布且无关联事实逐个保留。审批中和待设计师不新增可删资格。",
-      "expectation": "设计师原页实际提交、撤回、取消和删除；正确页签计数重读，原申请、事件、档案、编号和附件保持原值。两种重提顺序、旧或错误版本/申请、原回执幂等以及历史独立关联拒绝均覆盖。",
+      "initialization": "报价、IE、工艺和物料待办活动过滤在分页前执行，不删快照；原有仅正式单触发的批量报价通知照旧。",
+      "dateAndPermission": "报价与投料在原锁及认证角色内核来源活动状态，保持原历史权限。保留物料历史、非作废订单与正式预下单办理。",
+      "expectation": "原真实 IE 录价和跟单投料旧请求被服务端拒绝，报价与 IE 定点、投料待办取消活动投影，但原始报价及历史物料行内容不改。",
       "checks": [
-        "draft-followup-targeted",
-        "draft-followup-static"
+        "draft-policy-native-final",
+        "draft-policy-pg-final",
+        "draft-policy-related-final",
+        "draft-policy-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "draft-followup-targeted",
+      "id": "draft-policy-native-final",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
-      "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
-      "startedAt": "2026-11-28T08:08:23Z",
-      "endedAt": "2026-11-28T08:11:57Z",
-      "log": "/workspace/scratch/draft-inbox-followup-evidence/targeted.log",
-      "logSha256": "b792c8b78b242a61f831c2b30d86efa2c6a0278c89992a224f912263ef45b0ef",
-      "cwd": "/workspace/scratch/draft-inbox-spacing-withdraw",
-      "passed": 9,
+      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
+      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
+      "startedAt": "2026-11-28T09:06:09Z",
+      "endedAt": "2026-11-28T09:09:17Z",
+      "log": "/workspace/scratch/draft-discard-correction-evidence/native-final.log",
+      "logSha256": "8333cf98e0a3508cc6719aec777be8c73e931ce6513b32453b393bfff68f3b41",
+      "cwd": "/workspace/scratch/draft-discard-correction",
+      "passed": 7,
       "failed": 0,
-      "skipped": 75,
+      "skipped": 31,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --maxWorkers=1 -t \"automatic quotation without deleting|normal draft with ended|retains original material records|discards ordinary drafts only|recovers only the original eligible shell|shows only one draft tab|resumes an unnumbered draft\" --reporter=default --reporter=json",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "91515b42d223dea323ae7c5024f3e2e9e6f2a1d6fd02b41853ce0fd35005b3bb"
+          "sha256": "0511bb83c841916a9d430c2c4f9cc4d38447677e124f19c5e5cafac6075feac0"
         }
       ],
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --maxWorkers=1 -t \"deletes only the exact|returns and withdraws the same saved proposal|shows only one draft tab|submits, withdraws|discards ordinary drafts only|resumes an unnumbered draft|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json",
-      "context": "Node 22.22.2, canonical Vitest business-chain runner, Chromium 151 system browser, signed original app and actors, marked local low-privilege PostgreSQL 16 isolated schemas. Filters intentionally skip unrelated cases. No Acceptance or production run."
+      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
     },
     {
-      "id": "draft-followup-static",
+      "id": "draft-policy-pg-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
+      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
+      "startedAt": "2026-11-28T09:07:06Z",
+      "endedAt": "2026-11-28T09:07:53Z",
+      "log": "/workspace/scratch/draft-discard-correction-evidence/pg-final.log",
+      "logSha256": "037085d65ccba821e8f9c516153d9ce377a1fc294ddfd33fa539cb94d2d93683",
+      "cwd": "/workspace/scratch/draft-discard-correction",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 40,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts --maxWorkers=1 -t \"customer-confirmed quotation|deletes only the exact|returns and withdraws the same saved proposal|newest terminal history\" --reporter=default --reporter=json",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "88976a147b6a2a1a5f289fe51cda2d50c5592112046392f180cb55a6a7bea9ab"
+        }
+      ],
+      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
+    },
+    {
+      "id": "draft-policy-related-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
+      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
+      "startedAt": "2026-11-28T09:07:06Z",
+      "endedAt": "2026-11-28T09:09:28Z",
+      "log": "/workspace/scratch/draft-discard-correction-evidence/related-final.log",
+      "logSha256": "8ca661f8950ba6c19266af52388ce36e13afa46e156dfa804d977c4bdd4d07c7",
+      "cwd": "/workspace/scratch/draft-discard-correction",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 12,
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --maxWorkers=1 -t \"paginates real assigned IE processing|filters three real IE candidate sets|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "9651c02cccf35be8fe36d32c71d0131c4fa0e24f86d3c985cac449cba6be4e45"
+        }
+      ],
+      "context": "Node 22.22.2, Chromium 151 when browser applies, marked isolated local low-privilege PostgreSQL 16, actual App/auth/native service; unrelated cases explicitly filtered. Not Acceptance or production."
+    },
+    {
+      "id": "draft-policy-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
-      "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
-      "startedAt": "2026-11-28T08:10:18Z",
-      "endedAt": "2026-11-28T08:12:32Z",
-      "log": "/workspace/scratch/draft-inbox-followup-evidence/static.log",
-      "logSha256": "dc26f8e898d711c0dff0e7282d6266a899cb130238aff7168960fe5149def29c",
-      "cwd": "/workspace/scratch/draft-inbox-spacing-withdraw",
-      "command": "API and Web typechecks, npm run db:migrate:lint, node scripts/acceptance/time-site-inventory.mjs, node --test scripts/ci/test-execution-contract.test.mjs, eslint --max-warnings=0 on the four changed TS/TSX files, git diff --check",
-      "context": "Node 22.22.2, official workspace static commands. No deploy or Acceptance writes."
+      "testedHead": "c154100cb0cdc5f27d89cae67402b99c331a1e59",
+      "sourceFingerprint": "ea474bb2527a40f9d90fdff2055d6f5441bbca2e904c396fbb283a2da21a98c3",
+      "startedAt": "2026-11-28T09:05:30Z",
+      "endedAt": "2026-11-28T09:07:51Z",
+      "log": "/workspace/scratch/draft-discard-correction-evidence/static.log",
+      "logSha256": "a27b6b5f231d0ea08cd228da8fb991e3c872fde2689c54751cf430b0c69749ff",
+      "cwd": "/workspace/scratch/draft-discard-correction",
+      "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on the changed TS/TSX, git diff --check",
+      "context": "Node 22.22.2 and checked dependency lock; no deployment or operation on field data."
     }
   ]
 }

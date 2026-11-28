@@ -1,10 +1,15 @@
+import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
+import {OrderTimeRequestRepository} from '../../apps/api/src/production-platform/order-time-request-repository.js';
+import {observedBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {appendPreparationMaterial,preparationContext} from '../../apps/api/src/production-platform/preparation-material-repository.js';
+import {materialInvestmentTodos} from '../../apps/api/src/production-platform/preparation-todos.js';
 import {warehouseReceiptCutover} from '../../apps/api/src/production-platform/warehouse-receipt-cutover-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {chooseDevelopmentCreation} from "./development-creation-browser-steps.js";
 import {DEVELOPMENT_MEASUREMENTS} from '@dx-rework/contracts/digital-development';
-import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import {mkdtemp,readdir,readFile,writeFile} from 'node:fs/promises';
 import type {Page,Response} from 'playwright-core';
 import {createHash,randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
@@ -35,6 +40,21 @@ function nativeWarehouseReceiptTime(now:number){
  // value, while the receipt must keep the original actual instant.
  const local=new Date(instant+8*3600000).toISOString().slice(0,19).replace(/:00$/,'');
  return {local,occurredAt:new Date(instant).toISOString()};
+}
+async function applyDraftTestMigrations(h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,from:number){
+ const migrationDir=new URL('../../apps/api/migrations/',import.meta.url);
+ const tail=(await readdir(migrationDir)).filter(m=>m.endsWith('.sql')&&Number(m.slice(0,4))>=from&&Number(m.slice(0,4))<=323).sort();
+ expect(tail.at(-1)).toBe('0323_development_draft_discard_policy.sql');
+ const db=await h.db.connect();
+ try{
+  await db.query('BEGIN');
+  for(const migration of tail){
+   const ddl=await readFile(new URL(migration,migrationDir),'utf8');
+   await db.query(ddl);
+   await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.slice(0,-4),createHash('sha256').update(ddl).digest('hex')]);
+  }
+  await db.query('COMMIT');
+ }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }
 async function inspectCreationControl(page:Page,selector:string){
  const session=await page.context().newCDPSession(page);
@@ -618,6 +638,9 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const client=await h.db.connect();
    try{await client.query('BEGIN');await client.query(sql);await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[version,createHash('sha256').update(sql).digest('hex')]);await client.query('COMMIT');}
    catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   expect(await eligible()).toBe(true);
+   // Continue through the current schema before exercising the current App.
+   await applyDraftTestMigrations(h,318);
    expect(await eligible()).toBe(true);
    const tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
    try{
@@ -1809,7 +1832,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    expect(history).toEqual([{state:'returned',version:prepared.approval.version+1,return_reason:'TEST 先核对真实交货日期'}]);
   }finally{await tab.close();h.setCollectionScene(undefined);}
  });
- it('submits, withdraws and discards an original development draft as its designer without deleting its history',async()=>{
+ it('submits, withdraws and discards a development draft with an automatic quotation without deleting its history',async()=>{
   const signed=h.f.people['sample-designer']!,prefix='TEST-DRAFT-WITHDRAW-'+randomUUID(),style=prefix+'-撤回';
   const permissions=(await h.db.query<{capability:string}>(`SELECT DISTINCT c.capability FROM user_role_assignments a
     JOIN role_capabilities c USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL`,[signed.actorId])).rows;
@@ -1824,7 +1847,14 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
     templateConfirmed:true,sizeTableInitialized:true,returnDate:'2026-11-19',files:[{attachmentId,kind:'款图'}],
     patternCategoryId:category.price_id}},randomUUID());
-   return {sourceId,attachmentId};
+   const quoteId=randomUUID(),materialRow=randomUUID(),ieRow=randomUUID();
+   const row=(rowId:string,name:string,consumption:string)=>({rowId,section:'主料',category:'面料',name,specification:'',unit:'米',supplier:'',consumption,unitPrice:''});
+   const document={fabricType:'',productCategory:'',monthSeries:'',date:null,currency:'人民币',rows:[row(materialRow,'原自动报价主布','1'),row(ieRow,'原加工报价','')],freight:'',cm:'',salePrice:'',outsourcingScope:'',outsourcingUnitPrice:'',imageAttachmentIds:[]};
+   const assembly={schemaVersion:1,sourceVersion:1,roundNumber:1,fingerprint:'test-old-automatic',rows:{
+    [materialRow]:{kind:'material',sourceRef:'material:original',basis:'original',stage:'development'},
+    [ieRow]:{kind:'ie',sourceRef:'ie:processing',basis:'original',stage:'development'},
+   }};
+   return {sourceId,attachmentId,quoteId,ieRow,document,assembly};
   });
   const entry='/ui/digital-production?workspace=designer&section=create&search='+encodeURIComponent(prefix);
   h.setCollectionScene(scene);
@@ -1850,42 +1880,170 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const withdrawn=await withdraw;expect(withdrawn.status(),await withdrawn.text()).toBe(200);
    const closed=await withdrawn.json();expect(closed).toMatchObject({state:'withdrawn',version:review.version+1});
    await page.getByText('已保存本次处理。',{exact:true}).waitFor();
+   // Match the retained automatic quotation on a withdrawn historical draft.
+   const {quoteId,sourceId,document,assembly,ieRow}=prepared;
+   await h.db.query(`INSERT INTO digital_quotation_documents(quote_id,source_id,version,document,assignments,assembly,updated_by)
+    VALUES($1,$2,2,$3,$4,$5,$6)`,[quoteId,sourceId,JSON.stringify(document),JSON.stringify([
+     {rowId:ieRow,priceRole:'ie_reviewer',priceAssigneeId:h.f.people.ie!.actorId,technicalAssigneeId:null},
+     {rowId:document.rows[0]!.rowId,priceRole:'sample_designer',priceAssigneeId:actor.actorId,technicalAssigneeId:null},
+   ]),JSON.stringify(assembly),actor.actorId]);
+
 
    const before=async()=>(await h.db.query(`SELECT to_jsonb(s) AS source,to_jsonb(d) AS draft,to_jsonb(n) AS number,to_jsonb(r) AS request,
     (SELECT jsonb_agg(to_jsonb(e) ORDER BY request_version) FROM digital_order_time_request_events e WHERE e.request_id=r.request_id) AS history,
-    (SELECT to_jsonb(a) FROM digital_development_attachment_bindings a WHERE a.source_id=s.source_id AND a.attachment_id=$3) AS attachment
+    (SELECT to_jsonb(a) FROM digital_development_attachment_bindings a WHERE a.source_id=s.source_id AND a.attachment_id=$3) AS attachment,
+    (SELECT to_jsonb(q) FROM digital_quotation_documents q WHERE q.source_id=s.source_id) AS quotation
     FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
     JOIN digital_design_code_registry n USING(source_id) JOIN digital_order_time_requests r ON r.request_id=$2 WHERE s.source_id=$1`,
    [prepared.sourceId,requestId,prepared.attachmentId])).rows[0];
    const original=await before();
    expect(original).toMatchObject({draft:{status:'draft'},number:{code:style},attachment:{attachment_id:prepared.attachmentId},
-    history:expect.arrayContaining([expect.objectContaining({request_version:review.version}),expect.objectContaining({request_version:closed.version})])});
+    quotation:{quote_id:prepared.quoteId,version:2,confirmed_version:null},history:expect.arrayContaining([expect.objectContaining({request_version:review.version}),expect.objectContaining({request_version:closed.version})])});
 
-   await page.goto(h.base+entry);
-   await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
-   await page.getByRole('tab',{name:'待审批-未发布（1）',exact:true}).click();
-   const row=page.getByRole('row').filter({hasText:style});
-   await row.getByText('已撤回',{exact:true}).waitFor();
-   const discard=row.getByRole('button',{name:'删除草稿 '+style,exact:true});
-   const confirm=page.getByRole('alertdialog',{name:'删除开发草稿',exact:true});
-   await discard.click();await confirm.getByRole('button',{name:'取消',exact:true}).click();
-   await confirm.waitFor({state:'hidden'});
-   expect(h.requests.filter(item=>item.session===tab.session&&item.method==='DELETE')).toEqual([]);
-   await row.getByText('已撤回',{exact:true}).waitFor();
-   await discard.click();
-   const deleted=page.waitForResponse(response=>response.request().method()==='DELETE'&&response.url().endsWith('/sources/'+prepared.sourceId+'/draft'));
-   await confirm.getByRole('button',{name:'删除',exact:true}).click();
-   const response=await deleted;expect(response.status(),await response.text()).toBe(200);
-   expect(response.request().postDataJSON()).toEqual({expectedVersion:original.draft.version,approvalRequestId:requestId,approvalVersion:closed.version});
-   await page.getByText('开发草稿已删除。',{exact:true}).waitFor();
-   await page.reload();
-   await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
-   await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).click();
-   expect(await row.count()).toBe(0);
-   expect((await tab.context.request.get(h.base+'/api/digital-production'+requestPath)).status()).toBe(404);
+   const api=h.base+'/api/digital-production',quotePath=api+'/sources/'+sourceId+'/quotation';
+   const quotations=new DigitalQuotationService(h.db,true),ieActor=h.f.people.ie!;
+   const activeList=()=>h.f.runtime.run(scene,actor,()=>quotations.list(actor));
+   const ieList=(target?:{quoteId:string;rowId:string})=>h.f.runtime.run(scene,ieActor,
+    ()=>quotations.ieProcessingDirectory(ieActor,{page:1,search:style,state:'all'},target));
+   expect((await activeList()).items).toEqual(expect.arrayContaining([expect.objectContaining({resource:{kind:'source',id:sourceId}})]));
+   // Native targeted processing entry and direct authorized price write.
+   const ie=await h.open(h.f.people.ie!.actorId,1165,{},'/ui/digital-production');
+   try{
+    expect((await ieList({quoteId,rowId:ieRow})).items).toMatchObject([{quoteId,rowId:ieRow}]);
+    expect(await ieList()).toMatchObject({total:1});
+    await page.goto(h.base+entry);
+    await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
+    await page.getByRole('tab',{name:'待审批-未发布（1）',exact:true}).click();
+    const row=page.getByRole('row').filter({hasText:style});
+    await row.getByText('已撤回',{exact:true}).waitFor();
+    const discard=row.getByRole('button',{name:'删除草稿 '+style,exact:true});
+    expect(await discard.count(), 'automatic quote v2 must not hide the original delete button').toBe(1);
+    const confirm=page.getByRole('alertdialog',{name:'删除开发草稿',exact:true});
+    await discard.click();await confirm.getByRole('button',{name:'取消',exact:true}).click();
+    await confirm.waitFor({state:'hidden'});
+    expect(h.requests.filter(item=>item.session===tab.session&&item.method==='DELETE')).toEqual([]);
+    await row.getByText('已撤回',{exact:true}).waitFor();
+    await discard.click();
+    const deleted=page.waitForResponse(response=>response.request().method()==='DELETE'&&response.url().endsWith('/sources/'+prepared.sourceId+'/draft'));
+    await confirm.getByRole('button',{name:'删除',exact:true}).click();
+    const response=await deleted;expect(response.status(),await response.text()).toBe(200);
+    expect(response.request().postDataJSON()).toEqual({expectedVersion:original.draft.version,approvalRequestId:requestId,approvalVersion:closed.version});
+    await page.getByText('开发草稿已删除。',{exact:true}).waitFor();
+    await page.reload();
+    await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
+    await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).click();
+    expect(await row.count()).toBe(0);
+    expect((await tab.context.request.get(h.base+'/api/digital-production'+requestPath)).status()).toBe(404);
+    const history=await h.f.runtime.run(scene,actor,()=>quotations.readSnapshot(actor,{kind:'source',id:sourceId}));
+    expect(history).toMatchObject({version:2,canStructure:false,canConfirm:false,
+     rows:expect.arrayContaining([expect.objectContaining({rowId:ieRow,canEditPrice:false})])});
+    expect((await activeList()).items).not.toEqual(expect.arrayContaining([expect.objectContaining({resource:{kind:'source',id:sourceId}})]));
+    expect(await ieList({quoteId,rowId:ieRow})).toMatchObject({total:0,items:[]});
+    expect(await ieList()).toMatchObject({total:0,items:[]});
+    const price=await ie.context.request.post(quotePath+'/rows/'+ieRow,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:2,unitPrice:'10'}});
+    expect(price.status(),await price.text()).toBe(410);
+   }finally{await ie.close();}
    expect(await before()).toEqual(original);
+   expect((await h.db.query(`SELECT (SELECT count(*)::int FROM digital_development_draft_discards WHERE source_id=$1) AS discards,
+    (SELECT count(*)::int FROM audit_events WHERE entity_id=$1::text AND action='digital_development_draft_discarded') AS audits`,[prepared.sourceId])).rows[0])
+    .toEqual({discards:1,audits:1});
   }catch(error){await writeFile(join(h.evidence,'withdrawn-draft-failure.txt'),await tab.page.locator('body').innerText());throw error;}
   finally{await tab.close();h.setCollectionScene(undefined);}
+ });
+ it('deletes a normal draft with ended historical approval only after active designer followup has ended',async()=>{
+  const actor=h.f.people['sample-designer']!,scene=await h.f.scene('2026-11-19T15:59:00.000Z');
+  const style='TEST-ORDINARY-OLD-APPROVAL-'+randomUUID(),identity=new DigitalProductionIdentityService(h.db,true);
+  const forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),repo=new OrderTimeRequestRepository(h.db);
+  const record=await h.f.runtime.run(scene,actor,async()=>{
+   const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const category=(await h.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const draft=await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id}},randomUUID());
+   const check=await h.orderTimeRequests!.check(actor,{kind:'development_publish',sourceId,input:{expectedVersion:draft.version,
+    patternOrder:{categoryId:category.price_id,priceVersion:category.version}}});
+   // Use the repository to retain the shape/events of a historical non-publish
+   // request on this source. Only the current signed DELETE is under test.
+   const approval=await repo.create({operation:{kind:'arrangement',resource:{kind:'source',id:sourceId}},check,
+    actorId:h.f.people['production-management']!.actorId,designerId:actor.actorId,reason:'TEST 来源原时效历史',needsDesigner:true,time:observedBusinessTime()});
+   return {sourceId,draft,approval};
+  });
+  h.setCollectionScene(scene);
+  const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create&search='+encodeURIComponent(style));
+  try{
+   const {page}=tab,api=h.base+'/api/digital-production/sources/'+record.sourceId+'/draft';
+   const remove=page.getByRole('button',{name:'删除草稿 '+style,exact:true});
+   await page.getByRole('button',{name:style,exact:true}).waitFor();
+   await page.getByRole('tab',{name:'草稿箱（1）',exact:true}).waitFor();
+   await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).waitFor();
+   expect(await remove.count()).toBe(0);
+   const denied=await tab.context.request.delete(api,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:record.draft.version}});
+   expect(denied.status(),await denied.text()).toBe(409);
+   await h.f.runtime.run(scene,actor,()=>repo.close(record.approval,{expectedVersion:record.approval.version,
+    actorId:actor.actorId,state:'withdrawn',time:observedBusinessTime()}));
+   await page.reload();await remove.click();
+   const deleted=page.waitForResponse(r=>r.request().method()==='DELETE'&&r.url()===api);
+   await page.getByRole('alertdialog',{name:'删除开发草稿'}).getByRole('button',{name:'删除',exact:true}).click();
+   const receipt=await deleted;expect(receipt.status(),await receipt.text()).toBe(200);
+   expect(receipt.request().postDataJSON()).toEqual({expectedVersion:record.draft.version});
+   await page.getByRole('tab',{name:'草稿箱（0）',exact:true}).waitFor();
+   expect((await repo.read(record.approval.request_id))?.state).toBe('withdrawn');
+   expect((await h.db.query('SELECT 1 FROM digital_order_time_request_events WHERE request_id=$1',[record.approval.request_id])).rowCount).toBe(2);
+  }finally{await tab.close();h.setCollectionScene(undefined);}
+ });
+ it('retains original material records but closes the discarded source investment and projected todo',async()=>{
+  const h=await supplychainSettingsBrowser(url!,await mkdtemp(join(tmpdir(),'dx-discard-original-material-')),
+   {fullApp:true,throughVersion:'0302_digital_order_number_identity'});
+  try{
+   const actor=h.f.people['sample-designer']!,merch=h.f.people.merchandiser!,identity=new DigitalProductionIdentityService(h.db,true);
+   const forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),scene=await h.f.scene('2027-02-01T07:00:00.000Z');
+   const style='TEST-DISCARDED-MATERIAL-'+randomUUID(),occurredAt='2027-02-01T06:00:00.000Z';
+   const {sourceId,draft,investment}=await h.f.runtime.run(scene,actor,async()=>{
+    const numbered=await identity.reserveNumberedDraft(actor,{developmentType:'头版',temporaryStyleNo:style,
+     numbering:{kind:'preorder',customerCode:'PD',productGroup:'男装',salesYear:2027,salesSeries:'P02'}},randomUUID());
+    const sourceId=numbered.sourceId,resource={kind:'source' as const,id:sourceId},raw=initialDevelopmentDocument();
+    const supplierName='TEST 原布行 '+style;
+    const supplier=await h.f.access.createSupplier(h.f.root,CreateSupplierSchema.parse({supplierCode:'TEST-DISC-'+randomUUID().slice(0,8).toUpperCase(),
+     supplierName,supplierType:'fabric',changeReason:'TEST 保留原供应方'}));
+    const fabric={...raw.materials[0]!,materialId:randomUUID(),name:'TEST 原主布',
+     supplier:supplierName,supplierReference:supplier,quantity:'100',quantityUnit:'米'};
+    const other={...fabric,materialId:randomUUID(),name:'TEST 原配布',category:'配布' as const};
+    const draft=await forms.save(actor,sourceId,{expectedVersion:0,document:{...raw,materials:[fabric,other],customerOrderDraft:{withOrder:true,stage:'preorder',
+     order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'',temporaryStyleNo:style,
+      primaryMerchandiserId:merch.actorId,orderDate:'',contractDeliveryDate:null,lines:[{color:'',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})}}},randomUUID());
+    const context=await preparationContext(h.db,resource);
+    // Retained pre-cutover native evidence, not an attempt to allow new writes
+    // on current unissued numbered preorders. The real DB guards stay active.
+    await appendPreparationMaterial(h.db,context,actor.actorId,{kind:'design_handover',scopeRef:'whole',expectedVersion:0,
+     state:'ready',occurredAt,note:'TEST 原投料交接依据',quantities:[],evidenceIds:[],sourceDocumentVersion:draft.version,recipientId:merch.actorId});
+    const investment={kind:'material_investment' as const,scopeRef:'whole',expectedVersion:0,state:'partial' as const,occurredAt,
+     note:'TEST 原部分投料',quantities:[{lineId:null,materialId:fabric.materialId,name:fabric.name,quantity:20,unit:'米'}],
+     evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+    await appendPreparationMaterial(h.db,context,merch.actorId,investment);
+    return {sourceId,draft,investment};
+   });
+   await applyDraftTestMigrations(h,303);
+   const evidence=async()=>(await h.db.query('SELECT to_jsonb(m) AS body FROM digital_preparation_material_versions m WHERE resource_id=$1 ORDER BY kind,version',[sourceId])).rows;
+   const before=await evidence();expect(before).toHaveLength(2);
+   const todos=()=>h.f.runtime.run(scene,merch,()=>materialInvestmentTodos(h.db,merch));
+   expect((await todos()).some(todo=>todo.route?.entityId===sourceId)).toBe(true);
+   h.setCollectionScene(scene);
+   const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create&search='+encodeURIComponent(style));
+   const buyer=await h.open(merch.actorId,1165,{},'/ui/digital-production');
+   try{
+    await tab.page.getByRole('button',{name:'删除草稿 '+style,exact:true}).click();
+    const deleted=tab.page.waitForResponse(r=>r.request().method()==='DELETE'&&r.url().endsWith('/sources/'+sourceId+'/draft'));
+    await tab.page.getByRole('alertdialog',{name:'删除开发草稿'}).getByRole('button',{name:'删除',exact:true}).click();
+    const response=await deleted;expect(response.status(),await response.text()).toBe(200);
+    expect(response.request().postDataJSON()).toEqual({expectedVersion:draft.version});
+    const oldEntry=h.base+'/api/digital-production/sources/'+sourceId+'/production-readiness';
+    const blocked=await buyer.context.request.post(oldEntry+'/materials',{headers:{'idempotency-key':randomUUID()},
+     data:{...investment,expectedVersion:1,note:'TEST 作废之后从旧链接再投料'}});
+    expect(blocked.status()).toBe(409);
+    expect(await blocked.text()).toContain('开发来源已作废');
+    expect((await todos()).some(todo=>todo.route?.entityId===sourceId)).toBe(false);
+    expect(await evidence()).toEqual(before);
+   }finally{await buyer.close();await tab.close();h.setCollectionScene(undefined);}
+  }finally{await h.dispose();}
  });
  it('starts one effective clock at successful publication, rolls back a failed native pattern write, and preserves it through later order confirmation',async()=>{
   const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);

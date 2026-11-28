@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {developmentCraftOptions,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
@@ -222,7 +223,8 @@ export async function secondaryCraftDirectory(db:Pick<PoolClient,'query'>,actor:
   FROM digital_quotation_documents q
   LEFT JOIN digital_production_orders o USING(production_order_id)
   LEFT JOIN digital_production_sources s ON s.source_id=q.source_id
-  WHERE NOT EXISTS (SELECT 1 FROM digital_production_resource_lifecycle l
+  WHERE (q.source_id IS NULL OR ${await wholeOrderActiveSql(db,'source','q.source_id')})
+  AND NOT EXISTS (SELECT 1 FROM digital_production_resource_lifecycle l
    WHERE l.state<>'active' AND ((l.resource_kind='order' AND l.resource_id=q.production_order_id)
     OR (l.resource_kind='source' AND l.resource_id=q.source_id)))
   AND (EXISTS (SELECT 1 FROM jsonb_array_elements(q.assignments) a

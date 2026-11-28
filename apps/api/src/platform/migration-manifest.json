@@ -1347,6 +1347,10 @@
     {
       "version": "0322_development_draft_withdraw_discard",
       "checksum": "733cdac9dd5e11ba7a7a43c5d45ea35c7030fb40e9cae659900f1f798b7ffecf"
+    },
+    {
+      "version": "0323_development_draft_discard_policy",
+      "checksum": "faa4c3565140514b75eb1566b637f77b462363705d3ed8fc21b2a719778ad458"
     }
   ]
 }
