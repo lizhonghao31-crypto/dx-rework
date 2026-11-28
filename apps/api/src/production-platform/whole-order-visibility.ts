@@ -21,13 +21,16 @@ export async function wholeOrderActiveSql(db:DB,kind:string,expression:string){
  if(kind==='source')return await wholeOrderDeletionAvailable(db)?`digital_whole_order_active('source',${expression})`:'true';
  return await wholeOrderDeletionAvailable(db)?`NOT EXISTS(SELECT 1 FROM digital_whole_order_deleted_objects whole_deleted WHERE whole_deleted.object_kind='${kind}' AND whole_deleted.object_id=${expression})`:'true';
 }
+export async function wholeSourceActive(db:DB,id:string){
+ return !await wholeOrderDeletionAvailable(db)||(await db.query("SELECT digital_whole_order_active('source',$1) AS active",[id])).rows[0]?.active===true;
+}
 export async function assertWholeOrderActive(db:DB,kind:string,id:string){
- if(!await wholeOrderDeletionAvailable(db))return;
  if(kind==='source'){
-  if(!(await db.query("SELECT digital_whole_order_active('source',$1) AS active",[id])).rows[0]?.active)
+  if(!await wholeSourceActive(db,id))
    throw new ApplicationError('ORDER_DELETED','订单已删除，不能继续查看或办理',410);
   return;
  }
+ if(!await wholeOrderDeletionAvailable(db))return;
  if((await db.query('SELECT 1 FROM digital_whole_order_deleted_objects WHERE object_kind=$1 AND object_id=$2',[kind,id])).rowCount)
   throw new ApplicationError('ORDER_DELETED','订单已删除，不能继续查看或办理',410);
 }

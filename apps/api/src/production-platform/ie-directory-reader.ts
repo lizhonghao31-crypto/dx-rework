@@ -29,7 +29,7 @@ export async function readIntegratedIeDirectory(database:Pool,actors:IntegratedI
   const allowed:IeAuthorizedCandidates={};
   if(input.kind==='all'||input.kind==='processing_quote'){
    const viewer=await ieProcessingViewer(db,actors.processing);
-   if(viewer)allowed.processing_quote=processingIeCandidates(database,viewer);
+   if(viewer)allowed.processing_quote=await processingIeCandidates(db,database,viewer);
   }
   if(actors.sourcing&&(input.kind==='all'||input.kind==='sourcing_review')){
    const sourcing=sourcingIeCandidates(actors.sourcing);

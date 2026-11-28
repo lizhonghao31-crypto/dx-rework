@@ -461,7 +461,8 @@ function DigitalDesignerWorkspaceContent() {
                 if(local)void openCreation(()=>creation.resume(local.viewId),local.viewId);
                 else if(saved)void openSavedDraft(saved.sourceId);
               }}/>
-              <span>{[kind,saved?(`最后保存 ${date(saved.updatedAt)}`):'尚未写入服务器',!saved?.designStyleNo?'尚未发号':null].filter(Boolean).join(' · ')}</span>
+              <span>{[kind,saved?(`最后保存 ${date(saved.updatedAt)}`):'尚未写入服务器',!saved?.designStyleNo?'尚未发号':null,
+                saved?.approvalState?draftApproval[saved.approvalState].label:null].filter(Boolean).join(' · ')}</span>
             </div>
             {canCreate&&(!saved||saved.canDiscard)&&<AstryxButton label="删除" aria-label={`删除草稿 ${code}`} variant="destructive" size="sm" type="button" isDisabled={creationBusy} onClick={()=>void discardDraft(row)}/>}
           </li>;

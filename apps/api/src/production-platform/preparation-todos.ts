@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import type {Pool,PoolClient} from 'pg';
 import type {TodoResponse} from '@dx-rework/contracts';
@@ -69,7 +70,7 @@ export async function materialInvestmentTodos(db:DB,actor:TrustedActorContext,pr
  const rows=(await db.query<Candidate>(`WITH resources AS (
   SELECT s.source_id,o.production_order_id,o.primary_merchandiser_id,s.design_style_no,s.customer_code
   FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
-  WHERE o.production_order_id IS NULL OR o.primary_merchandiser_id=$1
+  WHERE (o.production_order_id IS NULL OR o.primary_merchandiser_id=$1) AND ${await wholeOrderActiveSql(db,'source','s.source_id')}
   UNION ALL
   SELECT NULL,o.production_order_id,o.primary_merchandiser_id,o.design_style_no,NULL
   FROM digital_production_orders o WHERE o.source_id IS NULL AND o.primary_merchandiser_id=$1

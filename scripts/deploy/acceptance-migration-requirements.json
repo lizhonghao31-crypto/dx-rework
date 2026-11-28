@@ -2955,5 +2955,25 @@
       "digital_whole_order_active"
     ],
     "sequences": []
+  },
+  "0323_development_draft_discard_policy": {
+    "checksum": "faa4c3565140514b75eb1566b637f77b462363705d3ed8fc21b2a719778ad458",
+    "tables": [
+      "digital_development_documents",
+      "digital_development_source_lifecycle",
+      "digital_order_time_requests",
+      "digital_production_sources"
+    ],
+    "functions": [
+      "digital_development_draft_discardable"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "digital_whole_order_active"
+    ],
+    "sequences": []
   }
 }
