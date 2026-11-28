@@ -63,6 +63,8 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  const [adoptions,setAdoptions]=useState<Record<string,string>>({});
  const [structureDirty,setStructureDirty]=useState(false),[editingRowId,setEditingRowId]=useState<string|null>(null),[confirmationDirty,setConfirmationDirty]=useState(false);
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[uncertain,setUncertain]=useState(false),[history,setHistory]=useState<number|undefined>(originalSnapshot?.version??initialHistory.version),[retry,setRetry]=useState(0);
+ const [basisBlocked,setBasisBlocked]=useState(false),[previousInputs,setPreviousInputs]=useState<string[]>([]);
+ const basisRequest=useRef<{quoteId:string;key:string;applied:boolean}|null>(null);
  const [confirmedTotal,setConfirmedTotal]=useState(''),[scope,setScope]=useState<'per_piece'|'order_total'>('per_piece'),[quantity,setQuantity]=useState(''),[taxBasis,setTaxBasis]=useState<'excludes_tax'|'includes_tax'>('excludes_tax'),[evidence,setEvidence]=useState(''),[confirmedDate,setConfirmedDate]=useState('');
  const [adoptedPrice,setAdoptedPrice]=useState<{version:number;input:QuotationPricingInput;price:string}|null>(null);
  const writing=useRef(false),generation=useRef(0),operation=useRef<{path:string;method:string;body:unknown;key:string;startedAt:number}|null>(null),base=route(resource);
@@ -92,6 +94,7 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
   setSheet(null);setDocument(empty());setAssignments([]);setRowInputs({});setParticipants([]);setAdoptions({});
   setDisplayedRead(null);setReadFailure(null);setError('');setBusy(false);setDirty(false);setStructureDirty(false);
   setEditingRowId(null);setConfirmationDirty(false);setUncertain(false);setAdoptedPrice(null);
+  setBasisBlocked(false);setPreviousInputs([]);basisRequest.current=null;
   setConfirmedTotal('');setQuantity('');setEvidence('');setConfirmedDate('');
   setRetry(value=>value+1);
  }),[]);
@@ -126,14 +129,61 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  },[base,history,readKey,initialHistory.error,originalSnapshot,workbench]);
  const mutate=async(path:string,method:string,body:unknown)=>{
   if(originalSnapshot)return;
-  if(!canEditDisplayed||writing.current||uncertain)return;writing.current=true;setBusy(true);setError('');const epoch=generation.current;
+  if(!canEditDisplayed||writing.current||uncertain||basisBlocked)return;writing.current=true;setBusy(true);setError('');const epoch=generation.current;
   const op={path,method,body:JSON.parse(JSON.stringify(body)) as unknown,key:createClientRequestId(),startedAt:Date.now()};operation.current=op;
   try{const value=await quotationRequest(path,resource,method,op.body,op.key);if(epoch!==generation.current)return;install(value);operation.current=null;onChanged?.();}
-  catch(e){if(epoch!==generation.current)return;const unknown=e instanceof DigitalRequestError?e.resultUnknown:unknownWriteResult(e);setUncertain(unknown);if(!unknown)operation.current=null;setError(e instanceof Error?e.message:'报价提交失败，输入保留');}
+  catch(e){if(epoch!==generation.current)return;const unknown=e instanceof DigitalRequestError?e.resultUnknown:unknownWriteResult(e);setUncertain(unknown);if(!unknown)operation.current=null;
+   if(e instanceof DigitalRequestError&&e.code==='QUOTATION_BASIS_SYNC_REQUIRED'){
+    setBasisBlocked(true);
+    const proposed=assignments.flatMap(assignment=>{
+     const current=sheet?.assignments.find(row=>row.rowId===assignment.rowId),name=document.rows.find(row=>row.rowId===assignment.rowId)?.name;
+     const person=(id:string|null)=>participants.find(value=>value.id===id)?.name??(id?'所选负责人':'未指派');
+     return [...(current&&current.priceAssigneeId!==assignment.priceAssigneeId?[`${name}价格负责人：${person(assignment.priceAssigneeId)}`]:[]),
+      ...(current&&current.technicalAssigneeId!==assignment.technicalAssigneeId?[`${name}用量负责人：${person(assignment.technicalAssigneeId)}`]:[])];
+    });
+    for(const [id,fields] of Object.entries(rowInputs))for(const [field,value] of Object.entries(fields)){
+     const label={consumption:'单件用量',unitPrice:'单价',pricingUnit:'计价单位'}[field];
+     if(label)proposed.push(`${document.rows.find(row=>row.rowId===id)?.name??'原报价行'}${label}：${value}`);
+    }
+    if(confirmationDirty||path.endsWith('/confirm'))proposed.push(
+     `拟登记的客户确认：${confirmedTotal} 元 · ${scope==='per_piece'?'单件':`整单 ${quantity} 件`} · ${taxBasis==='excludes_tax'?'不含税':'含税'}`,
+     `客户确认依据：${evidence}`,`客户确认时间：${confirmedDate}`);
+    setPreviousInputs(proposed);
+    setError(sheet?.canStructure?e.message:'原单的报价依据已变更，本次没有保存。请通知本单设计师同步后再读取。');
+   }else setError(e instanceof Error?e.message:'报价提交失败，输入保留');
+  }
   finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}
  };
  const recover=async()=>{const op=operation.current;if(!op||writing.current||!uncertain)return;if(Date.now()-op.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError('已超过原请求安全恢复期限，请核对原报价版本，不能生成新请求重发');return;}const epoch=generation.current;writing.current=true;setBusy(true);try{const value=await quotationRequest(op.path,resource,op.method,op.body,op.key);if(epoch!==generation.current)return;install(value);setUncertain(false);operation.current=null;setError('');onChanged?.();}catch(e){if(epoch===generation.current)setError(e instanceof Error?e.message:'原报价回执仍未确认');}finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}};
- const reload=async()=>{if(refreshing||writing.current)return;if(!uncertain&&(dirty||confirmationDirty)&&!await confirmInApp('重新载入会丢弃本页未保存修改，确定继续？'))return;if(uncertain){try{const current=await quotationRequest(base,resource);setError(`当前报价 v${current.version}，原请求结果仍未确认；输入和请求标识保留`);}catch(e){setError(e instanceof Error?e.message:'读取失败');}return;}setRetry(v=>v+1);};
+ const reload=async()=>{
+  if(refreshing||writing.current)return;
+  if(basisBlocked&&sheet?.quoteId){
+   const epoch=generation.current;
+   writing.current=true;setBusy(true);setError('');
+   try{
+    if(sheet.canStructure){
+     const request=basisRequest.current??{quoteId:sheet.quoteId,key:createClientRequestId(),applied:false};
+     basisRequest.current=request;
+     if(!request.applied){
+      const result=await digitalRequest<QuotationSheet>(`${base}/refresh-basis`,'POST',{quoteId:request.quoteId},request.key);
+      if(result?.quoteId!==request.quoteId||result.commandReceipt?.action!=='refresh-basis'
+       ||!Number.isSafeInteger(result.commandReceipt.appliedVersion)||result.version<result.commandReceipt.appliedVersion)
+       throw new DigitalRequestError('同步回执待确认，请用同一请求继续核对',200,'INVALID_RESPONSE');
+      request.applied=true;
+     }
+    }
+    const latest=await quotationRequest(base,resource);
+    if(epoch!==generation.current)return;
+    install(latest);setAdoptedPrice(null);setConfirmedTotal('');setQuantity('');setEvidence('');setConfirmedDate('');
+    basisRequest.current=null;setBasisBlocked(false);onChanged?.();
+   }catch(error){if(epoch===generation.current)setError(error instanceof Error?error.message:'读取报价失败，原输入保留');}
+   finally{if(epoch===generation.current){writing.current=false;setBusy(false);}}
+   return;
+  }
+  if(!uncertain&&(dirty||confirmationDirty)&&!await confirmInApp('重新载入会丢弃本页未保存修改，确定继续？'))return;
+  if(uncertain){try{const current=await quotationRequest(base,resource);setError(`当前报价 v${current.version}，原请求结果仍未确认；输入和请求标识保留`);}catch(e){setError(e instanceof Error?e.message:'读取失败');}return;}
+  setRetry(v=>v+1);
+ };
  const edit=(patch:Partial<BudgetDocument>)=>{setDocument(v=>({...v,...patch}));setDirty(true);setStructureDirty(true);};
  const rowEdit=(id:string,patch:Partial<BudgetRow>)=>{edit({rows:document.rows.map(row=>row.rowId===id?{...row,...patch}:row)});};
  const assignmentEdit=(id:string,patch:Partial<QuotationAssignment>)=>{setAssignments(v=>v.map(a=>a.rowId===id?{...a,...patch}:a));setDirty(true);setStructureDirty(true);};
@@ -152,8 +202,8 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  const onHeadline=designerWorkbench?.onHeadline;
  const projection=sheet?.designerStatus,expectedRound=designerWorkbench?.roundNumber;
  const sameRound=!projection?.roundNumber||!expectedRound||projection.roundNumber===expectedRound;
- const statusCode:DesignerQuotationStatusCode=refreshing||onHeadline&&history!==undefined?'unverified':readFailure??(sameRound?projection?.state:undefined)??'unverified';
- const currentStatus=canEditDisplayed&&history===undefined&&sameRound?projection:undefined;
+ const statusCode:DesignerQuotationStatusCode=refreshing||basisBlocked||onHeadline&&history!==undefined?'unverified':readFailure??(sameRound?projection?.state:undefined)??'unverified';
+ const currentStatus=canEditDisplayed&&!basisBlocked&&history===undefined&&sameRound?projection:undefined;
  const quoteId=currentStatus?.quoteId??null,quoteVersion=currentStatus?.version??null,quoteRound=currentStatus?.roundNumber??null;
  useEffect(()=>onHeadline?.({resource:{kind:resource.kind,id:resource.id},state:statusCode,quoteId,version:quoteVersion,roundNumber:quoteRound}),
   [onHeadline,resource.kind,resource.id,statusCode,quoteId,quoteVersion,quoteRound]);
@@ -162,17 +212,18 @@ export function DigitalQuotationPanel({resource,onChanged,originalSnapshot,desig
  const confirmedPricing=sheet?.status==='confirmed'?sheet.confirmedPricing:null;
  const back=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get('returnTo'),import.meta.env.BASE_URL);
  return <Surface><section className="quotation-editor dx-doc-budget"><DocumentToolbar title={workbench?"对客户报价表":"客户报价表"} status={busy?'提交中':uncertain?'原提交结果待确认':dirty?'未保存修改':sheet?`v${sheet.version} · ${sheet.status==='confirmed'?'客户已确认':'协作草稿'}`:'读取中'}>
-  {!workbench&&<>{back&&<a className="dx-button dx-button--secondary" href={back}>返回原单</a>}<a href={urls.pageUrl('ui/digital-quotation')}>我的报价协作</a></>}{sheet?.canStructure&&<Button disabled={!canEditDisplayed||busy||uncertain||editingRowId!==null} onClick={save}>保存报价</Button>}
- </DocumentToolbar>{error&&<p role="alert">{error}</p>}{uncertain?<><Button disabled={busy} onClick={()=>void recover()}>使用原内容核对报价提交</Button><Button disabled={busy} onClick={()=>void reload()}>仅核对当前版本</Button></>:<Button disabled={busy||refreshing} onClick={()=>void reload()}>重新读取报价</Button>}
+  {!workbench&&<>{back&&<a className="dx-button dx-button--secondary" href={back}>返回原单</a>}<a href={urls.pageUrl('ui/digital-quotation')}>我的报价协作</a></>}{sheet?.canStructure&&<Button disabled={!canEditDisplayed||busy||uncertain||basisBlocked||editingRowId!==null} onClick={save}>保存报价</Button>}
+ </DocumentToolbar>{error&&<p role="alert">{error}</p>}{uncertain?<><Button disabled={busy} onClick={()=>void recover()}>使用原内容核对报价提交</Button><Button disabled={busy} onClick={()=>void reload()}>仅核对当前版本</Button></>:<Button disabled={busy||refreshing} onClick={()=>void reload()}>{basisBlocked&&sheet?.canStructure?'同步并重新读取报价':'重新读取报价'}</Button>}
+ {previousInputs.length>0&&<details><summary>核对上次未保存的输入</summary><p>仅供核对，不会自动覆盖当前报价。</p><ul>{previousInputs.map((value,index)=><li key={index}>{value}</li>)}</ul></details>}
  {workbench&&<div className="quotation-designer-state" aria-label="当前报价状态">
    <StatusBadge tone={displayStatus.tone}>{displayStatus.label}</StatusBadge>
-   {sheet?.designerStatus&&canEditDisplayed&&sameRound&&<><span>已完成 {sheet.designerStatus.completed}/{sheet.designerStatus.applicable} 项</span>
+   {sheet?.designerStatus&&canEditDisplayed&&!basisBlocked&&sameRound&&<><span>已完成 {sheet.designerStatus.completed}/{sheet.designerStatus.applicable} 项</span>
     {sheet.designerStatus.reasons.length>0&&<p>{sheet.designerStatus.reasons.join('、')}</p>}</>}
  </div>}
- {sheet&&<>{!workbench&&sheet.automatic&&<p>材料、用量与工艺按本单资料自动汇集。{sheet.status==='confirmed'?'':sheet.workbenchReadiness?.canConfirm?'报价资料已齐，待客户确认。':sheet.workbenchReadiness?.reasons.length?sheet.workbenchReadiness.reasons.join('、')+'。':'仍有资料或负责人员待补齐。'}</p>}<div className="budget-heading"><p>设计编号：<strong>{sheet.designStyleNo}</strong></p><p>客户：{sheet.customerCode??'通用开发'}</p><p>{workbench&&sheet.status==='draft'&&sheet.confirmedVersion!==null?'客户上次确认版':'客户当前确认版'}：{sheet.confirmedVersion??'尚未确认'}</p></div>
+ {sheet&&<>{!workbench&&sheet.automatic&&!basisBlocked&&<p>材料、用量与工艺按本单资料自动汇集。{sheet.status==='confirmed'?'':sheet.workbenchReadiness?.canConfirm?'报价资料已齐，待客户确认。':sheet.workbenchReadiness?.reasons.length?sheet.workbenchReadiness.reasons.join('、')+'。':'仍有资料或负责人员待补齐。'}</p>}<div className="budget-heading"><p>设计编号：<strong>{sheet.designStyleNo}</strong></p><p>客户：{sheet.customerCode??'通用开发'}</p><p>{workbench&&sheet.status==='draft'&&sheet.confirmedVersion!==null?'客户上次确认版':'客户当前确认版'}：{sheet.confirmedVersion??'尚未确认'}</p></div>
  {sheet.priorCraftRows?.length&&<details><summary>历史工艺报价（不计入本版金额）</summary><table><thead><tr><th>阶段</th><th>工艺</th><th>单位</th><th>原单价</th></tr></thead><tbody>{sheet.priorCraftRows.map(({row,stage})=><tr key={row.rowId}><td>{stage==='development'?'开发':'大货'}</td><td>{row.name}</td><td>{row.unit}</td><td>{quotationAmountDisplay(row.unitPrice,'未填写')}</td></tr>)}</tbody></table></details>}
  <label>查看报价版本<select aria-label="查看报价版本" disabled={Boolean(originalSnapshot)||busy||uncertain} value={history??''} onChange={async e=>{const next=e.target.value?Number(e.target.value):undefined;if((dirty||confirmationDirty)&&!await confirmInApp('切换版本将丢弃未保存修改，继续？'))return;setHistory(next);}}><option value="">当前协作资料</option>{sheet.versions.map(v=><option key={v} value={v}>客户确认版 {v}</option>)}</select></label>
- <fieldset className="quotation-read-fields" disabled={!canEditDisplayed}>
+ <fieldset className="quotation-read-fields" disabled={!canEditDisplayed||basisBlocked}>
  {sheet.status==='confirmed'&&sheet.canStructure&&<p>客户原确认版已保留。修改后保存为新协作草稿，须重新记录客户确认，才会提供新的预算对照。</p>}{!sheet.automatic&&sheet.fullCost&&<DocumentSection id="quote-basic" title="报价基本信息"><div className="budget-heading">{(['productCategory','fabricType','monthSeries','date','freight','cm','salePrice','outsourcingScope','outsourcingUnitPrice'] as const).map(key=><label key={key}>{({productCategory:'产品类别',fabricType:'面料属性',monthSeries:'月份系列',date:'报价日期',freight:'运费',cm:'CM加工费用',salePrice:'参考销售单价',outsourcingScope:'外发范围',outsourcingUnitPrice:'外发预算参考价'})[key]}<DocumentField id={`quote-${key}`} label={({productCategory:'产品类别',fabricType:'面料属性',monthSeries:'月份系列',date:'报价日期',freight:'运费',cm:'CM加工费用',salePrice:'参考销售单价',outsourcingScope:'外发范围',outsourcingUnitPrice:'外发预算参考价'})[key]} value={String(document[key]??'')} {...(['freight','cm','salePrice','outsourcingUnitPrice'].includes(key)?{displayValue:quotationAmountDisplay(String(document[key]??''),'')}: {})} readonly={readOnly} disabled={busy} type={key==='date'?'date':'text'} onValue={value=>edit({[key]:key==='date'?value||null:value})}/></label>)}</div></DocumentSection>}
  <DocumentSection id="quote-rows" title={workbench?'成本明细':sheet.fullCost?'分项报价与责任分工':'我负责的报价明细'} detail="单件用量由技术填写；物料价格由设计填写；工艺价格由指定报价岗位填写">
  <DocumentTableScroll scrollLabel="报价明细，可左右滚动查看全部字段"><table><thead><tr><th>类别</th><th>物料或工序</th><th>规格</th><th>单位</th><th>供应方</th><th>单件用量</th><th>单价（不含税）</th>{sheet.fullCost&&<th>金额</th>}{!workbench&&<th>技术用量负责人</th>}<th>价格负责人</th>{workbench&&<th>状态</th>}{!structureReadOnly&&<th>操作</th>}</tr></thead><tbody>{(sheet.fullCost?document.rows:sheet.rows).map(row=>{const a=assignments.find(a=>a.rowId===row.rowId),visibleRow=sheet.rows.find(r=>r.rowId===row.rowId);return <tr key={row.rowId}>

@@ -18,12 +18,11 @@ export type AssembledQuotation={quote_id:string;source_id:string|null;production
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return `${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;}
 
-/** Called by original write commands inside their lifecycle lock/transaction.
- * Re-read current source state rather than applying a potentially late event payload.
- * No GET invokes this writer; confirmed snapshots and budgets are never updated here. */
-export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>):Promise<AssembledQuotation|undefined>{
- // This writer is called under the caller's original lifecycle lock; a late
- // event must not rebuild or notify from a discarded source.
+type QuotationBasisChange={kind:'unchanged'|'source_pointer'|'commercial';quote:AssembledQuotation};
+
+/** Compare the effective source to the stored quote under the caller's lifecycle
+ * lock. Calculation never writes, notifies, or changes the stored version. */
+export async function planQuotationBasis(db:PoolClient,sourceId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>):Promise<QuotationBasisChange|undefined>{
  if(!await wholeSourceActive(db,sourceId))return;
  const saved=await developmentDocumentRow(db,sourceId);
  if(saved?.document?.quotationMode!=='automatic_v1'||(await developmentSourceLifecycle(db,sourceId))?.is_draft)return;
@@ -32,7 +31,7 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  if(!source)return;
  const old=(await db.query('SELECT * FROM digital_quotation_documents WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0] as AssembledQuotation|undefined;
  // A historical manual quote is never silently converted, even when source data gains prices.
- if(old&&!old.assembly)return old;
+ if(old&&!old.assembly)return {kind:'unchanged',quote:old};
  // A legacy hash can only be upgraded against its actual source version.
  // Document-changing commands provide the pre-write row under the lifecycle lock.
  const legacySource=previousSource??saved;
@@ -134,13 +133,36 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
   if(row&&assignment)priorCraftRows[id]={row,assignment,ref,...(old!.price_sources[id]?{priceSource:old!.price_sources[id]}:{})};
  }
  const assembly:QuotationAssembly={...(Object.keys(priorCraftRows).length?{priorCraftRows}:{}),schemaVersion:1,sourceVersion:saved.version,roundNumber:round,...(Object.keys(materialPricingUnits).length?{materialPricingUnits}:{}),fingerprint:digest(Object.keys(materialPricingUnits).length?[output,assignments,refs,materialPricingUnits]:[output,assignments,refs]),rows:refs};
- if(old&&isDeepStrictEqual(old.document,output)&&isDeepStrictEqual(old.assignments,assignments)&&isDeepStrictEqual(old.consumption_sources,consumptions)&&isDeepStrictEqual(old.price_sources,prices)&&isDeepStrictEqual(old.assembly,assembly))return old;
- const quoteId=old?.quote_id??randomUUID();
+ if(old?.assembly&&isDeepStrictEqual(old.document,output)&&isDeepStrictEqual(old.assignments,assignments)
+  &&isDeepStrictEqual(old.consumption_sources,consumptions)&&isDeepStrictEqual(old.price_sources,prices)
+  &&isDeepStrictEqual({...old.assembly,sourceVersion:saved.version},assembly)){
+  if(old.assembly.sourceVersion===saved.version)return {kind:'unchanged',quote:old};
+  return {kind:'source_pointer',quote:{...old,assembly}};
+ }
+ return {kind:'commercial',quote:{quote_id:old?.quote_id??randomUUID(),source_id:sourceId,
+  production_order_id:source.production_order_id??null,version:nextVersion,confirmed_version:old?.confirmed_version??null,
+  document:output,assignments,consumption_sources:consumptions,price_sources:prices,assembly}};
+}
+
+/** Apply only within the transaction that calculated the plan. No snapshots or
+ * frozen budget versions are written by either branch. */
+export async function applyQuotationBasis(db:PoolClient,change:QuotationBasisChange,actorId:string):Promise<AssembledQuotation>{
+ const quote=change.quote;
+ if(change.kind==='unchanged')return quote;
+ if(change.kind==='source_pointer'){
+  await db.query('UPDATE digital_quotation_documents SET assembly=$2 WHERE quote_id=$1',[quote.quote_id,JSON.stringify(quote.assembly)]);
+  return quote;
+ }
  const result=await db.query(`INSERT INTO digital_quotation_documents(quote_id,source_id,production_order_id,version,document,assignments,consumption_sources,price_sources,assembly,updated_by)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(quote_id) DO UPDATE SET version=EXCLUDED.version,document=EXCLUDED.document,assignments=EXCLUDED.assignments,
   consumption_sources=EXCLUDED.consumption_sources,price_sources=EXCLUDED.price_sources,assembly=EXCLUDED.assembly,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP RETURNING *`,
-  [quoteId,sourceId,source.production_order_id??null,nextVersion,JSON.stringify(output),JSON.stringify(assignments),JSON.stringify(consumptions),JSON.stringify(prices),JSON.stringify(assembly),actorId]);
+  [quote.quote_id,quote.source_id,quote.production_order_id,quote.version,JSON.stringify(quote.document),JSON.stringify(quote.assignments),JSON.stringify(quote.consumption_sources),JSON.stringify(quote.price_sources),JSON.stringify(quote.assembly),actorId]);
  const assembled=result.rows[0] as AssembledQuotation;await notifySpecialCraftQuotes(db,assembled);return assembled;
+}
+
+export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>){
+ const change=await planQuotationBasis(db,sourceId,appliedVersion,previousSource);
+ return change?applyQuotationBasis(db,change,actorId):undefined;
 }
 
 export function quotationComplete(q:AssembledQuotation){
