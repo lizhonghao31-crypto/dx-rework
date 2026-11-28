@@ -84,22 +84,59 @@ export class DevelopmentWorkspaceQuery {
       return value.representatives.has(item.journey.id)&&(!chosen||Boolean(row&&(chosen==='handover'&&row.handoverComplete||chosen===row.kind)));
     };
     const indexed=await this.journeys.workspace?.(actor,JourneyFilterSchema.parse({search:filter.search,...(filter.customer?{customer:filter.customer}:{}),startDate:filter.startDate,endDate:filter.endDate}),undefined,async(facts,asOf,freshness,db,authorized)=>{
-      const scoped=facts.filter(item=>!filter.designer||item.designer===filter.designer);
+      const matchesDesigner=(item:{designer:string|null})=>!filter.designer||item.designer===filter.designer;
+      const scoped=facts.filter(matchesDesigner),authorizedScope=authorized.filter(matchesDesigner);
       const handling=filter.layout==='workbench'?await this.handling(db,actor,scoped):undefined;
       const rush=filter.layout==='workbench'?await readDevelopmentOrderRush(db,scoped):new Set<string>();
-      const all=scoped.map(journey=>({journey,...rushMarker(rush,journey),view:developmentNodesView(journey.orderId,journey.nodes),canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})}));
+      const business=filter.layout==='workbench'&&this.readiness?await readDesignerBusinessRoots(db,actor,authorizedScope,this.readiness):null;
+      const all=scoped.map(journey=>{
+        const nativeView=developmentNodesView(journey.orderId,journey.nodes);
+        const view=nativeView==='draft'&&business?.byId.get(journey.id)?.kind==='preorder'?'developing':nativeView;
+        return {journey,...rushMarker(rush,journey),view,canConfirm:!journey.orderId&&Boolean(journey.sourceId)&&(isRootActor(actor)||journey.nodes.some(node=>node.key==='product_development'&&node.owner?.id===actor.actorId)),...(handling?.has(journey.id)?{handling:handling.get(journey.id)!}:{})};
+      });
       const counts=Object.fromEntries(DEVELOPMENT_VIEWS.map(view=>[view.key,view.key==='all'?all.length:all.filter(item=>item.view===view.key).length])) as DevelopmentWorkspaceResult['counts'];
-      const business=filter.layout==='workbench'&&this.readiness?await readDesignerBusinessRoots(db,actor,
-        authorized.filter(item=>!filter.designer||item.designer===filter.designer),this.readiness):null;
+      const selectionFailures=authorizedScope.filter(journey=>journey.readStatus!=='ready');
+      const relevant=selectionFailures.filter(journey=>{
+        if(!selectsBusiness(business,{journey}))return false;
+        // These mismatches are provable from native identity. For handling
+        // and development phase the missing selection might still match.
+        if(journey.orderId)return (filter.view==='all'||filter.view==='ordered')&&(!filter.handling||filter.handling==='all');
+        if(filter.view==='ordered'||business&&filter.view==='draft'&&business.byId.has(journey.id))return false;
+        return true;
+      });
+      const selectedFreshness=business?(relevant.length?{
+        pending:relevant.filter(row=>row.readStatus!=='failed').length,failed:relevant.filter(row=>row.readStatus==='failed').length,
+        retryIds:relevant.filter(row=>row.readStatus==='failed').map(row=>row.id).slice(0,15),
+      }:undefined):freshness;
       const filtered=prioritizeDesignRush(all.filter(item=>selectsBusiness(business,item)&&viewMatches(item,business)),item=>item.journey.nodes);
-      const chosenPage=business?filter.page:freshness?1:filter.page;
+      const chosenPage=business?filter.page:selectedFreshness?1:filter.page;
       const page=filtered.slice((chosenPage-1)*15,chosenPage*15);
-      const shipping=business?await readWorkbenchShipping(db,actor,page.map(item=>item.journey)):null;
-      return {ids:page.map(item=>item.journey.id),finish:(details,finalFreshness=freshness,detailFailures=[])=>{
-        const failures=detailFailures.map(id=>({journeyId:id,designStyleNo:facts.find(item=>item.id===id)!.designStyleNo}));
-        return {asOf,page:business?filter.page:finalFreshness?1:filter.page,pageSize:15 as const,total:finalFreshness?null:filtered.length,
-          counts:finalFreshness?null:counts,...(business?{businessCounts:business.counts}:{}),...(finalFreshness?{freshness:finalFreshness}:{}),
-          ...(failures.length?{detailFailures:failures}:{}),designers:[...new Set(authorized.flatMap(item=>item.designer?[item.designer]:[]))].sort(),
+      let shipping:Map<string,DevelopmentShippingDisplay>|undefined,shippingFailed=false;
+      if(business&&page.length){
+        await db.query('SAVEPOINT designer_shipping_details');
+        try{
+          shipping=await readWorkbenchShipping(db,actor,page.map(item=>item.journey));
+          await db.query('RELEASE SAVEPOINT designer_shipping_details');
+        }catch(error){
+          await db.query('ROLLBACK TO SAVEPOINT designer_shipping_details');await db.query('RELEASE SAVEPOINT designer_shipping_details');
+          if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
+          shippingFailed=true;
+        }
+      }
+      return {ids:page.map(item=>item.journey.id),finish:(details,_unscopedFreshness,detailFailures=[])=>{
+        const missing=new Set(detailFailures),failures=page.filter(item=>shippingFailed||missing.has(item.journey.id))
+          .map(item=>({journeyId:item.journey.id,designStyleNo:item.journey.designStyleNo}));
+        const unavailableRows=business?page.flatMap(({journey:j},position)=>{
+          const kind=business.byId.get(j.id)?.kind;
+          return !details.has(j.id)?[{position,journeyId:j.id,sourceId:j.sourceId,orderId:j.orderId,
+            designStyleNo:j.designStyleNo,styleName:j.styleName??null,customer:j.customer,designer:j.designer,createdAt:j.createdAt,
+            ...(kind?{businessKind:kind}:{})}]:[];
+        }):[];
+        return {asOf,page:chosenPage,pageSize:15 as const,total:selectedFreshness?null:filtered.length,
+          counts:selectedFreshness||business&&selectionFailures.length?null:counts,
+          ...(business?{businessCounts:business.counts}:{}),...(selectedFreshness?{freshness:selectedFreshness}:{}),
+          ...(failures.length?{detailFailures:failures}:{}),...(unavailableRows.length?{unavailableRows}:{}),
+          designers:[...new Set(authorized.flatMap(item=>item.designer?[item.designer]:[]))].sort(),
           customers:[...new Set(authorized.flatMap(item=>item.customer?[item.customer]:[]))].sort(),
           items:page.filter(item=>details.has(item.journey.id)).map(item=>({...item,
             ...(business?.byId.get(item.journey.id)?{business:{...business.byId.get(item.journey.id)!,

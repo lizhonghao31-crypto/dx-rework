@@ -36,8 +36,12 @@ export type DevelopmentWorkspaceItem = {
   /** Published order marker, not approval to alter any deadline. */
   orderRush?:true;
 };
+/** Known page position and native identity only; no inferred tasks or write actions. */
+export type DevelopmentUnavailableRow={position:number;journeyId:string;sourceId:string|null;orderId:string|null;
+ designStyleNo:string;styleName?:string|null;customer:string|null;designer:string|null;createdAt:string;businessKind?:DesignerBusinessKind};
+
 export type DevelopmentWorkspaceResult = {
-  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;
+  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;unavailableRows?:DevelopmentUnavailableRow[];
   counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;businessCounts?:Record<DesignerBusinessKind|'handover',number>;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };

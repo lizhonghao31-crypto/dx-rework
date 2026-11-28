@@ -27,16 +27,16 @@ export async function readDesignerStyleNames(db:PoolClient,actor:TrustedActorCon
 
 /** Scope has already passed the signed journey selection. SQL batches the
  * identity and classification independent from SLA/node projections. */
-export async function readDesignerBusinessRoots(db:PoolClient,actor:TrustedActorContext,scope:readonly {id:string;sourceId:string|null;orderId:string|null}[],
+export async function readDesignerBusinessRoots(db:PoolClient,actor:TrustedActorContext,scope:readonly {id:string;sourceId:string|null;orderId:string|null;asOf?:string|undefined}[],
  readiness:Pick<ProductionReadinessService,'currentFormalHandoversInSnapshot'>,resolveRootFacts=true):Promise<DesignerBusinessProjection|null>{
  const migrated=(await db.query("SELECT to_regclass('digital_development_preorder_publications') AS preorders")).rows[0]?.preorders;
  if(!migrated)return null;
  const out:DesignerBusinessProjection={byId:new Map(),representatives:new Set(),counts:{pure:0,preorder:0,ordered:0,handover:0}};
  if(!scope.length)return out;
  const tables=await developmentReadTables(db),formal=await formalDevelopmentHandoverAvailable(db);
- const requested=scope.map(({id,sourceId,orderId})=>({id,sourceId,orderId}));
+ const requested=scope.map(({id,sourceId,orderId,asOf})=>({id,sourceId,orderId,asOf:asOf??null}));
  const {rows}=await db.query<BusinessRow>(`WITH authorized AS (
-   SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(id text,"sourceId" uuid,"orderId" uuid)
+   SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(id text,"sourceId" uuid,"orderId" uuid,"asOf" timestamptz)
   )
   SELECT x.id,coalesce(r.root_source_id,s.source_id,o.production_order_id)::text AS "rootId",
     r.source_id IS NULL AS "rootRow",CASE WHEN o.production_order_id IS NOT NULL THEN 'ordered'
@@ -49,6 +49,7 @@ export async function readDesignerBusinessRoots(db:PoolClient,actor:TrustedActor
   LEFT JOIN digital_production_orders o ON o.production_order_id=x."orderId"
   LEFT JOIN digital_development_revision_sources r ON r.source_id=s.source_id
   LEFT JOIN digital_development_preorder_publications p ON p.source_id=s.source_id
+   AND (x."asOf" IS NULL OR (p.business_time->>'now')::timestamptz<=x."asOf")
   LEFT JOIN ${tables.documents} d ON d.source_id=s.source_id
   LEFT JOIN digital_production_resource_lifecycle sr ON sr.resource_kind='source' AND sr.resource_id=s.source_id
   LEFT JOIN digital_production_resource_lifecycle oro ON oro.resource_kind='order' AND oro.resource_id=o.production_order_id

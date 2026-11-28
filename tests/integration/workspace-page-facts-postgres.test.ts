@@ -7,6 +7,7 @@ import type {PoolClient} from 'pg';
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {afterAll,beforeAll,describe,it,expect,vi} from 'vitest';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {prepareRewashSettings} from '../helpers/order-time-rewash-fixture.js';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -105,6 +106,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{const actual=await new DevelopmentWorkspaceQuery(nativeQuery).designer(f.root,filter);expect(actual).toMatchObject({page:2,total:expected.total,counts:expected.counts});expect(actual.freshness).toBeUndefined();expect(actual.detailFailures?.map(item=>item.journeyId)).toEqual([target]);expect(actual.items.map(item=>item.journey.id)).toEqual(expected.items.filter(item=>item.journey.id!==target).map(item=>item.journey.id));}finally{spy.mockRestore();}
  }));
 
+ it('preserves the authorized workbench row identity and its exact selected position after native detail SQL fails',()=>run(async()=>{
+  const nativeQuery=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),native=Reflect.get(nativeQuery,'project') as (...args:unknown[])=>Promise<OrderJourney|null>;
+  const workbench=new DevelopmentWorkspaceQuery(nativeQuery,undefined,new ProductionReadinessService(f.db));
+  const filter=DevelopmentWorkspaceFilterSchema.parse({layout:'workbench',businessView:'pure',search:'TEST-PERF07-04'}),target=ids[4]!;
+  const before=await workbench.designer(f.root,filter);expect(before).toMatchObject({total:1,items:[{journey:{id:target}}]});
+  const project=vi.spyOn(nativeQuery as unknown as {project:typeof native},'project').mockImplementation(async(...args)=>{
+   if((args[2] as {source?:{source_id:string}}).source?.source_id===target)await(args[0] as PoolClient).query('SELECT 1/0');return native.apply(nativeQuery,args);
+  });
+  try{const read=await workbench.designer(f.root,filter);
+   expect(read).toMatchObject({page:1,total:1,businessCounts:before.businessCounts,counts:before.counts,items:[],
+    detailFailures:[{journeyId:target,designStyleNo:'TEST-PERF07-04'}],unavailableRows:[{position:0,journeyId:target,sourceId:target,orderId:null,designStyleNo:'TEST-PERF07-04',businessKind:'pure'}]});
+   expect(read.freshness).toBeUndefined();expect(Object.keys(read.unavailableRows![0]!)).not.toContain('stages');
+  }finally{project.mockRestore();}
+  expect((await workbench.designer(f.root,filter)).items[0]?.journey.id).toBe(target);
+ }));
+
  it('keeps reliable counts and page2 when one selected pattern detail fails',()=>run(async()=>{
   const tasks=new DigitalProductionTaskService(f.db);
   for(const sourceId of ids.slice(3,18)){const db=await f.db.connect();try{await db.query('BEGIN');await tasks.createWithClient(db,f.root,{resource:{kind:'source',id:sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:f.people['pattern-room-worker']!.actorId});await db.query('COMMIT');}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}await repo.buildOne({kind:'source',id:sourceId});}
@@ -113,5 +130,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const spy=vi.spyOn(nativeQuery as unknown as {project:typeof native},'project').mockImplementation(async(...args)=>{if((args[2] as {source?:{source_id:string}}).source?.source_id===target)await(args[0] as PoolClient).query('SELECT 1/0');return native.apply(nativeQuery,args);});
   try{const actual=await new DevelopmentWorkspaceQuery(nativeQuery).pattern(f.root,filter);expect(actual).toMatchObject({page:2,total:expected.total,counts:expected.counts,riskCounts:expected.riskCounts,archiveTotal:expected.archiveTotal});expect(actual.freshness).toBeUndefined();expect(actual.detailFailures?.map(item=>item.journeyId)).toEqual([target]);expect(actual.items.map(item=>item.node.instanceId)).toEqual(expected.items.filter(item=>item.journeyId!==target).map(item=>item.node.instanceId));}finally{spy.mockRestore();}
  }));
+
+ it('requires an actual pure-development clock without poisoning a different authorized business category',async()=>{
+  await prepareRewashSettings(f);
+  return run(async()=>{
+  const designer=f.people['sample-designer']!,style='TEST-PERF07-MANAGED-PURE',
+   identity=new DigitalProductionIdentityService(f.db,true),forms=new DigitalDevelopmentService(f.db,true);
+  const {sourceId:target}=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const document={...initialDevelopmentDocument(),quantity:1,sizes:['M'],sizeQuantities:[1],sampleSize:'M',orderDate:null,measurements:[],craft:'无' as const,washing:'免洗' as const,materials:[],files:[{attachmentId:await f.image(designer),kind:'款图' as const}]};
+  const saved=await forms.save(designer,target,{expectedVersion:0,document},randomUUID());
+  expect(await forms.publish(designer,target,saved.version,randomUUID())).toMatchObject({status:'published'});
+  await repo.buildOne({kind:'source',id:target});
+  const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),workbench=new DevelopmentWorkspaceQuery(query,undefined,new ProductionReadinessService(f.db));
+  const pure=DevelopmentWorkspaceFilterSchema.parse({layout:'workbench',businessView:'pure',search:style});
+  const ordered=DevelopmentWorkspaceFilterSchema.parse({layout:'workbench',businessView:'ordered',search:'TEST-PERF07-'});
+  const before=await workbench.designer(f.root,ordered);expect(before.total).toBe(1);
+  expect((await workbench.designer(f.root,pure)).total).toBe(1);
+  const original=(await f.db.query('SELECT created_business_time FROM digital_order_time_subjects WHERE source_id=$1',[target])).rows[0]!.created_business_time;
+  await f.db.query("UPDATE digital_order_time_subjects SET created_business_time='{}' WHERE source_id=$1",[target]);
+  try{
+   expect(await workbench.designer(f.root,pure)).toMatchObject({total:null,businessCounts:{pure:1},items:[],freshness:{failed:1}});
+   const unaffected=await workbench.designer(f.root,ordered);expect(unaffected.total).toBe(before.total);
+   expect(unaffected.items.map(row=>row.journey.id)).toEqual(before.items.map(row=>row.journey.id));expect(unaffected.freshness).toBeUndefined();
+  }finally{await f.db.query('UPDATE digital_order_time_subjects SET created_business_time=$2 WHERE source_id=$1',[target,original]);}
+  expect((await workbench.designer(f.root,pure)).total).toBe(1);
+  });
+ });
 
 });
