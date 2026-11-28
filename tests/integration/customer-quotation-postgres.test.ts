@@ -165,11 +165,19 @@ const url=process.env.TEST_DATABASE_URL;
     try{return {directory:await quotes.list(worker),reads};}
     finally{database.removeListener('acquire',trace);for(const [client,query] of before)client.query=query;}
    };
-   const narrow={resource,version:technical.version,status:technical.status,designStyleNo:technical.designStyleNo,customerCode:technical.customerCode};
+   const narrow={resource,version:technical.version,status:technical.status,designStyleNo:technical.designStyleNo,customerCode:technical.customerCode,confirmedVersion:null};
+   const verifySnapshotProjection=(reads:Awaited<ReturnType<typeof tracedDirectory>>['reads'])=>{
+    const snapshotReads=reads.filter(({sql})=>sql.includes('digital_quotation_versions'));
+    expect(snapshotReads).toHaveLength(1);
+    expect(snapshotReads[0]!.sql).toContain('confirmed.version AS confirmed_snapshot_version');
+    expect(snapshotReads[0]!.sql).toContain('confirmed.quote_id=quote.quote_id AND confirmed.version=quote.confirmed_version');
+    expect(snapshotReads[0]!.sql).not.toMatch(/confirmed\.(?:confirmation|document|assignments|customer_confirmed_total)|SELECT\s+confirmed\.\*/i);
+   };
    const unlinked=await tracedDirectory();
    expect(unlinked.directory.items).toEqual([narrow]);
    expect(unlinked.reads.filter(({sql})=>sql.includes('WITH candidates AS'))).toHaveLength(1);
-   expect(unlinked.reads.some(({sql})=>/digital_budget_documents|digital_quotation_versions|digital_development_documents|technical_artifact/.test(sql))).toBe(false);
+   verifySnapshotProjection(unlinked.reads);
+   expect(unlinked.reads.some(({sql})=>/digital_budget_documents|digital_development_documents|technical_artifact/.test(sql))).toBe(false);
    const linkedStyle=`TEST-RUSH-QUOTE-${randomUUID()}`,linked=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:linkedStyle,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const linkedResource={kind:'source' as const,id:linked.sourceId},linkedQuote=await readyQuote(linkedResource,false,scopedTech);
    const client=await database.connect();try{
@@ -180,9 +188,10 @@ const url=process.env.TEST_DATABASE_URL;
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
    const mixed=await tracedDirectory();
    expect(mixed.directory.items).toEqual([{
-    resource:linkedResource,version:linkedQuote.sheet.version,status:'draft',designStyleNo:linkedStyle,customerCode:'PD',orderRush:true,
+    resource:linkedResource,version:linkedQuote.sheet.version,status:'draft',designStyleNo:linkedStyle,customerCode:'PD',confirmedVersion:null,orderRush:true,
    },narrow]);
-   expect(mixed.reads.some(({sql})=>/digital_budget_documents|digital_quotation_versions|technical_artifact/.test(sql))).toBe(false);
+   verifySnapshotProjection(mixed.reads);
+   expect(mixed.reads.some(({sql})=>/digital_budget_documents|technical_artifact/.test(sql))).toBe(false);
    const developmentReads=mixed.reads.filter(({sql})=>sql.includes('digital_development_documents'));
    expect(developmentReads.filter(({sql})=>sql.includes('to_regclass('))).toHaveLength(1);
    const flagProjection=developmentReads.filter(({sql})=>!sql.includes('to_regclass('));

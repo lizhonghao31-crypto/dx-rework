@@ -6,6 +6,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {readAuthorizedIeDirectoryPage,type IeAuthorizedCandidates,type IeDirectoryPageInput} from './ie-authorized-directory.js';
 import {ieProcessingViewer,processingIeCandidates} from './ie-processing-directory.js';
 import {developmentRushKey,readDevelopmentOrderRush} from './development-order-rush.js';
+import {readIeQuotationStyleNames} from './ie-quotation-style-names.js';
 
 export type IntegratedIeActors=Readonly<{processing:TrustedActorContext;sourcing:TrustedActorContext|null;rework:TrustedActorContext|null}>;
 
@@ -44,7 +45,10 @@ export async function readIntegratedIeDirectory(database:Pool,actors:IntegratedI
   const result=await readAuthorizedIeDirectoryPage(db,input,allowed);
   const identity=(item:(typeof result.items)[number])=>item.orderId===null?{sourceId:item.resourceId,orderId:null}:{sourceId:null,orderId:item.resourceId};
   const rush=await readDevelopmentOrderRush(db,result.items.filter(item=>item.kind==='processing_quote').map(identity));
-  const items=result.items.map(item=>item.kind==='processing_quote'&&rush.has(developmentRushKey(identity(item))??'')?{...item,orderRush:true as const}:item);
+  const names=await readIeQuotationStyleNames(db,result.items.map(item=>({kind:item.kind,resourceId:item.resourceId,
+   quoteId:item.objectId,order:item.orderId!==null,round:item.round})));
+  const items=result.items.map((item,index)=>({...item,styleName:names[index]??null,
+   ...(item.kind==='processing_quote'&&rush.has(developmentRushKey(identity(item))??'')?{orderRush:true as const}:{})}));
   await db.query('COMMIT');
   return {...result,items};
  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

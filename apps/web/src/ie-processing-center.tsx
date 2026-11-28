@@ -23,6 +23,7 @@ import {quotationRequest} from './digital-quotation-panel.js';
 import {OrderRushBadge} from './order-rush-badge.js';
 import {QuotationBasisImage} from './quotation-basis-image.js';
 import './quotation-basis.css';
+import './ie-quotation-detail.css';
 import {useForegroundWait} from './foreground-loading.js';
 import {navigateInternalPage} from './internal-navigation.js';
 import {loadReworkQueue} from './reporting/reporting-client.js';
@@ -119,7 +120,9 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
   if(identityKey(directoryEntry)!==target)throw Error('当前账号无法查看所选报价行，请返回列表重新选择。');
   const sheet=await quotationRequest(base,resource);
   if(sheet.version!==directoryEntry.version||sheet.quoteId!==quoteId||!sheet.rows.some(row=>row.rowId===rowId))throw Error('报价行已更新，请重新读取。');
-  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis,priceReview:directoryEntry.priceReview};
+  return {sheet,canEdit:directoryEntry.canEditPrice,orderRush:directoryEntry.orderRush,basis:directoryEntry.basis,
+   styleName:directoryEntry.styleName,round:directoryEntry.round,assigneeName:directoryEntry.assigneeName,
+   state:directoryEntry.state,priceReview:directoryEntry.priceReview};
  },[base,resource,quoteId,rowId,target]);
  const read=useForegroundRead(resource.id,target,load);
  useForegroundWait(read.foregroundKey);
@@ -176,20 +179,34 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
    }finally{saving.current=false;}
   });
  };
- return <section aria-label={processingQuoteLabel}>
+ return <section aria-label={processingQuoteLabel} className="ie-quotation-detail">
   <Link href={back}>返回报价列表</Link>
   {read.error&&<p role="alert">{receipt!==null?'报价已保存，重新读取失败。 ':''}{read.error.message} <Button label="重新读取报价" isDisabled={busy||feedback.uncertain} onClick={read.retry}/></p>}
   {sheet&&row&&<>
-   <h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/> · {processingQuoteLabel}</h2><p>{[sheet.customerCode??'未维护客户',`报价 v${receipt??sheet.version}`,row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
-   {basis&&<section aria-label="本行核价依据" className="quotation-basis">
+   <header className="ie-quotation-heading">
+    <div><h2>{sheet.designStyleNo}<OrderRushBadge value={read.value?.orderRush}/>{read.value?.styleName&&<> · {read.value.styleName}</>}</h2>
+     <p>{[sheet.customerCode??'未维护客户',`第 ${read.value!.round} 轮 · v${receipt??sheet.version}`,basis?`开发资料 v${basis.sourceVersion}`:'',
+      `报价负责人 ${read.value?.assigneeName??'—'}`].filter(Boolean).join('　')}</p>
+    </div><Badge label={review?(review.status==='resubmitted'||resent?'已重报，待复核':'退回重核'):stateNames[read.value!.state]}
+     variant={review?'error':read.value!.state==='priced'?'success':'neutral'}/>
+   </header>
+   <div className="ie-quotation-sides">
+   <section aria-label="本行核价依据" className="quotation-basis ie-quotation-card">
     <h3>本行核价依据</h3>
-    {photo?<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/quotations/ie-processing/${quoteId}/${rowId}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}`)}/>:<p>本版未登记款图。</p>}
-    <p>{basis.developmentType} · {basis.template} · 资料 v{basis.sourceVersion}{basis.technicalVersion!==null&&` · 采用技术成果 v${basis.technicalVersion}`}</p>
-    <dl><dt>制作要求</dt><dd>{basis.instructions||'—'}</dd><dt>工艺 / 洗水</dt><dd>{basis.craft} / {basis.washing}</dd>
+    <p>{[row.name,row.specification,row.unit].filter(Boolean).join(' · ')}</p>
+    {basis?<>
+    <div className="ie-quotation-basis-body">
+     <div>{photo?<QuotationBasisImage key={photo.attachmentId} label="本版款图" href={urls.apiUrl(`digital-production/quotations/ie-processing/${quoteId}/${rowId}/style-image/${photo.attachmentId}?documentVersion=${photo.documentVersion}`)}/>:<p>本版未登记款图。</p>}</div>
+     <dl><dt>开发类型</dt><dd>{basis.developmentType} · {basis.template}{basis.technicalVersion!==null&&` · 采用技术成果 v${basis.technicalVersion}`}</dd>
+     <dt>制作要求</dt><dd>{basis.instructions||'—'}</dd><dt>工艺 / 洗水</dt><dd>{basis.craft} / {basis.washing}</dd>
      <dt>样衣数量</dt><dd>{basis.quantity??'—'}</dd><dt>PO</dt><dd>{basis.formalPoNos.join('、')||'—'}</dd>
      <dt>材料</dt><dd>{basis.materials.map(item=>[item.category,item.name,item.specification].filter(Boolean).join(' · ')).join('；')||'—'}</dd></dl>
+    </div>
     {basis.measurements.length>0&&<div className="development-table-scroll"><Table columns={sizeColumns} data={basis.measurements} idKey={measure=>measure.name} aria-label="核价尺寸依据" density="compact"/></div>}
-   </section>}
+    </>:<p>本行没有关联可核的开发资料。</p>}
+   </section>
+   <section aria-label="填写加工单价" className="ie-quotation-card ie-quotation-price">
+   <h3>填写加工单价</h3>
    {review&&<div aria-label="本行退回重核">
     <p>{review.status==='resubmitted'||resent?'已重报，待复核':'退回重核'} · {review.reason}</p>
     {review.status==='returned'&&!resent&&(review.canResubmit?<Button label="重报本行核价" isDisabled={busy||changed||feedback.uncertain||read.waiting} onClick={resubmit}/>
@@ -197,13 +214,16 @@ function ProcessingPriceDetail({selection,back}:{selection:z.infer<typeof entryI
    </div>}
    <form onSubmit={event=>{event.preventDefault();save();}}>
     <Stack gap={2} maxWidth={480}>
-     <TextInput label="加工单价" inputMode="decimal" value={receipt!==null?price:draft??price}
+     <TextInput label="加工单价" inputMode="decimal" placeholder="请输入加工单价" value={receipt!==null?price:draft??price}
       isDisabled={read.waiting||busy||feedback.uncertain||!canEdit||receipt!==null}
       onChange={value=>{setDraft(value);setFieldError('');}}
       {...(fieldError?{status:{type:'error',message:fieldError}}:{})}/>
+     <span className="ie-quotation-unit">元 / 件</span>
      {canEdit&&receipt===null&&<div><Button type="submit" label="保存加工单价" variant="primary" isDisabled={!changed||busy||feedback.uncertain||read.waiting}/></div>}
     </Stack>
    </form>
+   </section>
+   </div>
   </>}
   {feedback.notice&&<p role="status">{feedback.notice}</p>}
   {feedback.uncertain&&<Button label="核对上次提交结果" isDisabled={busy} onClick={()=>void feedback.retry()}/>}
@@ -341,6 +361,7 @@ function UnifiedIeDirectory({location,readDirectory}:{location:UnifiedIeLocation
    return href?<><Link id={resultLinkId(unifiedIeEntryKey(row))} href={href}>{label}</Link><OrderRushBadge value={row.orderRush}/></>:label;
   }},
   {key:'customerCode',header:'客户',renderCell:row=>row.customerCode??'—'},
+  {key:'styleName',header:'款式（品名）',renderCell:row=><span className="ie-quotation-name">{row.styleName??'—'}</span>},
   {key:'kind',header:'报价类型',renderCell:row=>unifiedIeListLabel[row.kind]},
   {key:'pricing',header:'报价 / 单位',renderCell:row=>row.pricing?.kind==='multiple'?'多项价格':row.pricing?.kind==='single'
    ?<span title={`${row.pricing.amount} 元 / ${row.pricing.unit}`}>{formatBusinessDecimal(row.pricing.amount,1)} 元 / {row.pricing.unit}{row.state==='returned'?'（上次）':''}</span>:'—'},

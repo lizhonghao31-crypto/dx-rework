@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {DevelopmentRevisionSchema} from '@dx-rework/contracts/digital-development-rounds';
 import {beijingCalendarDate,DigitalOrderCreateSchema,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
 import type {Page} from 'playwright-core';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
@@ -26,6 +27,7 @@ import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {decideSeenSourcingOwner} from '../helpers/sourcing-owner-approval-fixture.js';
+import {createIndependentDevelopmentRevision} from '../../apps/api/src/production-platform/development-revision-source.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('PR03 automatic quotation through original authenticated App and real PG',()=>{
@@ -42,6 +44,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const resource={kind:'source' as const,id:source.sourceId},today=beijingCalendarDate(new Date()),delivery=minimumInitialCustomerDate();
   const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
    returnDate:null,quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   workbenchSheet:{version:1,styleName:'TEST 同源外发核价品名',brand:'TEST',referenceNote:'',gender:'男装',boardType:'头版',processingSelected:true,sewingRows:[]},
    materials:[],files:[{attachmentId:await f.image(designer),kind:'款图'}]});
   const draft=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
   await forms.publish(designer,source.sourceId,draft.version,randomUUID());
@@ -169,7 +172,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     new URLSearchParams({kind:'sourcing_review',page:'1',search:alternate}));
    expect(response.status(),await response.text()).toBe(200);
    const name=(await db.query('SELECT display_name FROM app_users WHERE id=$1',[ie.actorId])).rows[0]!.display_name;
-   expect(await response.json()).toMatchObject({total:1,items:[{objectId:created.sourcingCaseId,state:'priced',assigneeName:name,
+   expect(await response.json()).toMatchObject({total:1,items:[{objectId:created.sourcingCaseId,state:'priced',assigneeName:name,styleName:'TEST 同源外发核价品名',
     pricing:{kind:'single',amount:'15.8000',unit:'件'}}]});
   }finally{await center.close();}
   expect((await db.query('SELECT count(*)::int AS count FROM sourcing_ie_quotes WHERE sourcing_case_id=$1',[created.sourcingCaseId])).rows[0]!.count).toBe(1);
@@ -178,6 +181,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expectedVersion:corrected.version,reason:'TEST 回原报价中心核对真实加工范围'},randomUUID())).value;
   const latest=await quotes.read(designer,resource);
   const repriced=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:latest.version,unitPrice:'16.2'},randomUUID());
+  const frozenBefore=(await db.query('SELECT status,version,quote_id,quote_version FROM digital_budget_documents WHERE production_order_id=$1',[id])).rows[0];
+  const collaboration=await h.open(designer.actorId,1165,{},'/ui/digital-quotation');
+  try{
+   const directory=collaboration.page.getByRole('row').filter({hasText:style});
+   await directory.getByText(`已确认 v${confirmed.version}`,{exact:true}).waitFor();
+   await directory.getByText(`新协作稿 v${repriced.version}`,{exact:true}).waitFor();
+   expect(await directory.getByText('待客户确认',{exact:true}).count()).toBe(0);
+   await directory.getByRole('link',{name:'打开报价',exact:true}).click();
+   for(const width of [1165,1366]){
+    await collaboration.page.setViewportSize({width,height:820});
+    const summary=collaboration.page.locator('[aria-label="报价摘要"]');
+    await summary.getByRole('heading',{name:/TEST 同源外发核价品名/}).waitFor();
+    await summary.getByText('报价资料已齐，待客户确认。',{exact:true}).waitFor();
+    expect(await collaboration.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+    await collaboration.page.locator('#quote-confirmed-basis').getByText('32.4',{exact:true}).waitFor();
+    expect(await collaboration.page.locator('#quote-confirmed-basis').innerText()).toContain('不含税');
+    await collaboration.page.screenshot({path:join(h.evidence,`quotation-collaboration-${width}.png`)});
+   }
+  }finally{await collaboration.close();}
+  expect((await db.query('SELECT status,version,quote_id,quote_version FROM digital_budget_documents WHERE production_order_id=$1',[id])).rows[0]).toEqual(frozenBefore);
+  expect((await quotes.readSnapshot(ie,resource)).confirmation).toBeNull();
   const confirmation={...confirmed.confirmation!,expectedVersion:repriced.version};
   const newQuote=await quotes.confirm(designer,resource,confirmation,randomUUID());
   await expect(sourcing.correctCase(merch,created.sourcingCaseId,{...correction,expectedVersion:secondReturn.version},randomUUID()))
@@ -307,6 +331,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ieAssignment={rowId:ieRow.rowId,technicalAssigneeId:worker.actorId,priceAssigneeId:ie.actorId,priceRole:'ie_reviewer' as const};
   const saved=await quotes.save(designer,resource,{expectedVersion:0,document,assignments:[ieAssignment]},randomUUID());
   expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({status:'incomplete',counts:{incomplete:1,pendingCraftApproval:0},unitCost:null});
+  const tab=await h.open(designer.actorId,1165,{},'/ui/digital-quotation?kind=order&id='+resource.id);
+  const status=tab.page.locator('[aria-label="当前协作稿办理状态"]');
+  try{
+   await status.waitFor();expect(await status.innerText()).toContain('待IE加工价');
+   expect(await status.innerText()).not.toContain('待客户确认');
   const withUsage=await quotes.fillRow(worker,resource,ieRow.rowId,{expectedVersion:saved.version,consumption:'1'},randomUUID());
   const withPrice=await quotes.fillRow(ie,resource,ieRow.rowId,{expectedVersion:withUsage.version,unitPrice:'9'},randomUUID());
   expect(withPrice.document).toBeNull();
@@ -325,6 +354,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await quotes.workbenchPreview(designer,resource)).toMatchObject({
    status:'incomplete',counts:{incomplete:1,pendingCraftApproval:1},unitCost:null,confirmation:'joint_release_ready',
   });
+   await tab.page.reload();
+   await status.waitFor();expect(await status.innerText()).toContain('待工艺审批');
+   expect(await status.innerText()).not.toContain('待客户确认');
+  }finally{await tab.close();}
  });
  it('paginates real assigned IE processing rows after authorization without changing the original quote readers',async()=>{
   const f=h.f,designer=f.people['sample-designer']!,ie=f.people.ie!,identities=new DigitalProductionIdentityService(h.db,true);
@@ -358,7 +391,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(originalDirectory.ok(),await originalDirectory.text()).toBe(true);
    const originalItems=(await originalDirectory.json()).items;
    expect(originalItems.find(item=>item.resource.id===source.sourceId)).toEqual({resource,designStyleNo:`${prefix}-target`,
-    customerCode:'PD',version:assigned.version,status:'draft',orderRush:true});
+    customerCode:'PD',version:assigned.version,confirmedVersion:null,status:'draft',orderRush:true});
    const first=await ieTab.page.request.get(url(1)),second=await ieTab.page.request.get(url(2)),empty=await ieTab.page.request.get(url(3));
    expect(first.ok(),await first.text()).toBe(true);expect(second.ok(),await second.text()).toBe(true);
    const firstPage=await first.json(),secondPage=await second.json();
@@ -497,6 +530,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const image=await f.image(designer);
   const document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',instructions:'TEST 本轮加工要求',
    rush:true,quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   workbenchSheet:{version:1,styleName:'TEST IE 长款式品名用来核对两栏能否正确换行'.repeat(3),brand:'TEST',referenceNote:'',gender:'男装',boardType:'头版',processingSelected:true,sewingRows:[]},
    files:[{attachmentId:image,kind:'款图'}]});
   const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
   await forms.publish(designer,source.sourceId,saved.version,randomUUID());
@@ -522,9 +556,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(first.total).toBe(second.total);expect(first.items).toHaveLength(15);
    expect(first.items.map(row=>row.objectId)).not.toContain(historic.sourcingCaseId);
    expect(second.items).toEqual(expect.arrayContaining([
-    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned',orderRush:true,pricing:{kind:'single',amount:'7.125',unit:'件'}}),
-    expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId,pricing:{kind:'single',amount:'3.2500',unit:'件'}}),
-    expect.objectContaining({kind:'rework_review',objectId:id,nativeStatus:'pending_ie_review'}),
+    expect.objectContaining({kind:'processing_quote',objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned',orderRush:true,styleName:document.workbenchSheet!.styleName,pricing:{kind:'single',amount:'7.125',unit:'件'}}),
+    expect.objectContaining({kind:'sourcing_review',objectId:historic.sourcingCaseId,styleName:null,pricing:{kind:'single',amount:'3.2500',unit:'件'}}),
+    expect.objectContaining({kind:'rework_review',objectId:id,nativeStatus:'pending_ie_review',styleName:null}),
    ]));
    const keys=[...first.items,...second.items].map(row=>`${row.kind}:${row.objectId}:${row.entryId}`);
    expect(new Set(keys).size).toBe(keys.length);
@@ -558,6 +592,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(needsRevision.status()).toBe(200);
     expect(await needsRevision.json()).toMatchObject({total:1,items:[{objectId:quote.quoteId,entryId:ieRow.rowId,state:'returned'}]});
     await page.getByRole('row').filter({has:link('processing_quote',quote.quoteId!,ieRow.rowId)}).getByText('急单',{exact:true}).waitFor();
+    await page.getByRole('columnheader',{name:'款式（品名）',exact:true}).waitFor();
+    await page.getByRole('row').filter({has:link('processing_quote',quote.quoteId!,ieRow.rowId)}).getByText(document.workbenchSheet!.styleName,{exact:true}).waitFor();
     await page.getByText('7.1 元 / 件（上次）',{exact:true}).waitFor();
     const forbidden=await h.open(designer.actorId,1165,{},'/ui/home');
     try{expect((await forbidden.page.request.get(url+'?kind=rework_review')).status()).toBe(403);}
@@ -573,6 +609,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
       const basis=page.getByRole('region',{name:'本行核价依据'});
       await basis.getByText('TEST 本轮加工要求',{exact:true}).waitFor();
       await basis.getByRole('cell',{name:'50',exact:true}).waitFor();
+      const input=page.getByRole('region',{name:'填写加工单价'});
+      for(const width of [1165,1366,390]){
+       await page.setViewportSize({width,height:820});
+       const left=(await basis.boundingBox())!,right=(await input.boundingBox())!;
+       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+       if(width===390)expect(right.y).toBeGreaterThanOrEqual(left.y+left.height);
+       else expect(right.x).toBeGreaterThanOrEqual(left.x+left.width);
+       await page.screenshot({path:join(h.evidence,`quotation-ie-detail-${width}.png`)});
+      }
+      await page.setViewportSize({width:1165,height:820});
       const img=basis.getByRole('img',{name:'本版款图'});
       await img.scrollIntoViewIfNeeded();
       const imageUrl=(await img.getAttribute('src'))!;
@@ -620,6 +666,44 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect(await sourcingOnly.json()).toMatchObject({total:1,items:[{kind:'sourcing_review',objectId:historic.sourcingCaseId}]});
    }finally{await tab.close();}
   });
+ });
+ it('reads the independent quotation revision creation name, never the parent name or an unassigned row',async()=>{
+  const {f,db}=h,designer=f.people['sample-designer']!,ie=f.people.ie!;
+  const forms=new DigitalDevelopmentService(db,true),quotes=new DigitalQuotationService(db,true);
+  const prefix='TEST-IE-STYLE-'+randomUUID(),parent=await new DigitalProductionIdentityService(db,true).createSource(designer,
+   {developmentType:'头版',designStyleNo:prefix,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const original=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),quotationMode:'automatic_v1',template:'上衣',
+   quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],measurements:[{name:'胸围',values:['50']}],
+   files:[{attachmentId:await f.image(designer),kind:'款图'}],
+   workbenchSheet:{version:1,styleName:'TEST 父单建单品名',brand:'TEST',referenceNote:'',gender:'男装',boardType:'头版',processingSelected:true,sewingRows:[]}});
+  const draft=await forms.save(designer,parent.sourceId,{expectedVersion:0,document:original},randomUUID());
+  const published=await forms.publish(designer,parent.sourceId,draft.version,randomUUID());
+  const styleName='TEST 独立复版自己的品名';
+  const client=await db.connect();
+  let child:Awaited<ReturnType<typeof createIndependentDevelopmentRevision>>;
+  try{
+   await client.query('BEGIN');
+   await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+   child=await createIndependentDevelopmentRevision(client,designer,parent.sourceId,DevelopmentRevisionSchema.parse({
+    basedOnRound:1,origin:'客户新增要求',customerComment:'TEST 改复版品名',internalProblem:'',explanation:'TEST 复版核价',
+    categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板',
+    document:{...published.document,workbenchSheet:{...original.workbenchSheet,styleName}},
+   }));
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  await forms.publish(designer,child.sourceId,1,randomUUID());
+  const resource={kind:'source' as const,id:child.sourceId},quote=await quotes.readSnapshot(designer,resource);
+  const assigned=await quotes.save(designer,resource,{expectedVersion:quote.version,document:quote.document!,
+   assignments:quote.assignments.map(row=>row.priceRole==='ie_reviewer'?{...row,priceAssigneeId:ie.actorId}:row)},randomUUID());
+  const tab=await h.open(ie.actorId,1366,{},'/ui/ie-processing?directory=unified&kind=processing_quote&search='+encodeURIComponent(prefix));
+  try{
+   const directory=h.base+'/api/digital-production/quotations/ie-directory?kind=processing_quote&search=';
+   const page=await tab.page.request.get(directory+encodeURIComponent(prefix));
+   expect(await page.json()).toMatchObject({total:1,items:[{objectId:assigned.quoteId,resourceId:child.sourceId,styleName}]});
+   expect(await (await tab.page.request.get(directory+encodeURIComponent(styleName))).json()).toMatchObject({total:0});
+   await tab.page.getByRole('cell',{name:styleName,exact:true}).waitFor();
+   expect(await tab.page.getByText('TEST 父单建单品名',{exact:true}).count()).toBe(0);
+  }finally{await tab.close();}
  });
  it('opens exact saved quotation, budget and instruction originals through the real authorized App without writes or latest substitution',async()=>{
   const f=h.f,designer=f.people['sample-designer']!,merch=f.people.merchandiser!,worker=f.people['pattern-room-worker']!,identity=new DigitalProductionIdentityService(h.db,true),quotes=new DigitalQuotationService(h.db,true),budgets=new DigitalBudgetService(h.db,true),instructions=new ProductionInstructionService(h.db,true);
@@ -712,7 +796,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(blank.workbenchReadiness).toMatchObject({canConfirm:false,reasons:expect.arrayContaining(['待正式纸样技术成果','待IE加工价'])});
   const noPaper=await h.open(designer.actorId,1165,{},path);
   try{
-   await noPaper.page.locator('.quotation-editor > p').filter({hasText:'待正式纸样技术成果'}).first().waitFor();
+   await noPaper.page.locator('[aria-label="当前协作稿办理状态"]').filter({hasText:'待正式纸样技术成果'}).waitFor();
    expect(await noPaper.page.locator('#quote-cost-reference').innerText()).toContain('待正式纸样技术成果');
    expect(await noPaper.page.getByRole('button',{name:'确认报价',exact:true}).isDisabled()).toBe(true);
   }finally{await noPaper.close();}
