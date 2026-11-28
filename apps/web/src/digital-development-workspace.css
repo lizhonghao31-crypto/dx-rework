@@ -673,7 +673,10 @@
 .designer-order-area .development-correction-actions{display:flex;flex-wrap:wrap;gap:8px}
 .designer-order-area .order-document-container:has(.development-designer-correction) .task-document-reader > nav[aria-label="单据章节"]{display:none}
 
-.development-creation-drafts .development-draft-tabs{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 12px}
+/* Preserve the Astryx spacing scale at its 16px reference size in this toolbar only. */
+.development-creation-drafts .development-draft-toolbar{display:grid;row-gap:calc(var(--spacing-3,.75rem) + .75 * (16px - 1rem));margin-block-end:12px}
+.development-creation-drafts .development-draft-toolbar .development-search-field{display:flex;flex-direction:column}
+.development-creation-drafts .development-draft-tabs{display:flex;flex-wrap:nowrap;gap:calc(var(--spacing-2,.5rem) + .5 * (16px - 1rem))}
 .development-creation-drafts .development-draft-tabs button{white-space:nowrap}
 .development-creation-drafts .development-draft-approval-scroll{overflow-x:auto}
 .development-creation-drafts .development-draft-approval-table{width:100%;text-align:left;border-collapse:collapse}

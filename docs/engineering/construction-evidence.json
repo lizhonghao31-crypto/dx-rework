@@ -1,157 +1,106 @@
 {
   "version": 1,
-  "base": "48f67666b10bba898f9a2c54b721b4b6cd022205",
-  "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
+  "base": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
+  "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
   "risk": "full",
   "rules": [
     {
-      "rule": "现有创建页按真实生命周期和发布申请分组，计数搜索与快照一致",
-      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
+      "rule": "仅创建页草稿箱搜索下沿至页签上沿12px，页签可见边缘间8px",
+      "source": "审定《开发草稿箱间距与撤回草稿删除施工方案》Library libfile_fde3_f-e7fe87d8f0ac8191ac1ffbf46beb0487_c8d3bf5d609c8191bce6411a30e94d44 v0（完整47行），关联原图 draft_toolbar_gap_12px.png",
       "writes": [
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/web/src/development-draft-list.ts",
         "apps/web/src/digital-designer-workspace.tsx",
         "apps/web/src/digital-development-workspace.css",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
-        "tests/unit/development-creation-draft.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/development-source-lifecycle.ts",
-        "apps/api/src/production-platform/order-time-request-repository.ts",
-        "apps/web/src/use-development-creation-draft.ts",
-        "apps/web/src/list-pagination.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
-        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#converts the original preorder",
-        "tests/unit/development-creation-draft.test.ts"
-      ],
-      "initialization": "两页签独立服务端分页，活动项连列表只读一次；非活动只取计数或沿同查询已有计数。只保存新版预下单留普通，原真实发布后两处都排除；旧测试预下单两处排除不迁移。",
-      "dateAndPermission": "原设计师本人和有效 Root 可读，保留订单号中文搜索、原本地独立草稿和原待核对回执。取同一数据快照最近一条真实申请的更新时间，不借时间算法推测。",
-      "expectation": "原页一次只显示一组，前端不会将旧搜索结果应用，新旧预下单原投料/转正完整，审批中无删除，退回原因直出。",
-      "checks": [
-        "draft-inbox-pg",
-        "draft-inbox-unit",
-        "draft-inbox-static"
-      ]
-    },
-    {
-      "rule": "精确退回版本才可软删，数据库独立重核且审批历史不动",
-      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
-      "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/migrations/0321_development_draft_review_inbox.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-todos.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/whole-order-visibility.ts"
-      ],
-      "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts#returns and withdraws the same saved proposal",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root"
-      ],
-      "initialization": "0321无数据回填；三参数入口仍保原约束，审批例外的实际原申请及草稿版本写同事务前态审计。原审批与事件不写，上游来源/原附件/编号不移除。",
-      "dateAndPermission": "既有生命周期同锁，数据库再核同申请、版本、状态及既有独立保护；仍须当前本人设计资格或 Root。撤回、版本错误、无审计拒绝。",
-      "expectation": "原页面取消无副作用，确认后一个原软删及审计，待办与计数同时回落。重提先成功旧删拒绝；删除先提交且原重提确实在锁上等待后失败。同键只回放原成功。",
-      "checks": [
-        "draft-inbox-pg",
-        "draft-inbox-static"
-      ]
-    },
-    {
-      "rule": "正式单的编号详情与异步逐 PO 区域分别等待，保留原浏览器业务断言",
-      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
-      "writes": [
+        "docs/ui/ASTRYX_UI_SPEC.md",
         "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/designer-order-workbench.tsx",
-        "apps/web/src/digital-designer-workspace.tsx"
+        "apps/web/src/development-entry-controls.tsx",
+        "apps/web/src/use-development-creation-draft.ts"
       ],
       "oldTests": [
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#numbers new pure and confirmed orders"
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#lets the actual merchandiser enter from My Tasks",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#converts the original preorder"
       ],
-      "initialization": "旧 Full 46117291547 中 585 项通过、1 项失败，现有顺序在发行基线的生产源码相同。对基线的诊断浏览器仅在测试临时工作区延迟真实原工作台回包，观察真实 PO 暂不可见、放行后可见。未改生产文件。",
-      "dateAndPermission": "仍从原有有效设计师签名入口登记、发布和确认，客户端独立读取原版单与工作台；等待正式 PO 表格精确单元格可见。无人工假数据、固定延时或降低业务断言。",
-      "expectation": "保持原下单写入、订单号、销售系列、精确 PO、回读版本和权限全部受测。根据用户明确决定仅在定向回归通过后正常人工合并，不把上一轮 Full 改记通过或重跑。",
+      "initialization": "复用原 Astryx 搜索控件与按钮，仅局部按 16px 参考字号补偿 rem，保留列表上方原余量。",
+      "dateAndPermission": "两页签只显示当前选择，原角色与计数授权不变。不改全局排版、搜索或预下单。",
+      "expectation": "两种宽度和两种选中态逐一实测可见矩形距离，维持原退回入口、草稿分组、跟单及转正。",
       "checks": [
-        "draft-inbox-pg",
-        "draft-inbox-static"
+        "draft-followup-targeted",
+        "draft-followup-static"
+      ]
+    },
+    {
+      "rule": "同一服务与数据库门禁允许精确的已撤回或已退回申请软删除",
+      "source": "审定《开发草稿箱间距与撤回草稿删除施工方案》Library libfile_fde3_f-e7fe87d8f0ac8191ac1ffbf46beb0487_c8d3bf5d609c8191bce6411a30e94d44 v0（完整47行），关联原图 draft_toolbar_gap_12px.png",
+      "writes": [
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/migrations/0322_development_draft_withdraw_discard.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/web/src/order-time-request-page.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-requests-postgres.test.ts#returns and withdraws the same saved proposal",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#shows only one draft tab"
+      ],
+      "initialization": "只增0322，替换现有五参数函数本体，不改0321及原触发器，不回填历史，不添加授权。",
+      "dateAndPermission": "申请ID、当前申请版本、草稿版本、原主体权限、未发布且无关联事实逐个保留。审批中和待设计师不新增可删资格。",
+      "expectation": "设计师原页实际提交、撤回、取消和删除；正确页签计数重读，原申请、事件、档案、编号和附件保持原值。两种重提顺序、旧或错误版本/申请、原回执幂等以及历史独立关联拒绝均覆盖。",
+      "checks": [
+        "draft-followup-targeted",
+        "draft-followup-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "draft-inbox-pg",
+      "id": "draft-followup-targeted",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
-      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
-      "startedAt": "2026-11-28T07:20:01Z",
-      "endedAt": "2026-11-28T07:21:21Z",
-      "log": "/workspace/scratch/draft-inbox-evidence/pg.log",
-      "logSha256": "211b3d87476d047b92cf860513f2fe6ce92cd7bc50084ebfd92c59ba49523298",
-      "cwd": "/workspace/scratch/development-draft-inbox",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 34,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "6f7a0c5a3c78bf75289ed061aa4369eeda7c5a3871741a497e126b5278a7a73b"
-        }
-      ],
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --maxWorkers=1 -t \"numbers new pure and confirmed orders\" --reporter=default --reporter=json",
-      "context": "Node 22.22.2, canonical Vitest business-chain runner, system Chromium, original signed application and role fixtures; local low-privilege PostgreSQL 16 marked dx-rework-isolated-test-v1, isolated disposable schemas. Standalone exact reproduction of the failed case, with unchanged original 409 assertion and full error text. Original inspected rerun also recorded passes for 6 adjacent cases, not claiming that mixed run green. Not deployed Acceptance or production."
-    },
-    {
-      "id": "draft-inbox-unit",
-      "kind": "tests",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
-      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
-      "startedAt": "2026-11-28T07:15:47Z",
-      "endedAt": "2026-11-28T07:15:50Z",
-      "log": "/workspace/scratch/draft-inbox-evidence/unit.log",
-      "logSha256": "0c49461ca77554f33251d8fb6a92f997e6357c64ce7e821da53145d1f01398e9",
-      "cwd": "/workspace/scratch/development-draft-inbox",
+      "testedHead": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
+      "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
+      "startedAt": "2026-11-28T08:08:23Z",
+      "endedAt": "2026-11-28T08:11:57Z",
+      "log": "/workspace/scratch/draft-inbox-followup-evidence/targeted.log",
+      "logSha256": "b792c8b78b242a61f831c2b30d86efa2c6a0278c89992a224f912263ef45b0ef",
+      "cwd": "/workspace/scratch/draft-inbox-spacing-withdraw",
       "passed": 9,
       "failed": 0,
-      "skipped": 0,
+      "skipped": 75,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1a81b23f767266aa560be2f65d0b7afb36585d1085e112361f98d7c0d452c5cc"
+          "sha256": "91515b42d223dea323ae7c5024f3e2e9e6f2a1d6fd02b41853ce0fd35005b3bb"
         }
       ],
-      "command": "npx vitest run --config vitest.config.ts tests/unit/development-creation-draft.test.ts --reporter=default --reporter=json",
-      "context": "Real Vitest JSON for deterministic local draft storage, authorization identity and reconciliation behavior."
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --maxWorkers=1 -t \"deletes only the exact|returns and withdraws the same saved proposal|shows only one draft tab|submits, withdraws|discards ordinary drafts only|resumes an unnumbered draft|lets the actual merchandiser enter from My Tasks|converts the original preorder\" --reporter=default --reporter=json",
+      "context": "Node 22.22.2, canonical Vitest business-chain runner, Chromium 151 system browser, signed original app and actors, marked local low-privilege PostgreSQL 16 isolated schemas. Filters intentionally skip unrelated cases. No Acceptance or production run."
     },
     {
-      "id": "draft-inbox-static",
+      "id": "draft-followup-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
-      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
-      "startedAt": "2026-11-28T07:15:47Z",
-      "endedAt": "2026-11-28T07:21:34Z",
-      "log": "/workspace/scratch/draft-inbox-evidence/static.log",
-      "logSha256": "d5e30c22b22779cdbfbb67fba21aa37cdfcc4d8d20f41693f08c88ed452232a3",
-      "cwd": "/workspace/scratch/development-draft-inbox",
-      "command": "git diff --quiet 6773baaf63926b15635b3a54d573aadabda250a3 -- apps packages scripts; npx eslint --max-warnings=0 tests/integration/development-creation-draft-native-browser-postgres.test.ts; git diff --check",
-      "context": "Candidate sync fix changes only the original native browser test and its evidence. Git independently verifies zero production application, package and CI script diff since the previously reviewed candidate; no claim that historical Full passed."
+      "testedHead": "4789307f686181f4c4ae2ebffa36b2e0b0e76168",
+      "sourceFingerprint": "806b04d635a2be7fc65d37cbdf5d1968b81e9baa2e332fa4c1f2ca7b2d2db9e9",
+      "startedAt": "2026-11-28T08:10:18Z",
+      "endedAt": "2026-11-28T08:12:32Z",
+      "log": "/workspace/scratch/draft-inbox-followup-evidence/static.log",
+      "logSha256": "dc26f8e898d711c0dff0e7282d6266a899cb130238aff7168960fe5149def29c",
+      "cwd": "/workspace/scratch/draft-inbox-spacing-withdraw",
+      "command": "API and Web typechecks, npm run db:migrate:lint, node scripts/acceptance/time-site-inventory.mjs, node --test scripts/ci/test-execution-contract.test.mjs, eslint --max-warnings=0 on the four changed TS/TSX files, git diff --check",
+      "context": "Node 22.22.2, official workspace static commands. No deploy or Acceptance writes."
     }
   ]
 }
