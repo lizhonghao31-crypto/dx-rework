@@ -2,7 +2,7 @@ import {designerWorkspaceSection} from './digital-workspace-navigation.js';
 import {ListPagination} from './list-pagination.js';
 import {beginForegroundWait,useForegroundWait} from "./foreground-loading.js";
 import {useDevelopmentCreationDraft} from './use-development-creation-draft.js';
-import {developmentDraftRows,pendingDevelopmentCommands,unboundNumberedDraftKeys,type DevelopmentDraftRow,type SavedDevelopmentDraft} from './development-draft-list.js';
+import {developmentDraftRows,independentLocalDrafts,pendingDevelopmentCommands,unboundNumberedDraftKeys,type DevelopmentDraftRow,type SavedDevelopmentDraft,type DraftApprovalState} from './development-draft-list.js';
 import {useInternalReturnScroll} from './use-internal-return-scroll.js';
 import {Link} from '@astryxdesign/core/Link';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
@@ -12,6 +12,7 @@ import {DevelopmentEntryAction,DevelopmentEntryLanguage,DevelopmentEntryText} fr
 import {designerAstryxCss as workspaceAstryxCss} from './designer-astryx.js';
 import {registerSessionInvalidator,sessionCacheVersion} from './auth-session.js';
 import {createClientRequestId} from './client-request-id.js';
+import {publishTodoRead} from './todo-indicator-refresh.js';
 import {developmentShippingLabel,developmentShippingTone} from './development-shipping-display.js';
 import {confirmInApp} from './system-dialog.js';
 import {useLiveSearch} from "./use-live-search.js";
@@ -41,6 +42,10 @@ import "./digital-development-workspace.css";
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
 type SavedDevelopmentDraftPage={items:SavedDevelopmentDraft[];page:number;hasNext:boolean;total:number};
+type DraftBucket='drafts'|'followup';
+type DraftCount={scope:string;total:number|null;error?:true};
+const draftApproval={pending:{label:'审批中',tone:'warning'},returned:{label:'已退回',tone:'danger'},
+ withdrawn:{label:'已撤回',tone:'neutral'},needs_designer:{label:'待设计师处理',tone:'info'}} as const satisfies Record<DraftApprovalState,{label:string;tone:'warning'|'danger'|'neutral'|'info'}>;
 type DraftReceiptResolution={page:SavedDevelopmentDraftPage;keys:string;resolvedSourceIds:Set<string>;unverified:boolean};
 const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
@@ -67,13 +72,18 @@ function DigitalDesignerWorkspaceContent() {
   const openCreationChoices=()=>{setNewType(null);setNewGarment(null);setNewRush(null);setChoosingType(true);};
   const creation=useDevelopmentCreationDraft();
   const [draftPage,setDraftPage]=useState(1);
-  const [followupPage,setFollowupPage]=useState(1),[followupOpen,setFollowupOpen]=useState(false);
-  const [followup,setFollowup]=useState<SavedDevelopmentDraftPage|null>(null),[followupError,setFollowupError]=useState('');
+  const [followupPage,setFollowupPage]=useState(1),[draftBucket,setDraftBucket]=useState<DraftBucket>('drafts');
   const [drafts,setDrafts]=useState<SavedDevelopmentDraftPage|null>(null),[draftError,setDraftError]=useState('');
+  const [draftCounts,setDraftCounts]=useState<Partial<Record<DraftBucket,DraftCount>>>({});
+  const draftCountCache=useRef<Partial<Record<DraftBucket,DraftCount>>>({});
+  const rememberDraftCount=useCallback((bucket:DraftBucket,count:DraftCount)=>{
+    draftCountCache.current={...draftCountCache.current,[bucket]:count};
+    setDraftCounts(draftCountCache.current);
+  },[]);
   const [draftReceiptResolution,setDraftReceiptResolution]=useState<DraftReceiptResolution|null>(null);
   const [appliedDraftQuery,setAppliedDraftQuery]=useState<string|null>(null);
   const [creationMessage,setCreationMessage]=useState(''),[creationBusy,setCreationBusy]=useState(false);
-  const discardKeys=useRef(new Map<string,{version:number;key:string}>());
+  const discardKeys=useRef(new Map<string,{version:number;approvalRequestId?:string;approvalVersion?:number;key:string}>());
   const [confirmSheet,setConfirmSheet]=useState<DevelopmentSheet|undefined>(),[preparingConfirm,setPreparingConfirm]=useState(false),[confirmError,setConfirmError]=useState("");
   const [confirmedOrderId,setConfirmedOrderId]=useState<string|null>(null);
   const [confirmedOrder,setConfirmedOrder]=useState<DigitalOrder|null>(null),[confirmedOrderError,setConfirmedOrderError]=useState(""),[orderRetry,setOrderRetry]=useState(0);
@@ -134,7 +144,12 @@ function DigitalDesignerWorkspaceContent() {
   const configured=new URLSearchParams(Object.entries(scoped).filter(([,value])=>value!==undefined&&value!=="").map(([key,value])=>[key,String(value)]));
   configured.sort();
   const listQuery=configured.toString();
-  const draftQuery=new URLSearchParams({page:String(draftPage),search:filter.search}).toString();
+  const activeDraftPage=draftBucket==='drafts'?draftPage:followupPage;
+  const setActiveDraftPage=draftBucket==='drafts'?setDraftPage:setFollowupPage;
+  const inactiveDraftBucket=draftBucket==='drafts'?'followup':'drafts';
+  const draftCountScope=JSON.stringify([access?.actorId,filter.search,refresh]);
+  const draftQuery=new URLSearchParams({page:String(activeDraftPage),search:filter.search,bucket:draftBucket}).toString();
+  const draftReadKey=JSON.stringify([draftCountScope,draftQuery]);
   const listReady=!creatingPage&&!editor&&!liveSearch.pending&&result!==null&&appliedListQuery===listQuery;
   useInternalReturnScroll(listReady);
   useEffect(()=>{
@@ -181,7 +196,7 @@ function DigitalDesignerWorkspaceContent() {
       .catch(reason=>{if(live)setAccessError(reason.message);});
     return()=>{live=false;abort.abort();};
   },[editor,creatingPage,refresh]);
-  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftReceiptResolution(null);setDraftError('');setFollowup(null);setFollowupOpen(false);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setEditorSession(value=>value+1);setRefresh(value=>value+1);}),[]);
+  useEffect(()=>registerSessionInvalidator(()=>{creation.reset();discardKeys.current.clear();quietListRefresh.current=true;setResult(null);setSheets({});setOrders({});setDrafts(null);setDraftReceiptResolution(null);setDraftError('');draftCountCache.current={};setDraftCounts({});setDraftBucket('drafts');setDraftPage(1);setFollowupPage(1);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setOpenedSheet(null);setAccess(null);setOptions(null);setEditorSession(value=>value+1);setRefresh(value=>value+1);}),[]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
     const item = editor?undefined:result?.items.find(value => value.journey.id === selectedId);
@@ -235,23 +250,44 @@ function DigitalDesignerWorkspaceContent() {
     if(!creatingPage||liveSearch.pending||intent||!options?.creationEnabled||!access?.create)return;
     const abort=new AbortController(),finish=beginForegroundWait();setDraftError('');
     void digitalRequest<SavedDevelopmentDraftPage>(`sources/drafts?${draftQuery}`,'GET',undefined,undefined,{signal:abort.signal})
-      .then(result=>{if(!abort.signal.aborted){setDrafts(result);setAppliedDraftQuery(draftQuery);}})
-      .catch(reason=>{if(!abort.signal.aborted){setDrafts(null);setDraftError(reason.message);}})
-      .finally(finish);
+      .then(result=>{
+        if(abort.signal.aborted)return;
+        rememberDraftCount(draftBucket,{scope:draftCountScope,total:result.total});
+        const last=Math.max(1,Math.ceil(result.total/15));
+        if(activeDraftPage>last){setActiveDraftPage(last);return;}
+        setDrafts(result);setAppliedDraftQuery(draftReadKey);
+      })
+      .catch(reason=>{
+        if(abort.signal.aborted)return;
+        rememberDraftCount(draftBucket,{scope:draftCountScope,total:null,error:true});
+        setDrafts(null);setDraftError(reason instanceof Error?reason.message:'未能读取开发草稿');
+      }).finally(finish);
     return()=>{abort.abort();finish();};
-  },[creatingPage,draftQuery,liveSearch.pending,intent,refresh,options?.creationEnabled,access?.actorId,access?.create]);
+  },[creatingPage,draftQuery,draftReadKey,draftBucket,draftCountScope,activeDraftPage,setActiveDraftPage,liveSearch.pending,intent,
+    options?.creationEnabled,access?.create,rememberDraftCount]);
   useEffect(()=>{
-    if(!creatingPage||!followupOpen||intent||liveSearch.pending||!options?.creationEnabled||!access?.create)return;
-    const abort=new AbortController(),params=new URLSearchParams({page:String(followupPage),search:filter.search,bucket:'followup'});
-    setFollowup(null);setFollowupError('');
+    if(!creatingPage||intent||liveSearch.pending||!options?.creationEnabled||!access?.create)return;
+    const existing=draftCountCache.current[inactiveDraftBucket];
+    if(existing?.scope===draftCountScope&&existing.total!==null)return;
+    const abort=new AbortController(),params=new URLSearchParams({page:'1',search:filter.search,bucket:inactiveDraftBucket,view:'count'});
     void digitalRequest<SavedDevelopmentDraftPage>(`sources/drafts?${params}`,'GET',undefined,undefined,{signal:abort.signal})
-      .then(value=>{if(!abort.signal.aborted)setFollowup(value);})
-      .catch(reason=>{if(!abort.signal.aborted)setFollowupError(reason instanceof Error?reason.message:'未能读取待核对档案');});
+      .then(value=>{if(!abort.signal.aborted)rememberDraftCount(inactiveDraftBucket,{scope:draftCountScope,total:value.total});})
+      .catch(()=>{if(!abort.signal.aborted)rememberDraftCount(inactiveDraftBucket,{scope:draftCountScope,total:null,error:true});});
     return()=>abort.abort();
-  },[creatingPage,followupOpen,followupPage,intent,liveSearch.pending,filter.search,refresh,options?.creationEnabled,access?.actorId,access?.create]);
+  },[creatingPage,inactiveDraftBucket,intent,liveSearch.pending,filter.search,draftCountScope,options?.creationEnabled,access?.create,rememberDraftCount]);
   const canCreate=Boolean(options?.creationEnabled&&access?.create);
   const ownLocal=creation.localDrafts.filter(record=>record.identity.actorId===access?.actorId&&(canCreate||record.phase==='pending'));
-  const draftMatches=canCreate&&appliedDraftQuery===draftQuery?drafts:null;
+  const activeDraftList=canCreate&&!liveSearch.pending&&appliedDraftQuery===draftReadKey?drafts:null;
+  const draftMatches=draftBucket==='drafts'?activeDraftList:null;
+  const countFor=(bucket:DraftBucket)=>{
+    const result=draftCounts[bucket];
+    return !liveSearch.pending&&result?.scope===draftCountScope?result:null;
+  };
+  const ordinaryLocalCount=independentLocalDrafts(ownLocal,filter.search).length;
+  const tabCount=(bucket:DraftBucket)=>{
+    const count=countFor(bucket)?.total;
+    return count==null?'—':count+(bucket==='drafts'?ordinaryLocalCount:0);
+  };
   const receiptKeys=JSON.stringify(unboundNumberedDraftKeys(ownLocal));
   useEffect(()=>{
     if(!creatingPage||intent||!draftMatches||receiptKeys==='[]')return;
@@ -356,17 +392,23 @@ function DigitalDesignerWorkspaceContent() {
     const saved=row.kind==='saved'?row.saved:null,local=row.local;
     if(openingCreation.current||!canCreate||local?.phase==='pending'||(saved?!saved.canDiscard:local?.phase!=='draft'))return;
     const session=sessionCacheVersion(),ordered=saved?.designStyleNo??local?.snapshot.form.designStyleNo;
-    if(!await confirmInApp(`确认删除草稿「${ordered?.trim()||'待生成订单ID'}」？原已登记编号不会再次分配。`,{presentation:'astryx',title:'删除开发草稿',confirmLabel:'删除'}))return;
+    const approval=saved?.approvalRequestId&&saved.approvalVersion?
+      {approvalRequestId:saved.approvalRequestId,approvalVersion:saved.approvalVersion}:undefined;
+    if(!await confirmInApp(`确认删除草稿「${ordered?.trim()||'待生成订单ID'}」？${approval?'审批历史将保留。':'原已登记编号不会再次分配。'}`,
+      {presentation:'astryx',title:'删除开发草稿',confirmLabel:'删除'}))return;
     if(session!==sessionCacheVersion()||openingCreation.current)return;
     openingCreation.current=true;setCreationBusy(true);setCreationMessage('');
     try{
       if(saved){
-        const prior=discardKeys.current.get(saved.sourceId),attempt=prior?.version===saved.version?prior:{version:saved.version,key:createClientRequestId()};
+        const prior=discardKeys.current.get(saved.sourceId);
+        const attempt=prior?.version===saved.version&&prior.approvalRequestId===approval?.approvalRequestId&&prior.approvalVersion===approval?.approvalVersion
+          ?prior:{version:saved.version,...approval,key:createClientRequestId()};
         discardKeys.current.set(saved.sourceId,attempt);
-        const receipt=await digitalRequest<{discarded?:boolean}>(`sources/${saved.sourceId}/draft`,'DELETE',{expectedVersion:attempt.version},attempt.key);
+        const receipt=await digitalRequest<{discarded?:boolean}>(`sources/${saved.sourceId}/draft`,'DELETE',{expectedVersion:attempt.version,...approval},attempt.key);
         if(receipt?.discarded!==true)throw new DigitalRequestError('删除回执尚未确认',500,'INVALID_RESPONSE');
         if(session!==sessionCacheVersion())return;
         discardKeys.current.delete(saved.sourceId);
+        if(access?.actorId)publishTodoRead(access.actorId);
         setRefresh(value=>value+1);
       }
       if(local&&!creation.discardListSnapshot(local)&&!saved)throw Error('本页草稿已变化，请重新核对后删除');
@@ -390,8 +432,20 @@ function DigitalDesignerWorkspaceContent() {
         {canCreate&&<div className="development-search-field"><DevelopmentEntryText label="搜索草稿款号" visibleLabel value={search} maxLength={100}
           onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={setSearch}
           onKeyDown={event=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)update({search});}}/></div>}
+        {canCreate&&<div className="development-draft-tabs" role="tablist" aria-label="草稿分类">
+          <AstryxButton id="development-draft-tab" role="tab" aria-selected={draftBucket==='drafts'} aria-controls="development-draft-panel"
+            label={`草稿箱（${tabCount('drafts')}）`} variant={draftBucket==='drafts'?'primary':'secondary'} onClick={()=>setDraftBucket('drafts')}/>
+          <AstryxButton id="development-approval-tab" role="tab" aria-selected={draftBucket==='followup'} aria-controls="development-draft-panel"
+            label={`待审批-未发布（${tabCount('followup')}）`} variant={draftBucket==='followup'?'primary':'secondary'} onClick={()=>setDraftBucket('followup')}/>
+        </div>}
+        {canCreate&&countFor(inactiveDraftBucket)?.error&&<p role="alert">草稿计数未能读取
+          <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>重试计数</DevelopmentEntryAction></p>}
+        <div id="development-draft-panel" role={canCreate?'tabpanel':undefined}
+          aria-labelledby={canCreate?(draftBucket==='drafts'?'development-draft-tab':'development-approval-tab'):undefined}>
         {canCreate&&(draftError?<p role="alert">{draftError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>刷新草稿</DevelopmentEntryAction></p>
-          :!draftMatches?<p role="status">正在读取草稿…</p>:draftRows.length===0?<p>暂无开发草稿</p>:null)}
+          :!activeDraftList?<p role="status">正在读取草稿…</p>:draftBucket==='drafts'?draftRows.length===0?<p>暂无开发草稿</p>:null
+          :activeDraftList.items.length===0?<p>暂无待审批的未发布草稿</p>:null)}
+        {draftBucket==='drafts'?<>
         {draftRows.length>0&&<ul className="development-creation-draft-rows">{draftRows.map(row=>{
           const saved=row.kind==='saved'?row.saved:undefined,local=row.local;
           const kind=local?(local.snapshot.preorder?'预下单':local.snapshot.intent==='development'?'纯开发':'已确认订单'):
@@ -406,12 +460,34 @@ function DigitalDesignerWorkspaceContent() {
               }}/>
               <span>{[kind,saved?(`最后保存 ${date(saved.updatedAt)}`):'尚未写入服务器',!saved?.designStyleNo?'尚未发号':null].filter(Boolean).join(' · ')}</span>
             </div>
-            {canCreate&&<AstryxButton label="删除" aria-label={`删除草稿 ${code}`} variant="destructive" size="sm" type="button" isDisabled={creationBusy} onClick={()=>void discardDraft(row)}/>}
+            {canCreate&&(!saved||saved.canDiscard)&&<AstryxButton label="删除" aria-label={`删除草稿 ${code}`} variant="destructive" size="sm" type="button" isDisabled={creationBusy} onClick={()=>void discardDraft(row)}/>}
           </li>;
         })}</ul>}
-        {canCreate&&drafts&&<ListPagination page={drafts.page} totalPages={appliedDraftQuery===draftQuery?Math.max(1,Math.ceil(drafts.total/15)):null}
-          total={!liveSearch.pending&&appliedDraftQuery===draftQuery?drafts.total:null}
-          busy={creationBusy||liveSearch.pending||appliedDraftQuery!==draftQuery} onPageChange={setDraftPage} ariaLabel="开发草稿分页"/>}
+        </>:activeDraftList?.items.length?<div className="development-draft-approval-scroll"><table className="development-draft-approval-table">
+          <thead><tr><th scope="col">款号</th><th scope="col">时效状态</th><th scope="col">最近更新</th><th scope="col">操作</th></tr></thead>
+          <tbody>{activeDraftList.items.map(saved=>{
+            const code=saved.designStyleNo??saved.temporaryStyleNo??'原开发档案';
+            const status=saved.approvalState?draftApproval[saved.approvalState]:null;
+            const pending=unresolved.some(record=>record.sourceId===saved.sourceId||
+              !record.sourceId&&record.snapshot.form.designStyleNo.trim()!==''&&record.snapshot.form.designStyleNo.trim()===saved.designStyleNo);
+            const local=ownLocal.find(record=>record.phase==='bound'&&record.sourceId===saved.sourceId);
+            return <tr key={saved.sourceId}><th scope="row">{code}</th>
+              <td>{status&&<StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+                {saved.approvalState==='returned'&&saved.approvalReturnReason?.trim()&&<p className="development-draft-return-reason">{saved.approvalReturnReason}</p>}</td>
+              <td><time dateTime={saved.updatedAt}>{new Date(saved.updatedAt).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})}</time></td>
+              <td><div className="development-draft-row-actions">
+                {!pending&&saved.approvalState!=='pending'&&<AstryxButton label="继续编辑" aria-label={`继续编辑草稿 ${code}`} variant="secondary" size="sm"
+                  isDisabled={creationBusy} onClick={()=>void openSavedDraft(saved.sourceId)}/>}
+                {!pending&&saved.canDiscard&&<AstryxButton label="删除" aria-label={`删除草稿 ${code}`} variant="destructive" size="sm"
+                  isDisabled={creationBusy} onClick={()=>void discardDraft({kind:'saved',saved,...(local?{local}:{})})}/>}
+              </div></td>
+            </tr>;
+          })}</tbody>
+        </table></div>:null}
+        {canCreate&&activeDraftList&&<ListPagination page={activeDraftList.page} totalPages={Math.max(1,Math.ceil(activeDraftList.total/15))}
+          total={activeDraftList.total} busy={creationBusy||liveSearch.pending} onPageChange={setActiveDraftPage}
+          ariaLabel={draftBucket==='drafts'?'开发草稿分页':'待审批草稿分页'}/>}
+        </div>
       </section>
       {canCreate&&<section className="development-creation-entry" aria-label="新建开发订单入口">
         <h2>新建开发订单</h2>
@@ -426,21 +502,6 @@ function DigitalDesignerWorkspaceContent() {
           <DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>void openCreation(()=>creation.resume(record.viewId),record.viewId)}>核对原创建提交结果</DevelopmentEntryAction>
         </li>)}</ul>
       </section>}
-      {canCreate&&<details className="development-creation-followup" onToggle={event=>setFollowupOpen(event.currentTarget.open)}>
-        <summary>审批与原档案核对</summary>
-        {followupError?<p role="alert">{followupError} <DevelopmentEntryAction type="button" onClick={()=>setRefresh(value=>value+1)}>重新读取</DevelopmentEntryAction></p>
-          :!followup?<p role="status">正在读取原档案…</p>:followup.items.length===0?<p>没有待审核或需核对的原档案。</p>:<>
-          <ul className="development-creation-draft-rows">{followup.items.map(row=><li key={row.sourceId}>
-            <div className="development-creation-draft-main"><strong>{row.designStyleNo??row.temporaryStyleNo??'原开发档案'}</strong>
-              <span>{row.approvalState==='pending'?'时效待审核':row.approvalState==='returned'?'时效申请已退回':'不符合普通草稿条件，请到原档案核对'} · {date(row.updatedAt)}</span></div>
-            <Link href={row.approvalRequestId?urls.pageUrl('ui/digital-production')+'?'+new URLSearchParams({timeRequest:row.approvalRequestId,returnTo:window.location.pathname+window.location.search})
-              :contextUrl({development:row.sourceId,section:'workspace'})}>{row.approvalRequestId?'查看原时效申请':'查看原开发档案'}</Link>
-            <>{row.approvalRequestId&&row.approvalState&&['returned','withdrawn','needs_designer'].includes(row.approvalState)&&
-              <DevelopmentEntryAction type="button" disabled={creationBusy} onClick={()=>void openSavedDraft(row.sourceId)}>编辑原开发草稿</DevelopmentEntryAction>}</>
-          </li>)}</ul>
-          <ListPagination page={followup.page} totalPages={Math.max(1,Math.ceil(followup.total/15))} total={followup.total} busy={liveSearch.pending} onPageChange={setFollowupPage} ariaLabel="待核对档案分页"/>
-        </>}
-      </details>}
     </section>}
     {accessError&&<p role="alert">{accessError}</p>}
     {access&&(!access.create||options?.creationEnabled===false)&&<p role="status">当前身份或环境未开放开发单创建。</p>}

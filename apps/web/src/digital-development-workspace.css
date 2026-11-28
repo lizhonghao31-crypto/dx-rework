@@ -672,3 +672,11 @@
 .designer-order-area .development-designer-correction{min-inline-size:0;border:1px solid var(--production-border,#dce3eb);border-radius:8px;padding:12px;margin:12px 0;background:#fff}
 .designer-order-area .development-correction-actions{display:flex;flex-wrap:wrap;gap:8px}
 .designer-order-area .order-document-container:has(.development-designer-correction) .task-document-reader > nav[aria-label="单据章节"]{display:none}
+
+.development-creation-drafts .development-draft-tabs{display:flex;flex-wrap:nowrap;gap:8px;margin:0 0 12px}
+.development-creation-drafts .development-draft-tabs button{white-space:nowrap}
+.development-creation-drafts .development-draft-approval-scroll{overflow-x:auto}
+.development-creation-drafts .development-draft-approval-table{width:100%;text-align:left;border-collapse:collapse}
+.development-creation-drafts .development-draft-approval-table :is(th,td){padding:9px 7px;border-bottom:1px solid var(--dx-v2-color-border,#dce3eb);vertical-align:top}
+.development-creation-drafts .development-draft-return-reason{margin:4px 0 0;overflow-wrap:anywhere}
+.development-creation-drafts .development-draft-row-actions{display:flex;flex-wrap:wrap;gap:5px}

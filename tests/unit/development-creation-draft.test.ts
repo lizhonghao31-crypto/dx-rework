@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {clearCreationDraft,listCreationDrafts,readCreationDraft,selectCreationDraft,writeCreationDraft,type CreationDraftRecord,type CreationDraftSnapshot} from '../../apps/web/src/development-creation-draft.js';
-import {developmentDraftRows,pendingDevelopmentCommands,type SavedDevelopmentDraft} from '../../apps/web/src/development-draft-list.js';
+import {developmentDraftRows,independentLocalDrafts,pendingDevelopmentCommands,type SavedDevelopmentDraft} from '../../apps/web/src/development-draft-list.js';
 
 const actorId='11111111-1111-4111-8111-111111111111',viewId='22222222-2222-4222-8222-222222222222',sourceId='33333333-3333-4333-8333-333333333333',identity={actorId,environment:'https://TEST.invalid/acceptance/'};
 function storage(){const rows=new Map<string,string>();return {getItem:(key:string)=>rows.get(key)??null,setItem:(key:string,value:string)=>{rows.set(key,value);},removeItem:(key:string)=>{rows.delete(key);},rows};}
@@ -22,6 +22,12 @@ describe('separate ordinary development drafts and original command recovery',()
   expect(pendingDevelopmentCommands([bound,separate,pending])).toEqual([pending]);
   expect(developmentDraftRows([saved],[bound],'persisted',2)).toEqual([{kind:'saved',saved,local:bound}]);
   expect(developmentDraftRows([], [bound], 'persisted',1)).toEqual([]);
+ });
+ it('counts only separate local drafts matching the ordinary search even while a different server page is shown',()=>{
+  const local=draft();local.snapshot.form.temporaryStyleNo='原代用款号';
+  expect(independentLocalDrafts([local,bound,pending],'原代用')).toEqual([local]);
+  expect(developmentDraftRows([saved],[local,bound,pending],'原代用',2)).toEqual([]);
+  expect(independentLocalDrafts([local,bound,pending],'无关')).toEqual([]);
  });
  it('keeps an unrelated pending result findable without blocking all saved drafts',()=>{
   const local=draft(),unbound={...pending,viewId:actorId,sourceId:null,beforeVersion:null,original:{path:'sources/drafts',method:'POST' as const,key:'TEST-pending',body:'{}'}};

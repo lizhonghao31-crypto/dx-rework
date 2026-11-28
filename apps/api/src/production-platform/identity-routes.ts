@@ -191,8 +191,12 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.get("/digital-production/sources/drafts/receipt",async request=>dependencies.service.developmentDraftReceipt(await actor(request),key(request)));
   app.delete('/digital-production/sources/:sourceId/draft',async request=>{
     const trusted=await actor(request);
-    const {expectedVersion}=parse(cockpitZ.object({expectedVersion:cockpitZ.number().int().nonnegative()}).strict(),request.body);
-    return dependencies.service.discardDevelopmentDraft(trusted,id(request,'sourceId'),expectedVersion,key(request));
+    const draft=cockpitZ.object({expectedVersion:cockpitZ.number().int().nonnegative()});
+    const payload=parse(cockpitZ.union([draft.strict(),draft.extend({
+      approvalRequestId:cockpitZ.uuid(),approvalVersion:cockpitZ.number().int().positive(),
+    }).strict()]),request.body);
+    const approval='approvalRequestId' in payload?{approvalRequestId:payload.approvalRequestId,approvalVersion:payload.approvalVersion}:undefined;
+    return dependencies.service.discardDevelopmentDraft(trusted,id(request,'sourceId'),payload.expectedVersion,key(request),approval);
   });
   app.post("/digital-production/sources/drafts",async request=>dependencies.service.createSource(await actor(request),parse(DigitalSourceCreateSchema,request.body),key(request),true));
   app.post("/digital-production/sources", async request => dependencies.service.createSource(await actor(request), parse(DigitalSourceCreateSchema, request.body), key(request)));
