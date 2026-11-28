@@ -2,7 +2,7 @@ import {assertWholeOrderActive,wholeOrderActiveSql,wholeSourceActive} from './wh
 import {DigitalBudgetService} from './budget-service.js';
 import {quotationMaterialConsumptionBasis,quotationMaterialUnitBasis,quotationMaterialPriceBasis} from './quotation-material-unit.js';
 import {isDeepStrictEqual} from 'node:util';
-import {assembleQuotation,quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
+import {applyQuotationBasis,assembleQuotation,planQuotationBasis,quotationComplete,type AssembledQuotation} from './quotation-assembly.js';
 import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -145,8 +145,10 @@ export class DigitalQuotationService{
   const input=SaveQuotationPricingDraftSchema.parse(raw);
   return this.command(actor,resource,'workbench-pricing-draft',key,input,async(db,context)=>{
    if(!await secondaryCraftReady(db))conflict('联合报价流程尚未就绪');
-   const quote=context.quote??digitalNotFound();
-   if(quote.version!==input.expectedVersion||quote.version===quote.confirmed_version)conflict('报价依据已更新或本版已确认，请读取当前报价');
+   const stale='报价依据已更新或本版已确认，请读取当前报价';
+   if(!context.quote)digitalNotFound();
+   const quote=await this.requireCurrentBasis(db,actor,context,input.expectedVersion,stale)??digitalNotFound();
+   if(quote.version===quote.confirmed_version)conflict(stale);
    await persistWorkbenchPricing(db,quote,actor.actorId,input.input);
   });
  }
@@ -358,6 +360,7 @@ export class DigitalQuotationService{
    // Read access never permits a pricing save or its receipt. Reject these
    // requests before competing with a session refresh for unrelated role rows.
    if(action==='workbench-pricing-draft'&&(c.designerId!==actor.actorId||!c.roles.has('sample_designer')))digitalForbidden();
+   if(action==='refresh-basis'&&!c.structure)digitalForbidden();
    for(const role of c.roles){
     if(action.startsWith('secondary-craft:')&&action.endsWith(':decision')&&role==='owner_group')continue;
     if(!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))digitalForbidden();
@@ -369,18 +372,42 @@ export class DigitalQuotationService{
    if(prior?.payload_hash!==undefined&&prior.payload_hash!==hash)conflict('同一操作标识不能用于不同内容');
    // Reauthorize each response. Do not replay a cached full-cost body after role revocation.
    let applied:number|void=undefined;
-   if(!prior){if(c.quote?.assembly&&c.sourceId)c.quote=await assembleQuotation(db,c.sourceId,actor.actorId)??c.quote;applied=await work(db,c);}
+   if(!prior){
+    // These commands address their own row/review revision, not an incoming
+    // quotation version. Keep their existing synchronization and checks.
+    if(c.quote?.assembly&&c.sourceId&&(action.startsWith('secondary-craft:')||action.startsWith('workbench-review:')))
+     c.quote=await assembleQuotation(db,c.sourceId,actor.actorId)??c.quote;
+    applied=await work(db,c);
+   }
    const current=await this.read(actor,resource,db),receipt=prior?.response?.commandReceipt??{action,appliedVersion:applied??current.version};
    if(!prior){await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify({resource,commandReceipt:receipt})]);
     await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'customer_quotation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`quotation_${action}`,resource.id,JSON.stringify({resource,commandReceipt:receipt})]);}
    await db.query('COMMIT');return {...current,commandReceipt:receipt};
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
+ private async requireCurrentBasis(db:PoolClient,actor:TrustedActorContext,c:Awaited<ReturnType<DigitalQuotationService['context']>>,expectedVersion:number,stale:string){
+  const stored=c.quote,versionMatches=(stored?.version??0)===expectedVersion;
+  const change=stored?.assembly&&c.sourceId?await planQuotationBasis(db,c.sourceId):undefined;
+  // An obsolete request must never incorporate a recalculated commercial
+  // version, even if the caller can already see a different stored version.
+  if(change?.kind==='commercial')conflict('原单的报价依据已变更，本次没有保存。请同步并重新读取报价，再核对原输入。','QUOTATION_BASIS_SYNC_REQUIRED');
+  if(!versionMatches)conflict(stale);
+  return change?.kind==='source_pointer'?applyQuotationBasis(db,change,actor.actorId):stored;
+ }
+ async refreshBasis(actor:TrustedActorContext,resource:QuotationResource,quoteId:string,key:string){
+  return this.command(actor,resource,'refresh-basis',key,{quoteId},async(db,c)=>{
+   const stored=c.quote??digitalNotFound();
+   if(stored.quote_id!==quoteId||!stored.assembly||!c.sourceId)digitalNotFound();
+   const change=await planQuotationBasis(db,c.sourceId!);
+   if(change?.kind==='commercial')return (await applyQuotationBasis(db,change,actor.actorId)).version;
+   return stored.version;
+  });
+ }
  async save(actor:TrustedActorContext,resource:QuotationResource,input:z.infer<typeof SaveQuotationSchema>,key:string){
   input=SaveQuotationSchema.parse(input);
   return this.command(actor,resource,'save',key,input,async(db,c)=>{
-   if(!c.structure)digitalForbidden();if((c.quote?.version??0)!==input.expectedVersion)conflict('报价版本已更新，请保留输入并读取最新版本');
-   const current=c.quote;
+   if(!c.structure)digitalForbidden();
+   const current=await this.requireCurrentBasis(db,actor,c,input.expectedVersion,'报价版本已更新，请保留输入并读取最新版本');
    if(current?.assembly){
     if(!isDeepStrictEqual(input.document,current.document))conflict('自动报价明细来自本单资料；请在原资料修改材料，单价由对应岗位填写');
     for(const a of input.assignments){
@@ -426,10 +453,12 @@ export class DigitalQuotationService{
  async fillRow(actor:TrustedActorContext,resource:QuotationResource,rowId:string,input:z.infer<typeof QuotationRowInputSchema>,key:string){
   input=QuotationRowInputSchema.parse(input);
   return this.command(actor,resource,`row:${rowId}`,key,input,async(db,c)=>{
-   const q=c.quote??digitalNotFound();if(q.version!==input.expectedVersion)conflict('报价版本已更新，请核对当前行后再提交');
-   const row=q.document.rows.find(r=>r.rowId===rowId)??digitalNotFound(),a=q.assignments.find(a=>a.rowId===rowId)??digitalNotFound();
+   const stored=c.quote??digitalNotFound(),a=stored.assignments.find(a=>a.rowId===rowId)??digitalNotFound();
    const tech=a.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker'),price=a.priceAssigneeId===actor.actorId&&c.roles.has(a.priceRole);
    if((input.consumption!==undefined||input.artifactConsumption)&&!isRootActor(actor)&&!tech||input.unitPrice!==undefined&&!isRootActor(actor)&&!price)digitalForbidden();
+   if(input.pricingUnit!==undefined&&!c.structure)digitalForbidden();
+   const q=await this.requireCurrentBasis(db,actor,c,input.expectedVersion,'报价版本已更新，请核对当前行后再提交')??digitalNotFound();
+   const row=q.document.rows.find(r=>r.rowId===rowId)??digitalNotFound();
    const component=q.assembly?.rows[rowId];
    if(input.unitPrice!==undefined&&(await releasedCraftRows(db,q)).some(value=>value.rowId===rowId))
     conflict('请在本项二次工艺报价入口送审，批准后再采用单价');
@@ -477,9 +506,11 @@ export class DigitalQuotationService{
  async confirm(actor:TrustedActorContext,resource:QuotationResource,input:z.infer<typeof QuotationConfirmationSchema>,key:string){
   input=QuotationConfirmationSchema.parse(input);
   return this.command(actor,resource,'confirm',key,input,async(db,c)=>{
-   if(!c.confirm)digitalForbidden();const q=c.quote??conflict('请先保存报价');
+   if(!c.confirm)digitalForbidden();if(!c.quote)conflict('请先保存报价');
    if(!c.customerCode||input.customerCode!==c.customerCode)conflict('客户未明确或与原单不一致，先保留报价草稿，不能记录为客户已确认');
-   if(q.version!==input.expectedVersion||q.version===q.confirmed_version)conflict('报价已更新或本版已确认，请读取当前版本');
+   const stale='报价已更新或本版已确认，请读取当前版本';
+   const q=await this.requireCurrentBasis(db,actor,c,input.expectedVersion,stale)??conflict('请先保存报价');
+   if(q.version===q.confirmed_version)conflict(stale);
    if(new Date(input.confirmedAt).getTime()>businessNow().getTime())conflict('客户确认时间不能晚于当前时间');
    const document=BudgetDocumentSchema.parse(q.document);
    if(!document.rows.length)conflict('报价须有实际明细');

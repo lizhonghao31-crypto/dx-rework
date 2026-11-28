@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "676196af0dd433f65deba79109af6bb01159cffe",
-  "sourceFingerprint": "f69a887e3b7a9518eaaf4eb0c7c5027ba3b522ae6ccbadaa862a786a558a8785",
+  "base": "b7b93b550bca47b5dd7b708ef0883778aa5a9a78",
+  "sourceFingerprint": "f822d0ccc8f5be14c606a59d1942fd8442897f34e5fa2aa4d997f7451b00528c",
   "rules": [
     {
       "rule": "同一报价目录输出当前协作版本和真实客户确认快照；不互相覆盖",
@@ -69,38 +69,22 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "263bb43db8ef27134537295ca4b1feefba87a7989c147f13851ca20624cc1f4a",
-      "startedAt": "2026-11-28T16:14:05Z",
-      "endedAt": "2026-11-28T16:15:42Z",
+      "testedHead": "0d116ae0c2af1789e078a11a97a6b836464b4210",
+      "sourceFingerprint": "f822d0ccc8f5be14c606a59d1942fd8442897f34e5fa2aa4d997f7451b00528c",
+      "startedAt": "2026-11-28T16:42:21Z",
+      "endedAt": "2026-11-28T16:43:42Z",
       "log": "/workspace/scratch/quote-b-evidence/quote-browser.log",
-      "logSha256": "331ba6817f89054ba5179223aef0328709f0cb2b7e945d41d8788fd466fdb94d",
-      "cwd": "/workspace/scratch/quote-b",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts --reporter=default --reporter=json -t \"Acceptance R6 carries|distinguishes manual IE|paginates real assigned IE|searches the authorized IE|filters three real IE|reads the independent quotation|explains a current published unit mismatch\"",
+      "logSha256": "55b0c5c9029bb25155ca80943385440db551a1da92c3d7065f9657c2ebeb93ea",
+      "cwd": "/workspace/scratch/quote-b-combined",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts --reporter=default --reporter=json -t \"Acceptance R6 carries|distinguishes manual IE|paginates real assigned IE|searches the authorized IE|filters three real IE|reads the independent quotation|explains a current published unit mismatch|genuinely unsynchronized commercial\"",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/ie-authorized-directory.test.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "2bdeed44478b1acf404de538311c97ad4a7f14a976209c8604871562b2cd3ce5",
-      "passed": 7,
+      "passed": 8,
       "failed": 0,
-      "skipped": 5,
+      "skipped": 6,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d8a2424d97c67ff1f41b085e1cfe389f8efc9269e83b01dd6fad79f41bde25af"
+          "sha256": "ee451d373a7377b4f565298b9a2c47ac188763d450673c7aab4abfdfe86827d7"
         }
       ]
     },
@@ -109,13 +93,13 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "f69a887e3b7a9518eaaf4eb0c7c5027ba3b522ae6ccbadaa862a786a558a8785",
-      "startedAt": "2026-11-28T16:16:55Z",
-      "endedAt": "2026-11-28T16:17:04Z",
+      "testedHead": "0d116ae0c2af1789e078a11a97a6b836464b4210",
+      "sourceFingerprint": "f822d0ccc8f5be14c606a59d1942fd8442897f34e5fa2aa4d997f7451b00528c",
+      "startedAt": "2026-11-28T16:43:42Z",
+      "endedAt": "2026-11-28T16:43:52Z",
       "log": "/workspace/scratch/quote-b-evidence/quote-pg.log",
-      "logSha256": "9a634fd12710133a8a7510b1fd4ce4e42243e6049cddcbbc70ee712b2616cd24",
-      "cwd": "/workspace/scratch/quote-b",
+      "logSha256": "e00ffa8ccef01344a6d7160f4556e7bd2f8118b2afc54b2c7ed8b01325a29414",
+      "cwd": "/workspace/scratch/quote-b-combined",
       "command": "npx vitest run --config vitest.postgres-immediate.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=default --reporter=json",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
       "passed": 17,
@@ -124,7 +108,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a683a8b0f8a62f970cca4f3759a3486d3470b777fb08f732f9df159d6cbb7bc6"
+          "sha256": "2c50c0bfdd0b76f031f62fef3117e3250f5753c86e6b5fbedecb7fb62cfa4841"
         }
       ]
     },
@@ -133,86 +117,39 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "263bb43db8ef27134537295ca4b1feefba87a7989c147f13851ca20624cc1f4a",
-      "startedAt": "2026-11-28T16:15:54Z",
-      "endedAt": "2026-11-28T16:15:56Z",
+      "testedHead": "0d116ae0c2af1789e078a11a97a6b836464b4210",
+      "sourceFingerprint": "f822d0ccc8f5be14c606a59d1942fd8442897f34e5fa2aa4d997f7451b00528c",
+      "startedAt": "2026-11-28T16:43:52Z",
+      "endedAt": "2026-11-28T16:43:54Z",
       "log": "/workspace/scratch/quote-b-evidence/ie-unit.log",
-      "logSha256": "ce83e616253e3ce316cd801f38fe0f1a84b4f0474e8cf4e671e3b53e7f83a329",
-      "cwd": "/workspace/scratch/quote-b",
+      "logSha256": "cad0d03087e3417904c8678f8eb1a6499c52bd10393103f21eae468fd3915e95",
+      "cwd": "/workspace/scratch/quote-b-combined",
       "command": "npx vitest run tests/unit/ie-authorized-directory.test.ts --reporter=default --reporter=json",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/ie-authorized-directory.test.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "2bdeed44478b1acf404de538311c97ad4a7f14a976209c8604871562b2cd3ce5",
       "passed": 7,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8ea5308c2c2afe8b9a440667ac1f4584906cc70fa18d41ef246b45f134b717c9"
+          "sha256": "6ca18885e3d1b1fff5c4e4988b9f4c9ba461a831e9fe72f0f0596d28bccad5c8"
         }
       ]
-    },
-    {
-      "id": "quotation-b-static-pg-test",
-      "status": "passed",
-      "kind": "command",
-      "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "f69a887e3b7a9518eaaf4eb0c7c5027ba3b522ae6ccbadaa862a786a558a8785",
-      "startedAt": "2026-11-28T16:17:28Z",
-      "endedAt": "2026-11-28T16:17:29Z",
-      "log": "/workspace/scratch/quote-b-evidence/static-pg-test.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "cwd": "/workspace/scratch/quote-b",
-      "command": "npx eslint --max-warnings=0 tests/integration/customer-quotation-postgres.test.ts",
-      "context": "Node 22.22.2 and existing locked dependencies; checks use the local candidate only."
     },
     {
       "id": "quotation-b-static-final",
       "status": "passed",
       "kind": "command",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "263bb43db8ef27134537295ca4b1feefba87a7989c147f13851ca20624cc1f4a",
-      "startedAt": "2026-11-28T16:14:16Z",
-      "endedAt": "2026-11-28T16:16:04Z",
+      "testedHead": "0d116ae0c2af1789e078a11a97a6b836464b4210",
+      "sourceFingerprint": "f822d0ccc8f5be14c606a59d1942fd8442897f34e5fa2aa4d997f7451b00528c",
+      "startedAt": "2026-11-28T16:43:54Z",
+      "endedAt": "2026-11-28T16:45:46Z",
       "log": "/workspace/scratch/quote-b-evidence/static-final.log",
       "logSha256": "5eeb13a001df1d7f614436365f2486ebb70c8012135997eac7f4b3a0d6a0b4b8",
-      "cwd": "/workspace/scratch/quote-b",
+      "cwd": "/workspace/scratch/quote-b-combined",
       "command": "npm API and Web typechecks, touched TS and TSX ESLint, git diff --check, time inventory check",
-      "context": "Node 22.22.2 and existing locked dependencies; checks use the local candidate only.",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/unit/ie-authorized-directory.test.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "2bdeed44478b1acf404de538311c97ad4a7f14a976209c8604871562b2cd3ce5"
+      "context": "Node 22.22.2 and existing locked dependencies; checks use the local candidate only."
     }
   ]
 }
