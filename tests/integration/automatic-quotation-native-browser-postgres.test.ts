@@ -1278,7 +1278,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect([403,404]).toContain(result.status());
    }finally{await w.context.close();await i.context.close();}
    expect(h.errors).toEqual([]);
-  }finally{await d.page.screenshot({path:join(h.evidence,'last-page.png'),fullPage:true});await d.context.close();}
+  }catch(error){
+   // This last screenshot is failure diagnostics only. It must not hide the
+   // original assertion or stop the browser context from closing.
+   await d.page.screenshot({path:join(h.evidence,'last-page.png'),timeout:3000}).catch(()=>{
+    console.warn('Quotation failure screenshot unavailable; preserving the original test error.');
+   });
+   throw error;
+  }finally{await d.context.close();}
  });
  it('supplements a published material unit in the original row, recovers the original lost receipt and rechecks same-session authority',async()=>{
   const designer=h.f.people['sample-designer']!,forms=new DigitalDevelopmentService(h.db,true),quotes=new DigitalQuotationService(h.db,true);

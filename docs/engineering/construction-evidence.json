@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "676196af0dd433f65deba79109af6bb01159cffe",
-  "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
+  "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
   "rules": [
     {
       "rule": "原开发订正与已保存报价共享有效依据；仅指针追平不新建报价版",
@@ -65,12 +65,12 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
-      "startedAt": "2026-11-28T16:06:17Z",
-      "endedAt": "2026-11-28T16:09:04Z",
+      "testedHead": "32fe9373d871bd4a40b86a00c3f7df0c95815169",
+      "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
+      "startedAt": "2026-11-28T16:36:32Z",
+      "endedAt": "2026-11-28T16:39:09Z",
       "log": "/workspace/scratch/quote-a-evidence/quote-browser.log",
-      "logSha256": "a1ff3895a15b6b925f0e292b857a11afc911e9c501411924a645b299471c6b3c",
+      "logSha256": "1f8ec3515450fe9369765c4e0cc72c67a77a1f3cbbf3970173bc3a0900aa3141",
       "cwd": "/workspace/scratch/quote-a",
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts --reporter=default --reporter=json",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
@@ -80,7 +80,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c3652b2d75ff1c73c5829ef4727b6b72aae084ba649c13bd1e460df2fe122c1b"
+          "sha256": "1be6b3ceb428e479ce0dee29a85db49584f987a81cd0023c00896098adf6e43f"
         }
       ]
     },
@@ -89,12 +89,12 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
-      "startedAt": "2026-11-28T16:10:46Z",
-      "endedAt": "2026-11-28T16:11:02Z",
+      "testedHead": "32fe9373d871bd4a40b86a00c3f7df0c95815169",
+      "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
+      "startedAt": "2026-11-28T16:40:33Z",
+      "endedAt": "2026-11-28T16:40:43Z",
       "log": "/workspace/scratch/quote-a-evidence/quote-pg.log",
-      "logSha256": "7bc31cc62b2cde8974fec96d64a8f09cd42b32df098a6649a14b144a1ff9c265",
+      "logSha256": "dd2326a75df3640c41511616c0b4590a9689427a226e249a2ddff6b4d96e3413",
       "cwd": "/workspace/scratch/quote-a",
       "command": "npx vitest run --config vitest.postgres-immediate.config.ts tests/integration/customer-quotation-postgres.test.ts --reporter=default --reporter=json",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
@@ -104,7 +104,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a9b2fdde59fb4c12017c7baee96e8bcc26c01fa927a123bfec72c54e8bf1137b"
+          "sha256": "c2fb2329d932cd7225a3dd48f980814452805fe449fc315cf087b9694518fe4d"
         }
       ]
     },
@@ -113,12 +113,12 @@
       "status": "passed",
       "kind": "tests",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
-      "startedAt": "2026-11-28T16:09:04Z",
-      "endedAt": "2026-11-28T16:10:46Z",
+      "testedHead": "32fe9373d871bd4a40b86a00c3f7df0c95815169",
+      "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
+      "startedAt": "2026-11-28T16:39:10Z",
+      "endedAt": "2026-11-28T16:40:33Z",
       "log": "/workspace/scratch/quote-a-evidence/prior-native.log",
-      "logSha256": "df80ec214e29ee1d572846493babdc7520b10e6e456edb79255e8bfa12a82498",
+      "logSha256": "7acd44955bebfb2446f70995dc4ba671d492f4dcb21b80e0ef4a7e030cc08838",
       "cwd": "/workspace/scratch/quote-a",
       "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/fixed-timeline-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts --reporter=default --reporter=json -t \"resumes an unnumbered draft|saves the actual chosen craft order|lets the actual merchandiser enter from My Tasks|converts the original preorder\"",
       "context": "Node 22.22.2. Browser group uses the pinned Chromium 141 and existing app authentication in isolated PostgreSQL 16. No real Acceptance or production writes.",
@@ -128,7 +128,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "452f6f4083434af1d687e145b9b8fa283445f0f2fe5004192dbc9a17d8da0acc"
+          "sha256": "930521a089653c317d048c051ae5bd16688bd27e54ce30b6dff4dbbb956ce517"
         }
       ]
     },
@@ -137,10 +137,10 @@
       "status": "passed",
       "kind": "command",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
-      "startedAt": "2026-11-28T16:10:05Z",
-      "endedAt": "2026-11-28T16:10:08Z",
+      "testedHead": "32fe9373d871bd4a40b86a00c3f7df0c95815169",
+      "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
+      "startedAt": "2026-11-28T16:36:54Z",
+      "endedAt": "2026-11-28T16:36:55Z",
       "log": "/workspace/scratch/quote-a-evidence/time-inventory.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
       "cwd": "/workspace/scratch/quote-a",
@@ -152,12 +152,12 @@
       "status": "passed",
       "kind": "command",
       "exitCode": 0,
-      "testedHead": "676196af0dd433f65deba79109af6bb01159cffe",
-      "sourceFingerprint": "9a6c2af920207e81fe277bc60091931fe8556f6571195985fb6081acee9f79d9",
-      "startedAt": "2026-11-28T16:11:02Z",
-      "endedAt": "2026-11-28T16:13:05Z",
+      "testedHead": "32fe9373d871bd4a40b86a00c3f7df0c95815169",
+      "sourceFingerprint": "90ad4ef6978907655cdc3639e35af15eaf6a734079ee76f8594f833e34c33848",
+      "startedAt": "2026-11-28T16:36:31Z",
+      "endedAt": "2026-11-28T16:38:10Z",
       "log": "/workspace/scratch/quote-a-evidence/static-final.log",
-      "logSha256": "e728436433ce50c25f393b1f5d43e7a2fd41619a147eeeb650c927538d3750ad",
+      "logSha256": "ce0c6b1cf783de332aa0e34396f3e9a3e545df6363396c78886163458e5bb4be",
       "cwd": "/workspace/scratch/quote-a",
       "command": "npm API and Web typechecks, touched TS and TSX ESLint, git diff --check, time inventory check, 21 named test execution contract subtests",
       "context": "Node 22.22.2 and existing locked dependencies; checks use the local candidate only."
