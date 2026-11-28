@@ -343,10 +343,11 @@ export class DigitalDevelopmentService {
       const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
       const prior = (await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, name, key])).rows[0];
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
-      const quotationSource=!prior&&(command==='save'||command==='publish')?await developmentDocumentRow(db,sourceId):undefined;
+      const syncQuotation=command==='save'||command==='publish'||command==='designer_document_correction';
+      const quotationSource=!prior&&syncQuotation?await developmentDocumentRow(db,sourceId):undefined;
       const result = prior ? prior.response as T : await action(db);
       if (!prior) {
-        if(command==='save'||command==='publish')await assembleQuotation(db,sourceId,actor.actorId,undefined,quotationSource);
+        if(syncQuotation)await assembleQuotation(db,sourceId,actor.actorId,undefined,quotationSource);
         await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, name, key, hash, JSON.stringify(result)]);
         await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_development',$5,$6)", [randomUUID(), actor.requestId, actor.actorId, `development_${command}`, sourceId, JSON.stringify({ command, version: (result as { version?: number }).version })]);
       }

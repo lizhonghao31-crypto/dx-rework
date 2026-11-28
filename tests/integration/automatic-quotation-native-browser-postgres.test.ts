@@ -32,6 +32,114 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'automatic-quotation-ui-'+randomUUID()),{fullApp:true,orderTimeFlow:true,unifiedIeDirectory:true,sourcingFullDetail:true});});
  afterAll(async()=>{await h?.writeEvidence();await h?.dispose();});
+ async function createBasisSample(){
+  const designer=h.f.people['sample-designer']!,ie=h.f.people.ie!,forms=new DigitalDevelopmentService(h.db,true),quotes=new DigitalQuotationService(h.db,true);
+  const number='TEST-QUOTE-BASIS-'+randomUUID(),source=await new DigitalProductionIdentityService(h.db,true).createSource(designer,
+   {developmentType:'头版',designStyleNo:number,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},document=DevelopmentDocumentSchema.parse({...initialDevelopmentDocument(),
+   quotationMode:'automatic_v1',template:'上衣',quantity:1,sizes:['M'],sampleSize:'M',sizeQuantities:[1],
+   measurements:[{name:'胸围',values:['50']}],files:[{attachmentId:await h.f.image(designer),kind:'款图'}],
+   workbenchSheet:{version:1,styleName:'TEST 原品名',brand:'TEST 品牌',referenceNote:'TEST 原说明',gender:'男装',boardType:'头版',processingSelected:true,sewingRows:[]}});
+  const draft=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+  const published=await forms.publish(designer,source.sourceId,draft.version,randomUUID());
+  const initial=await quotes.readSnapshot(designer,resource),row=initial.rows.find(line=>line.assignment.priceRole==='ie_reviewer')!;
+  const stored=async()=>(await h.db.query('SELECT quote_id,version,document,assignments,price_sources,assembly FROM digital_quotation_documents WHERE quote_id=$1',[initial.quoteId])).rows[0];
+  const pagePath='/ui/digital-quotation?kind=source&id='+source.sourceId,api=h.base+'/api/digital-production/sources/'+source.sourceId+'/quotation';
+  const choose=async(page:Page)=>page.getByLabel('IE加工单价价格负责人').selectOption('ie_reviewer:'+ie.actorId);
+  const correction=async()=>forms.correctDesignerDocument(designer,source.sourceId,{roundNumber:1,expectedDocumentVersion:published.version,
+   styleName:'TEST 修订品名',brand:'TEST 修订品牌',referenceNote:'TEST 修订说明',reason:'TEST 仅订正品名、品牌和参考说明'},randomUUID());
+  return {designer,ie,forms,quotes,number,source,published,resource,initial,row,stored,pagePath,api,choose,correction};
+ }
+ it('assigns the original IE row after a historical cosmetic correction without a phantom quotation version',async()=>{
+  const x=await createBasisSample(),before=await x.stored(),corrected=await x.correction(),after=await x.stored();
+  // Keep the genuine old, missed pointer as a fixture without changing any quotation input or version.
+  await h.db.query("UPDATE digital_quotation_documents SET assembly=jsonb_set(assembly,'{sourceVersion}',to_jsonb($2::int)) WHERE quote_id=$1",
+   [x.initial.quoteId,x.published.version]);
+  const designer=await h.open(x.designer.actorId,1165,{},x.pagePath);
+  const ie=await h.open(x.ie.actorId,1165,{},'/ui/ie-processing?search='+encodeURIComponent(x.number));
+  try{
+   await x.choose(designer.page);
+   const [assign]=await Promise.all([designer.page.waitForResponse(res=>res.url()===x.api&&res.request().method()==='PUT'),
+    designer.page.getByRole('button',{name:'保存报价',exact:true}).click()]);
+   expect(assign.status(),await assign.text()).toBe(200);
+   expect(after).toMatchObject({...before,assembly:{...before.assembly,sourceVersion:corrected.version}});
+   const receipt=await assign.json();
+   expect(receipt).toMatchObject({quoteId:x.initial.quoteId,version:before.version+1,commandReceipt:{appliedVersion:before.version+1}});
+   const replay=await designer.page.request.put(x.api,{data:assign.request().postDataJSON(),headers:{'idempotency-key':assign.request().headers()['idempotency-key']!}});
+   expect(await replay.json()).toMatchObject({version:before.version+1,commandReceipt:receipt.commandReceipt});
+   const queue=h.base+'/api/digital-production/quotations/ie-processing?'+new URLSearchParams({state:'awaiting_price',search:x.number});
+   expect(await (await ie.page.request.get(queue)).json()).toMatchObject({total:1,items:[{quoteId:x.initial.quoteId,rowId:x.row.rowId}]});
+   const link=ie.page.getByRole('link',{name:x.number,exact:true});await link.waitFor();await ie.page.reload();await link.click();
+   await ie.page.getByRole('textbox',{name:'加工单价',exact:true}).fill('15.8');
+   await ie.page.getByRole('button',{name:'保存加工单价',exact:true}).click();
+   await ie.page.getByText(`本行报价已保存 · v${before.version+2}`,{exact:true}).waitFor();
+   expect(await (await ie.page.request.get(queue)).json()).toMatchObject({total:0,items:[]});
+   const priced=await x.stored();
+   expect(priced).toMatchObject({quote_id:x.initial.quoteId,version:before.version+2,
+    assembly:{sourceVersion:corrected.version},document:{rows:[expect.objectContaining({rowId:x.row.rowId,unitPrice:'15.8'})]}});
+   const relabel=await x.forms.correctDesignerDocument(x.designer,x.source.sourceId,{roundNumber:1,expectedDocumentVersion:corrected.version,
+    styleName:'TEST 核价后订正品名',reason:'TEST 保留 IE 已报的单价'},randomUUID());
+   expect(await x.stored()).toEqual({...priced,assembly:{...priced.assembly,sourceVersion:relabel.version}});
+  }finally{await Promise.all([designer.close(),ie.close()]);}
+ });
+ it('recovers a genuinely unsynchronized commercial basis only through the authorized refresh and keeps the old submit uncommitted',async()=>{
+  const x=await createBasisSample(),before=await x.stored(),corrected=await x.correction();
+  // Legacy fixture: a valid newer effective document with a real pricing input, but still the old quote.
+  const effective=await x.forms.read(x.designer,x.source.sourceId);
+  const materialId=randomUUID(),document=DevelopmentDocumentSchema.parse({...effective.document,materials:[{materialId,category:'主布',
+   label:'主布',name:'TEST 新报价依据',supplier:'TEST',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',
+   specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null,pricingUnit:'米',unitPrice:'19'}]});
+  const fixture=await h.db.connect(),event=randomUUID(),version=corrected.version+1;
+  const reason='TEST historical unsynchronized commercial basis',changes=[{field:'materials',materialId,before:'',after:'TEST 新报价依据'}];
+  try{
+   await fixture.query('BEGIN');
+   await fixture.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+    VALUES($1,'TEST-quote-basis-fixture',$2,'development_designer_correction','digital_development',$3,$4,$5)`,
+    [event,x.designer.actorId,x.source.sourceId,JSON.stringify({version:corrected.version}),JSON.stringify({version,round:1,reason,changes})]);
+   await fixture.query(`INSERT INTO digital_development_amendments(amendment_id,source_id,round_number,document_version,base_document_version,
+    amendment_kind,correction_event_id,document,reason,changes,published_by)
+    VALUES($1,$2,1,$3,$4,'designer_correction',$5,$6,$7,$8,$9)`,
+    [randomUUID(),x.source.sourceId,version,corrected.version,event,JSON.stringify(document),reason,JSON.stringify(changes),x.designer.actorId]);
+   await fixture.query('COMMIT');
+  }catch(error){await fixture.query('ROLLBACK');throw error;}finally{fixture.release();}
+  const designer=await h.open(x.designer.actorId,1165,{},x.pagePath),second=await h.open(x.designer.actorId,1366,{},x.pagePath);
+  const outsider=await h.open(x.ie.actorId,1165,{},'/');
+  try{
+   const original=await x.stored();
+   expect(original.version).toBe(before.version);
+   expect(await (await designer.page.request.get(x.api)).json()).toMatchObject({quoteId:x.initial.quoteId,version:before.version});
+   expect(await x.stored()).toEqual(original);
+   await x.choose(designer.page);
+   const save=designer.page.getByRole('button',{name:'保存报价',exact:true});
+   const [stale]=await Promise.all([designer.page.waitForResponse(res=>res.url()===x.api&&res.request().method()==='PUT'),save.click()]);
+   expect(stale.status()).toBe(409);
+   expect(await stale.json()).toMatchObject({error:{code:'QUOTATION_BASIS_SYNC_REQUIRED'}});
+   const staleKey=stale.request().headers()['idempotency-key'];
+   expect((await h.db.query('SELECT 1 FROM digital_production_commands WHERE actor_id=$1 AND key=$2',[x.designer.actorId,staleKey])).rowCount).toBe(0);
+   expect(await x.stored()).toEqual(original);
+   const refresh=x.api+'/refresh-basis',body={quoteId:x.initial.quoteId};
+   expect([403,404]).toContain((await outsider.page.request.post(refresh,{data:body,headers:{'idempotency-key':randomUUID()}})).status());
+   const priorDifferentVersion=await second.page.request.put(x.api,{data:{...stale.request().postDataJSON(),expectedVersion:before.version+1},headers:{'idempotency-key':randomUUID()}});
+   expect(await priorDifferentVersion.json()).toMatchObject({error:{code:'QUOTATION_BASIS_SYNC_REQUIRED'}});
+   const sync=designer.page.getByRole('button',{name:'同步并重新读取报价',exact:true});
+   const [result,other]=await Promise.all([designer.page.waitForResponse(res=>res.url()===refresh&&res.request().method()==='POST'),
+    second.page.request.post(refresh,{data:body,headers:{'idempotency-key':randomUUID()}}),sync.click()]);
+   expect(result.status(),await result.text()).toBe(200);expect(other.status(),await other.text()).toBe(200);
+   const replay=await designer.page.request.post(refresh,{data:body,headers:{'idempotency-key':result.request().headers()['idempotency-key']!}});
+   for(const response of [result,other,replay])expect(await response.json()).toMatchObject({quoteId:x.initial.quoteId,version:before.version+1,commandReceipt:{appliedVersion:before.version+1}});
+   const newBasis=designer.page.locator(`#quote-${materialId}-name`);
+   await newBasis.waitFor();expect(await newBasis.innerText()).toBe('TEST 新报价依据');
+   expect(await designer.page.getByLabel('IE加工单价价格负责人').inputValue()).toBe('');
+   await designer.page.getByText('核对上次未保存的输入',{exact:true}).click();
+   await designer.page.getByText(/IE加工单价价格负责人：/).waitFor();
+   expect((await x.stored()).assignments.find((row:{rowId:string})=>row.rowId===x.row.rowId).priceAssigneeId).toBeNull();
+   const staleAgain=await second.page.request.put(x.api,{data:stale.request().postDataJSON(),headers:{'idempotency-key':randomUUID()}});
+   expect(await staleAgain.json()).toMatchObject({error:{code:'QUOTATION_CONFLICT'}});
+   await x.choose(designer.page);await save.click();
+   await expect.poll(async()=>(await x.stored()).version).toBe(before.version+2);
+   expect((await x.stored()).assignments.find((row:{rowId:string})=>row.rowId===x.row.rowId).priceAssigneeId).toBe(x.ie.actorId);
+  }finally{await Promise.all([designer.close(),second.close(),outsider.close()]);}
+ });
  it('Acceptance R6 carries the one confirmed IE processing price through the real budget and original factory selection',async()=>{
   const {f,db}=h,designer=f.people['sample-designer']!,ie=f.people.ie!,merch=f.people.merchandiser!;
   const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),

@@ -96,6 +96,7 @@ export function registerQuotationRoutes(app:FastifyInstance,deps:DigitalIdentity
   'decision',parse(SecondaryCraftDecisionSchema,request.body),key(request)));
  app.get(`${base}/participants`,async request=>service.participants(await actor(request),resource(request)));
  app.put(base,async request=>service.save(await actor(request),resource(request),parse(SaveQuotationSchema,request.body),key(request)));
+ app.post(`${base}/refresh-basis`,async request=>service.refreshBasis(await actor(request),resource(request),parse(z.object({quoteId:z.uuid()}).strict(),request.body).quoteId,key(request)));
  app.post(`${base}/rows/:rowId`,async request=>service.fillRow(await actor(request),resource(request),parse(z.string().uuid(),(request.params as {rowId:string}).rowId),parse(QuotationRowInputSchema,request.body),key(request)));
  app.post(`${base}/confirm`,async request=>service.confirm(await actor(request),resource(request),parse(QuotationConfirmationSchema,request.body),key(request)));
 }
