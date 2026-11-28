@@ -98,7 +98,7 @@ it('keeps the exact selected historical confirmation accessible behind the displ
  request.mockImplementation(async()=>{throw Error('Historical snapshot must not issue a new quotation request');});
  try{
   await h.render({...draft,version:5,status:'confirmed',confirmedVersion:6,versions:[6,5],canConfirm:false});
-  expect(h.element.textContent).toContain('v5 · 客户已确认');
+  expect(h.element.querySelector('[aria-label="报价版本"]')?.textContent).toBe('已确认 v5');
   expect(h.element.textContent).toContain('客户确认单件金额：48.1 元 · 含税');
   expect(h.element.querySelector('[title="原客户确认金额 48.123456 元"]')?.textContent).toBe('48.1');
   expect(h.element.textContent).toContain('TEST 第五版原始确认依据');
