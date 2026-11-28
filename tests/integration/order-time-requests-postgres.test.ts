@@ -52,9 +52,9 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 native first-effective order time and one request transaction',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,requests:OrderTimeRequestService,standardId:string,native:PatternRoomOrderService;
- const make=async(date:string|null,withMaterial=false,washing:'免洗'|'内洗'|'外洗'='免洗',numbered=false)=>{
+ const make=async(date:string|null,withMaterial=false,washing:'免洗'|'内洗'|'外洗'='免洗',numbered=false,temporaryStyleNo:string|null=null)=>{
   const original=f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']};
-  const source=numbered?await identity.reserveNumberedDraft(actor,{developmentType:'头版',temporaryStyleNo:null,
+  const source=numbered?await identity.reserveNumberedDraft(actor,{developmentType:'头版',temporaryStyleNo,
    numbering:{kind:'development',customerCode:null,productGroup:'男装',salesYear:2027,salesSeries:null}},randomUUID()):
    await identity.createSource(actor,{developmentType:'头版',designStyleNo:'TEST-R507-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
   const supplierName=numbered?'TEST 编号原材料 '+randomUUID().slice(0,8):'TEST';
@@ -346,6 +346,84 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const journey=await new DigitalJourneyQuery(f.db).read(f.root,row!.sourceId,undefined,true);
    expect(journey.fixedSchedule?.durationSummary).toMatchObject({actualStart:{precision:'instant',at:'2027-02-01T15:00:00.000Z'},elapsedSpanMinutes:{minimum:1440,maximum:1440},planSpanMinutes:300,finalActualSpanMinutes:null});
    expect(journey.fixedSchedule?.scopes[0]?.nodes.find(node=>node.canonicalWorkRef==='creation:source:'+row!.sourceId)).toMatchObject({businessCompleted:true});
+  });
+ });
+ it('deletes only the exact returned development draft and serializes both orders of original resubmission',async()=>{
+  const scene=await f.scene('2027-02-06T15:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const manager=f.people['production-management']!;
+   const prepare=async()=>{
+    const temporary='TEST-审批草稿-'+randomUUID();
+    const row=await make('2027-02-06',false,'免洗',true,temporary),pending=await submit(row);
+    const result=await requests.close(manager,pending.requestId,{expectedVersion:pending.version,reason:'TEST 原时效退回待核'},randomUUID(),'returned');
+    const approval={approvalRequestId:result.requestId,approvalVersion:result.version};
+    const resubmit={expectedVersion:result.version,operation:result.operation,fingerprint:result.check.fingerprint,reason:'TEST 原时效重提'};
+    return {row,result,approval,resubmit,temporary};
+   };
+   const first=await prepare(),stale=first.row;
+   const next=await requests.resubmit(stale.actor,first.result.requestId,first.resubmit,randomUUID());
+   expect(next.state).toBe('pending');
+   await expect(identity.discardDevelopmentDraft(stale.actor,stale.sourceId,1,randomUUID(),first.approval)).rejects.toMatchObject({statusCode:409});
+   expect((await identity.developmentDrafts(stale.actor,1,'',false,'followup')).items).toEqual(expect.arrayContaining([
+    expect.objectContaining({sourceId:stale.sourceId,approvalState:'pending',canDiscard:false}),
+   ]));
+   const fixture=await prepare(),{row,result,approval}=fixture;
+   const state=()=>f.db.query(`SELECT to_jsonb(r) AS request,(SELECT jsonb_agg(to_jsonb(e) ORDER BY request_version)
+     FROM digital_order_time_request_events e WHERE e.request_id=r.request_id) AS history FROM digital_order_time_requests r WHERE r.request_id=$1`,[result.requestId]).then(r=>r.rows[0]);
+   const original=await state();
+   const search=fixture.temporary;
+   expect((await identity.developmentDrafts(row.actor,1,search,false,'followup')).items).toMatchObject([{
+    sourceId:row.sourceId,approvalState:'returned',approvalRequestId:result.requestId,approvalVersion:result.version,
+    approvalReturnReason:'TEST 原时效退回待核',canDiscard:true,
+   }]);
+   expect((await identity.developmentDrafts(row.actor,1,search,true,'followup')).total).toBe(1);
+   await expect(identity.discardDevelopmentDraft(row.actor,row.sourceId,1,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(identity.discardDevelopmentDraft(row.actor,row.sourceId,2,randomUUID(),approval)).rejects.toMatchObject({statusCode:409});
+   await expect(identity.discardDevelopmentDraft(row.actor,row.sourceId,1,randomUUID(),first.approval)).rejects.toMatchObject({statusCode:409});
+   const direct=async(withWrongAudit:boolean)=>{
+    const db=await f.db.connect(),event=randomUUID();
+    try{
+     await db.query('BEGIN');
+     if(withWrongAudit)await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+      VALUES($1,$2,$3,'digital_development_draft_discarded','digital_production',$4,$5,$6)`,[event,randomUUID(),row.actor.actorId,row.sourceId,
+      JSON.stringify({version:1,approvalRequestId:result.requestId,approvalVersion:result.version-1}),JSON.stringify({ownerId:row.actor.actorId})]);
+     await expect(db.query('INSERT INTO digital_development_draft_discards(source_id,actor_id,draft_version,audit_event_id) VALUES($1,$2,1,$3)',
+      [row.sourceId,row.actor.actorId,event])).rejects.toMatchObject({code:'23514'});
+    }finally{await db.query('ROLLBACK');db.release();}
+   };
+   await direct(false);await direct(true);
+   expect((await orderTimeTodos(f.db,row.actor)).some(todo=>todo.todoId===result.requestId)).toBe(true);
+   const tx=await f.db.connect(),key=randomUUID();
+   let racing:Promise<unknown>|undefined;
+   try{
+    await tx.query('BEGIN');
+    const pid=(await tx.query<{id:number}>('SELECT pg_backend_pid() AS id')).rows[0]!.id;
+    expect(await identity.inTransaction(tx).discardDevelopmentDraft(row.actor,row.sourceId,1,key,approval)).toEqual({discarded:true});
+    // Start the stale original app command while deletion owns the original
+    // lifecycle lock and prove that it really waits on the deleting session.
+    racing=requests.resubmit(row.actor,result.requestId,fixture.resubmit,randomUUID()).then(value=>({value}),error=>({error}));
+    await expect.poll(async()=>Boolean((await f.db.query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+     WHERE $1::int=ANY(pg_blocking_pids(pid))) AS blocked`,[pid])).rows[0]?.blocked),{timeout:8000}).toBe(true);
+    await tx.query('COMMIT');
+    expect(await racing).toMatchObject({error:{statusCode:404}});
+   }finally{await tx.query('ROLLBACK');tx.release();if(racing)await racing;}
+   expect(await identity.discardDevelopmentDraft(row.actor,row.sourceId,1,key,approval)).toEqual({discarded:true});
+   expect((await identity.developmentDrafts(row.actor,1,search,true,'followup')).total).toBe(0);
+   expect((await orderTimeTodos(f.db,row.actor)).some(todo=>todo.todoId===result.requestId)).toBe(false);
+   await expect(requests.read(row.actor,result.requestId)).rejects.toMatchObject({statusCode:404});
+   expect(await state()).toEqual(original);
+   expect((await f.db.query(`SELECT count(*)::int AS total FROM digital_development_draft_discards
+    WHERE source_id=$1`,[row.sourceId])).rows[0]).toEqual({total:1});
+   expect((await f.db.query(`SELECT before_state FROM audit_events WHERE action='digital_development_draft_discarded' AND entity_id=$1`,[row.sourceId])).rows)
+    .toEqual([{before_state:{version:1,...approval}}]);
+   const forRoot=await prepare();
+   expect(await identity.discardDevelopmentDraft(f.root,forRoot.row.sourceId,1,randomUUID(),forRoot.approval)).toEqual({discarded:true});
+   const forWithdrawal=await prepare(),withdrawn=await requests.close(forWithdrawal.row.actor,forWithdrawal.result.requestId,
+    {expectedVersion:forWithdrawal.result.version},randomUUID(),'withdrawn');
+   expect((await identity.developmentDrafts(forWithdrawal.row.actor,1,forWithdrawal.temporary,false,'followup')).items)
+    .toMatchObject([{sourceId:forWithdrawal.row.sourceId,approvalState:'withdrawn',canDiscard:false}]);
+   await expect(identity.discardDevelopmentDraft(forWithdrawal.row.actor,forWithdrawal.row.sourceId,1,randomUUID(),
+    {approvalRequestId:withdrawn.requestId,approvalVersion:withdrawn.version})).rejects.toMatchObject({statusCode:409});
   });
  });
  it('lets only one current manager finish a pending request while another stale decision cannot duplicate native business',async()=>{

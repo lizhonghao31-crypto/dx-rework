@@ -326,14 +326,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tab=await h.open(designer.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
   try{
    const page=tab.page,base='/api/digital-production/sources/'+original.sourceId;
-   // An original draft with live handover/procurement cannot be discarded.
-   // UI-01 locates it under follow-up, not in the ordinary draft box.
+   // The original test preorder stays out of both draft counts. Its signed
+   // native source link still reaches the same procurement/formalization path.
    await page.getByRole('textbox',{name:'搜索草稿款号',exact:true}).fill(style);
-   await page.getByText('审批与原档案核对',{exact:true}).click();
-   const history=page.getByRole('listitem').filter({hasText:style});
-   const archived=history.getByRole('link',{name:'查看原开发档案',exact:true});
-   expect(await history.getByRole('button',{name:/^删除草稿/}).count()).toBe(0);
-   await archived.click();
+   await page.getByRole('tab',{name:'草稿箱（0）',exact:true}).waitFor();
+   await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).click();
+   await page.getByText('暂无待审批的未发布草稿',{exact:true}).waitFor();
+   expect(await page.getByRole('tabpanel').getByText(style,{exact:true}).count()).toBe(0);
+   expect(h.requests.filter(row=>row.session===tab.session&&row.method==='DELETE')).toEqual([]);
+   await page.goto(h.base+'/ui/digital-production?workspace=designer&section=workspace&development='+original.sourceId);
    expect(new URL(page.url()).searchParams.get('development')).toBe(original.sourceId);
    await page.getByRole('button',{name:'客户确认下单',exact:true}).click();
    await page.getByRole('button',{name:'确认',exact:true}).click();
@@ -354,6 +355,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
    const save=await intermediate;expect(save.status(),await save.text()).toBe(200);
    expect(await save.json()).toMatchObject({sourceId:original.sourceId,document:{customerOrderDraft:{stage:'preorder',wizardConfirmPreorder:true,wizardStep:3}}});
+   for(const bucket of ['drafts','followup'] as const){
+    const drafts=await tab.context.request.get(h.base+'/api/digital-production/sources/drafts?'+new URLSearchParams({search:style,bucket}));
+    expect(drafts.status(),await drafts.text()).toBe(200);
+    expect(await drafts.json()).toMatchObject({items:[],total:0});
+   }
    const before=await h.f.runtime.run(scene,merch,()=>readiness.read(merch,original.resource));
    expect(before.facts).toEqual(expect.arrayContaining([expect.objectContaining({recordId:purchase.recordId,occurredAt:at})]));
    expect(await orderTimeCreated(h.db,original.resource)).toBeNull();

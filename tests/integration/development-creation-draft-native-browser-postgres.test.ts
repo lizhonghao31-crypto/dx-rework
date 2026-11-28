@@ -203,6 +203,10 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     };
     const saved=await savedResponse;expect(saved.status(),await saved.text()).toBe(200);
     await page.getByText(/^开发资料与订购草稿已保存/).waitFor();
+    expect((await identity.developmentDrafts(actor,1,'')).items).toEqual(expect.arrayContaining([
+     expect.objectContaining({sourceId,kind:'preorder',canDiscard:true}),
+    ]));
+    expect((await identity.developmentDrafts(actor,1,'',false,'followup')).items.map(item=>item.sourceId)).not.toContain(sourceId);
     expect((await businessList()).businessCounts).toEqual({pure:0,preorder:0,ordered:0,handover:0});
     expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
     expect((await h.db.query('SELECT 1 FROM digital_development_preorder_publications WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
@@ -281,6 +285,8 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     expect(h.requests.filter(row=>row.session===tab.session&&row.method==='POST'&&row.path.endsWith('/sources/numbered-drafts'))).toHaveLength(1);
     const issued=(await h.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0]?.design_style_no;
     expect(issued).toMatch(/^PDMLH\d{4}P02-\d+$/);
+    for(const bucket of ['drafts','followup'] as const)
+     expect(await identity.developmentDrafts(actor,1,issued,false,bucket)).toMatchObject({items:[],total:0});
     expect(await orderTimeCreated(h.db,{kind:'source',id:sourceId})).toBeNull();
     expect((await h.db.query('SELECT 1 FROM digital_production_orders WHERE source_id=$1',[sourceId])).rowCount).toBe(0);
     const handover=(await h.db.query(`SELECT record_id,version,occurred_at FROM digital_preparation_material_versions WHERE resource_kind='source' AND resource_id=$1 AND kind='design_handover'`,[sourceId])).rows;
@@ -1684,6 +1690,103 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
   }finally{await context.close();}
  });
 
+ it('shows only one draft tab and lets the original designer delete a genuine returned application without removing its history',async()=>{
+  const signedDesigner=h.f.people['sample-designer']!,manager=h.f.people['production-management']!,prefix='TEST-DRAFT-INBOX-'+randomUUID();
+  const permissions=(await h.db.query<{capability:string}>(`SELECT DISTINCT c.capability FROM user_role_assignments a
+    JOIN role_capabilities c USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL`,[signedDesigner.actorId])).rows;
+  const actor={...signedDesigner,authorizationCapabilities:permissions.map(row=>row.capability)};
+  const identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),requests=h.orderTimeRequests!;
+  const scene=await h.f.scene('2026-11-19T05:00:00.000Z'),designStyleNo=prefix+'-退回';
+  const prepared=await h.f.runtime.run(scene,actor,async()=>{
+   for(let i=0;i<16;i++)await identity.createSource(actor,{developmentType:'头版',designStyleNo:prefix+'-草稿-'+i,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const {sourceId}=await identity.createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID(),true);
+   const row=(await h.db.query("SELECT price_id FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0]!;
+   const price=await new PatternRoomPriceService(h.db).quote(actor,'category',row.price_id);
+   const draft=await forms.save(actor,sourceId,{expectedVersion:0,document:{...initialDevelopmentDocument(),quantity:1,
+    files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:row.price_id}},randomUUID());
+   const operation={kind:'development_publish' as const,sourceId,input:{expectedVersion:draft.version,patternOrder:{categoryId:row.price_id,priceVersion:price.version}}};
+   const checked=await requests.check(actor,operation);
+   const approval=await requests.submit(actor,{operation,fingerprint:checked.fingerprint,reason:'TEST 原发布时效待审'},randomUUID());
+   return {sourceId,draft,approval};
+  });
+  h.setCollectionScene(scene);
+  const tab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create&search='+encodeURIComponent(prefix));
+  try{
+   const {page}=tab,ordinary=page.getByRole('tab',{name:'草稿箱（16）',exact:true}),approvals=page.getByRole('tab',{name:'待审批-未发布（1）',exact:true});
+   await ordinary.waitFor();await approvals.waitFor();
+   expect(await page.getByRole('tabpanel').count()).toBe(1);
+   const [left,right]=await Promise.all([ordinary.boundingBox(),approvals.boundingBox()]);
+   expect(Math.abs(left!.y-right!.y)).toBeLessThan(2);
+   expect(left!.x).toBeLessThan(right!.x);
+   const listed=h.requests.filter(item=>item.session===tab.session&&item.path.includes('/sources/drafts?')&&new URL(item.path,h.base).searchParams.get('search')===prefix);
+   expect(listed.filter(item=>item.path.includes('bucket=drafts'))).toHaveLength(1);
+   expect(listed.filter(item=>item.path.includes('bucket=followup'))).toHaveLength(1);
+   expect(listed.find(item=>item.path.includes('bucket=followup'))?.path).toContain('view=count');
+   const search=page.getByRole('textbox',{name:'搜索草稿款号',exact:true});
+   const delayed=prefix+'-过时',pattern=/\/sources\/drafts(?:\?|$)/;
+   let restoreOld!:()=>void,oldArrived!:()=>void;
+   const holdOld=new Promise<void>(resolve=>{restoreOld=resolve;}),oldRunning=new Promise<void>(resolve=>{oldArrived=resolve;});
+   let countFault=true;
+   await page.route(pattern,async route=>{
+    const params=new URL(route.request().url()).searchParams;
+    if(params.get('search')===delayed&&params.get('bucket')==='drafts'){
+     const response=await route.fetch();oldArrived();await holdOld;
+     await route.fulfill({response}).catch(()=>undefined);
+    }else if(countFault&&params.get('search')===designStyleNo&&params.get('view')==='count'){
+     countFault=false;await route.fulfill({status:503,body:'TEST count unavailable'});
+    }else await route.continue();
+   });
+   try{
+    await search.fill(delayed);await oldRunning;
+    await search.fill(designStyleNo);
+    await page.getByRole('button',{name:'重试计数',exact:true}).waitFor();
+    await page.getByRole('tab',{name:'待审批-未发布（—）',exact:true}).waitFor();
+    await page.getByRole('button',{name:'重试计数',exact:true}).click();
+    await approvals.waitFor();
+    restoreOld();
+    await page.getByRole('tab',{name:'草稿箱（0）',exact:true}).waitFor();
+    await approvals.waitFor();
+   }finally{restoreOld();await page.unroute(pattern);}
+   await search.fill(prefix);await ordinary.waitFor();
+   await page.getByRole('navigation',{name:'开发草稿分页'}).getByRole('button',{name:'下一页',exact:true}).click();
+   await page.getByText('共 16 条 · 第 2 页',{exact:true}).waitFor();
+   await approvals.click();
+   const row=page.getByRole('row').filter({hasText:designStyleNo});
+   await row.getByText('审批中',{exact:true}).waitFor();
+   expect(await row.getByRole('button').count()).toBe(0);
+   expect(await page.getByRole('tabpanel').count()).toBe(1);
+   await ordinary.click();
+   await page.getByText('共 16 条 · 第 2 页',{exact:true}).waitFor();
+   await h.f.runtime.run(scene,manager,async()=>{
+    await requests.close(manager,prepared.approval.requestId,{expectedVersion:prepared.approval.version,reason:'TEST 先核对真实交货日期'},randomUUID(),'returned');
+   });
+   await page.reload();
+   await approvals.click();
+   await row.getByText('已退回',{exact:true}).waitFor();
+   await row.getByText('TEST 先核对真实交货日期',{exact:true}).waitFor();
+   expect(await row.getByRole('link').count()).toBe(0);
+   const deletion=row.getByRole('button',{name:`删除草稿 ${designStyleNo}`,exact:true});
+   await deletion.click();
+   const confirm=page.getByRole('alertdialog',{name:'删除开发草稿',exact:true});
+   await confirm.getByText(/审批历史将保留/).waitFor();
+   await confirm.getByRole('button',{name:'取消',exact:true}).click();
+   expect(h.requests.filter(item=>item.session===tab.session&&item.method==='DELETE')).toEqual([]);
+   await deletion.click();
+   const result=page.waitForResponse(response=>response.request().method()==='DELETE'&&response.url().endsWith('/sources/'+prepared.sourceId+'/draft'));
+   await confirm.getByRole('button',{name:'删除',exact:true}).click();
+   const response=await result;expect(response.status(),await response.text()).toBe(200);
+   expect(response.request().postDataJSON()).toEqual({expectedVersion:prepared.draft.version,approvalRequestId:prepared.approval.requestId,
+    approvalVersion:prepared.approval.version+1});
+   await page.getByText('开发草稿已删除。',{exact:true}).waitFor();
+   await page.getByRole('tab',{name:'待审批-未发布（0）',exact:true}).waitFor();
+   await ordinary.waitFor();
+   expect(await row.count()).toBe(0);
+   const oldSession=await tab.context.request.get(h.base+'/api/digital-production/order-time/requests/'+prepared.approval.requestId);
+   expect(oldSession.status()).toBe(404);
+   const history=(await h.db.query(`SELECT state,version,return_reason FROM digital_order_time_requests WHERE request_id=$1`,[prepared.approval.requestId])).rows;
+   expect(history).toEqual([{state:'returned',version:prepared.approval.version+1,return_reason:'TEST 先核对真实交货日期'}]);
+  }finally{await tab.close();h.setCollectionScene(undefined);}
+ });
  it('starts one effective clock at successful publication, rolls back a failed native pattern write, and preserves it through later order confirmation',async()=>{
   const actor=h.f.root,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders);
   const designStyleNo='TEST-FIRST-EFFECTIVE-'+randomUUID(),scene=await h.f.scene('2026-11-19T01:02:03.123Z');
@@ -1715,18 +1818,18 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
    const returned=await requests.close(actor,pending.requestId,{expectedVersion:pending.version,reason:'TEST return before original publication'},randomUUID(),'returned');
    expect(returned.state).toBe('returned');
    expect((await identity.developmentDrafts(actor,1,designStyleNo)).items).toEqual([]);
-   expect((await identity.developmentDrafts(actor,1,designStyleNo,false,'followup')).items[0]).toMatchObject({sourceId,approvalState:'returned',canDiscard:false});
+   expect((await identity.developmentDrafts(actor,1,designStyleNo,false,'followup')).items[0]).toMatchObject({sourceId,approvalState:'returned',canDiscard:true});
    return {sheet,category,price};
   });
   h.setCollectionScene(scene);
    const returnedTab=await h.open(actor.actorId,1165,{},'/ui/digital-production?workspace=designer&section=create');
    try{
-    await returnedTab.page.getByText('审批与原档案核对',{exact:true}).click();
-    const row=returnedTab.page.getByRole('listitem').filter({hasText:designStyleNo});
-    await row.getByText('时效申请已退回',{exact:false}).waitFor();
-    await row.getByRole('link',{name:'查看原时效申请',exact:true}).waitFor();
-    expect(await row.getByRole('button',{name:/删除/}).count()).toBe(0);
-    await row.getByRole('button',{name:'编辑原开发草稿',exact:true}).click();
+    await returnedTab.page.getByRole('tab',{name:/待审批-未发布/}).click();
+    const row=returnedTab.page.getByRole('row').filter({hasText:designStyleNo});
+    await row.getByText('已退回',{exact:true}).waitFor();
+    expect(await row.getByRole('link',{name:'查看原时效申请',exact:true}).count()).toBe(0);
+    expect(await row.getByRole('button',{name:`删除草稿 ${designStyleNo}`,exact:true}).count()).toBe(1);
+    await row.getByRole('button',{name:`继续编辑草稿 ${designStyleNo}`,exact:true}).click();
     const field=returnedTab.page.getByRole('textbox',{name:'设计款号',exact:true});
     await field.waitFor();expect(await field.inputValue()).toBe(designStyleNo);
     expect(await returnedTab.page.getByRole('button',{name:'保存开发资料草稿',exact:true}).count()).toBe(1);

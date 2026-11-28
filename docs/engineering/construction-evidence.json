@@ -1,280 +1,136 @@
 {
   "version": 1,
-  "base": "64a6dbd3d39eebfa6897c98c405ccb1e9d935106",
-  "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
+  "base": "48f67666b10bba898f9a2c54b721b4b6cd022205",
+  "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
   "risk": "full",
   "rules": [
     {
-      "rule": "原仓库同组启停，安全读保留切换后原件和当前订正版",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
+      "rule": "现有创建页按真实生命周期和发布申请分组，计数搜索与快照一致",
+      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
       "writes": [
-        "apps/api/migrations/0320_warehouse_receipt_cutover.sql",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/web/src/development-draft-list.ts",
+        "apps/web/src/digital-designer-workspace.tsx",
+        "apps/web/src/digital-development-workspace.css",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts",
+        "tests/unit/development-creation-draft.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-source-lifecycle.ts",
+        "apps/api/src/production-platform/order-time-request-repository.ts",
+        "apps/web/src/use-development-creation-draft.ts",
+        "apps/web/src/list-pagination.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft",
+        "tests/integration/preorder-material-investment-native-browser-postgres.test.ts#converts the original preorder",
+        "tests/unit/development-creation-draft.test.ts"
+      ],
+      "initialization": "两页签独立服务端分页，活动项连列表只读一次；非活动只取计数或沿同查询已有计数。只保存新版预下单留普通，原真实发布后两处都排除；旧测试预下单两处排除不迁移。",
+      "dateAndPermission": "原设计师本人和有效 Root 可读，保留订单号中文搜索、原本地独立草稿和原待核对回执。取同一数据快照最近一条真实申请的更新时间，不借时间算法推测。",
+      "expectation": "原页一次只显示一组，前端不会将旧搜索结果应用，新旧预下单原投料/转正完整，审批中无删除，退回原因直出。",
+      "checks": [
+        "draft-inbox-pg",
+        "draft-inbox-unit",
+        "draft-inbox-static"
+      ]
+    },
+    {
+      "rule": "精确退回版本才可软删，数据库独立重核且审批历史不动",
+      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
+      "writes": [
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/migrations/0321_development_draft_review_inbox.sql",
         "apps/api/src/platform/migration-manifest.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/src/production-platform/warehouse-receipt-cutover-repository.ts",
-        "apps/api/src/production-platform/warehouse-receipt-cutover-service.ts",
-        "scripts/dx-acceptance.sh",
-        "scripts/deploy/warehouse-receipt-acceptance.sh",
-        "scripts/deploy/warehouse-receipt-acceptance.mjs",
-        "docs/operations/acceptance-lab-runbook-v1.0.md",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.ts#readWarehouseReceiptReconciliations",
-        "apps/api/src/production-platform/preparation-material-repository.ts#preparationContext",
-        "apps/api/src/production-platform/production-readiness-repository.ts#refreshPreparationWindows",
-        "apps/api/src/production-platform/bulk-preparation-service.ts#gates",
-        "scripts/deploy/lib.sh#assert_active_release"
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/whole-order-visibility.ts"
       ],
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts#X3 uses the same assigned warehouse report and management decision for exact fabric receipt versions"
+        "tests/integration/order-time-requests-postgres.test.ts#returns and withdraws the same saved proposal",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#discards ordinary drafts only for their owner or Root"
       ],
-      "initialization": "0320只追加状态表，未列范围继续旧模式。精确母单及原来源同组，不动旧批、历史或已有草稿窗。从旧发布基线新增迁移，Acceptance专属命令不随更新自动执行。",
-      "dateAndPermission": "现有运维账号和发布锁，钉住当前sha和本机Acceptance身份；事务范围锁和审批代次+版本重核；数据库记录时间只审计，业务时间保留原批。",
-      "expectation": "合成真实PG原入口：激活后补一次缺窗、退安全读保留当前批和历史时点并拒旧写，复启可继续旧提交。现场固定命令仍待实际授权运行。",
+      "initialization": "0321无数据回填；三参数入口仍保原约束，审批例外的实际原申请及草稿版本写同事务前态审计。原审批与事件不写，上游来源/原附件/编号不移除。",
+      "dateAndPermission": "既有生命周期同锁，数据库再核同申请、版本、状态及既有独立保护；仍须当前本人设计资格或 Root。撤回、版本错误、无审计拒绝。",
+      "expectation": "原页面取消无副作用，确认后一个原软删及审计，待办与计数同时回落。重提先成功旧删拒绝；删除先提交且原重提确实在锁上等待后失败。同键只回放原成功。",
       "checks": [
-        "wh02-pg",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "真实收布复用已有事务，旧链接只查原回执或留待原操作人续办",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/warehouse-receipt-continuation.ts",
-        "apps/api/src/production-platform/warehouse-receipt-work.ts",
-        "apps/api/src/production-platform/warehouse-receipt-page.ts",
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts",
-        "apps/web/src/production-readiness-panel.tsx",
-        "apps/web/src/warehouse-receipt-batch-panel.tsx",
-        "packages/contracts/src/production-readiness.ts",
-        "docs/requirements/sourcing-supplier-production-v1.0.md",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/warehouse-assigned-resources.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts#preparationMaterialHistory",
-        "apps/api/src/production-platform/warehouse-material-balance.ts#scopedWarehouseReceiptQuantity",
-        "apps/web/src/warehouse-center.tsx",
-        "apps/web/src/preparation-material-original.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/warehouse-material-balance.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts#Acceptance R5 saves the draft without arrival",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#resumes an unnumbered draft"
-      ],
-      "initialization": "已提交同命令同权限先返回原回执。旧请求未提交且没有可核分批凭证/明确替换目标，保留原请求不变成新实收。从原PO批面板补充并同事务完成。",
-      "dateAndPermission": "原在职岗位、实际指派、幂等、证据及原附件权限；文书行精确分物料范围；只允许实名原提交人看到和续办。",
-      "expectation": "固定原104米样本真实仓库可见104/93.6/10.4。旧请求保留后可凭精确独立证明追加一次，重试不增批，历史义和其他订单不变；H1未经原凭证不得报320。",
-      "checks": [
-        "wh02-unit",
-        "wh02-pg",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "按原收布事实和实际报告时点放行验布，不放松制单和开裁",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
-        "apps/api/src/production-platform/warehouse-fabric-inspection-eligibility.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/web/src/bulk-fabric-panel.tsx",
-        "packages/contracts/src/bulk-preparation.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "apps/api/src/production-platform/warehouse-receipt-reconciliation-projection.ts"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts#Acceptance R5 saves the draft without arrival, then separates 90% inspection from official publication",
-        "tests/integration/production-readiness-postgres.test.ts#X3 uses the same assigned warehouse report and management decision for exact fabric receipt versions"
-      ],
-      "initialization": "读取按审批范围生产投料 + 原批有效版本；未启用依旧原规则。报告绑定原批和依据版本，不以手写到仓建立实收。",
-      "dateAndPermission": "实际验布时间的下界/截止不包含到达更晚的批；制单草稿窗起于已有原首次有效到仓，验布岗位和决定权限不放宽。",
-      "expectation": "90/104拒绝，93.6/104允许；实际报告回填早时点仍拒。520米正常原入口467拒、468可；不合格和仅先处理不放行，允许使用仅移除原质量条件。",
-      "checks": [
-        "wh02-unit",
-        "wh02-pg",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "首轮 Review P1：订正自己的原凭证仍可办，别的有效批被占用的凭证行拒绝",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/warehouse-receipt-projection.ts#warehouseReceiptMovements",
-        "apps/api/src/production-platform/warehouse-receipt-reconciliation-repository.ts#readWarehouseReceiptReconciliations",
-        "apps/web/src/warehouse-receipt-batch-panel.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts#WH-02 uses the real 104m PO receipt",
-        "tests/integration/production-readiness-postgres.test.ts#X3 guards native accessory issues and receipt corrections"
-      ],
-      "initialization": "沿原批有效替代链，纯数量订正继承上次明确的凭证占用，不写假收货或新凭证。已作废的版本不会重复占一批。",
-      "dateAndPermission": "同一被采用采购范围、同一原凭证号码及行；仓管、原凭证文件、原批版本、幂等和真实发生时间保持原权限。",
-      "expectation": "指定原仓库收料路由实测两条凭证行可独立收料，另一批跨行占用409且读回数量不变；原批二次订正仍可沿自身原凭证。对应 4717541441。",
-      "checks": [
-        "wh02-pg",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "首轮 Review P2：同一旧收布记录中两条独立原数量行各自可发并扣减",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/warehouse-material-balance.ts",
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "apps/api/src/production-platform/warehouse-issue-allocation.ts",
-        "apps/web/src/bulk-materials-panel.tsx",
-        "packages/contracts/src/bulk-preparation.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts#dispatchMaterials",
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts",
-        "apps/api/src/production-platform/warehouse-receipt-reconciliation-projection.ts#projectWarehouseReceiptReconciliation"
-      ],
-      "oldTests": [
-        "tests/unit/warehouse-issue-allocation.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts#X3 uses the same assigned warehouse report and management decision",
-        "tests/integration/production-readiness-postgres.test.ts#X3 preserves the same preorder accessory lot for issue and correction"
-      ],
-      "initialization": "对账已识别的原数量行从质检引用传到发料明细和原发料事件。旧只含批次号和版本的原生面辅料记录仍正常读写；不把缺行键的请求当成某条旧数量行。",
-      "dateAndPermission": "保留同一许可范围、真实检验与发料时点、原权限、需用和实收约束。受发料占用的旧数量行不能因订正其原对照批而被移除。",
-      "expectation": "真实旧单两行200和210加独立对照90；原验布合格后原发料POST分别发120和150，剩80和60，90保留且总余230。缺行键、超出某行和会抹除已占用的对照订正分别拒绝。对应 4717541448。",
-      "checks": [
-        "wh02-pg",
-        "wh02-unit",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "第二轮 Review P1：旧无 PO 字段验布报告按确切原批发料",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/warehouse-material-issue.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/warehouse-issue-allocation.ts#restrictWarehouseIssueLots",
-        "apps/api/src/production-platform/warehouse-fabric-report-lots.ts#warehouseFabricReportLots",
-        "apps/api/src/production-platform/bulk-preparation-service.ts#dispatchMaterials"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts#X3 uses the same assigned warehouse report"
-      ],
-      "initialization": "未切换组正常读取已验布版本，原报告未存可选PO时由当前确切批号和版本定位，不写或重出报告。",
-      "dateAndPermission": "显式PO范围继续卡原值；旧格式按本PO的原批和当前质检状态核定，另一PO不能冒充。",
-      "expectation": "经原入口投料、登记、报告及发料；A和B各有原批，错批409，正确从A发100后只扣A。对应 4717665081。",
-      "checks": [
-        "wh02-pg",
-        "wh02-unit",
-        "wh02-static"
-      ]
-    },
-    {
-      "rule": "第二轮 Review P2：旧收布待续逐行完成，末行才记整笔原回执",
-      "source": "2026-11-27 审定《达兴 Acceptance｜仓库收布全链对账与整改方案》§5.1–5.3、§6.1–6.4、§7 A–H，Library libfile_fde3_f-6d221831edc081919198e7ed4f556a1d_c8d3bf5d609c8191bce6411a30e94d44 v1",
-      "writes": [
-        "apps/api/src/production-platform/warehouse-receipt-continuation.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "packages/contracts/src/production-readiness.ts",
-        "apps/web/src/warehouse-receipt-batch-panel.tsx",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/warehouse-receipt-work.ts#readWarehouseReceiptWork",
-        "apps/api/src/production-platform/preparation-material-repository.ts#appendPreparationMaterial"
-      ],
-      "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts#WH-02 uses the real 104m PO receipt",
-        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#submits the original report at 93.6m"
-      ],
-      "initialization": "不改原输入，原命令表另追加每行回执和对应正本原批请求，最后一行写最终原命令。单行或缺行待补的原路沿用第一行。",
-      "dateAndPermission": "本人原请求、精确物料PO/范围/原始量、凭证明细或替换依据与原事务锁，未完成不得成功、不得用已办行换凭证重登。",
-      "expectation": "真仓库路由原两行先选2米，旧标识仍返回待续，列表只留待办第2行，同请求重放和跨行无重复；后续5米成功才恢复旧整笔回执。对应 4717665094。",
-      "checks": [
-        "wh02-pg",
-        "wh02-static"
+        "draft-inbox-pg",
+        "draft-inbox-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "wh02-pg",
+      "id": "draft-inbox-pg",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
-      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
-      "startedAt": "2026-11-27T09:30:13Z",
-      "endedAt": "2026-11-27T09:31:11Z",
-      "log": "/workspace/scratch/wh02-review2-evidence/pg.log",
-      "logSha256": "b233ef6bcb7a1bdbf858d9243ce68155f9372a2e26bd01b93812b00538c22b98",
-      "cwd": "/workspace/scratch/wh02-inspection-cutover",
-      "passed": 9,
+      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
+      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
+      "startedAt": "2026-11-28T06:26:30Z",
+      "endedAt": "2026-11-28T06:31:23Z",
+      "log": "/workspace/scratch/draft-inbox-evidence/pg.log",
+      "logSha256": "15442dea7c5b685ae35c02eceb9e9beb8a20ba30e516479edc5fbbd2500e166e",
+      "cwd": "/workspace/scratch/development-draft-inbox",
+      "passed": 10,
       "failed": 0,
-      "skipped": 95,
+      "skipped": 72,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6c5c6e5ac3818fc23d51755502a8d6c9946e64e7ff6713a89d3cf4c46b418357"
+          "sha256": "8326ea03a9e8283b0884945686917b6a1e7f592a52ef06935b2e72cfea09a6b6"
         }
       ],
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --testNamePattern \"WH-02|submits the original report at 93.6m|uses the same assigned warehouse report|guards native accessory issues|preserves the same preorder accessory lot|separates 90% inspection|resumes an unnumbered draft\" --reporter=default --reporter=json",
-      "context": "Node 22.22.2, Vitest 4.1.10, system Chromium, isolated local TEST PostgreSQL schemas; existing normal startup/native browser fixture, signed worker session, real database/HTTP, explicit fixture business time. No deployed Acceptance samples or service changes. Targeted selection, other cases excluded."
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --maxWorkers=1 -t \"shows only one draft tab|deletes only the exact returned|starts one effective clock|converts the original preorder|resumes an unnumbered draft|lets the actual merchandiser enter from My Tasks|returns and withdraws the same saved proposal|keeps one creation draft panel|discards ordinary drafts only|recovers only the original eligible shell\" --reporter=default --reporter=json",
+      "context": "Node 22.22.2, canonical Vitest business-chain runner, system Chromium, original signed application and role fixtures; local low-privilege PostgreSQL 16 marked dx-rework-isolated-test-v1, isolated disposable schemas. Not deployed Acceptance or production."
     },
     {
-      "id": "wh02-unit",
+      "id": "draft-inbox-unit",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
-      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
-      "startedAt": "2026-11-27T09:29:49Z",
-      "endedAt": "2026-11-27T09:29:52Z",
-      "log": "/workspace/scratch/wh02-review2-evidence/unit.log",
-      "logSha256": "61769d8e3c510e209d37468873e9cb15e1b5e5a28d7725644fe79a11e656fdb4",
-      "cwd": "/workspace/scratch/wh02-inspection-cutover",
-      "passed": 41,
+      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
+      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
+      "startedAt": "2026-11-28T06:26:43Z",
+      "endedAt": "2026-11-28T06:26:49Z",
+      "log": "/workspace/scratch/draft-inbox-evidence/unit.log",
+      "logSha256": "034207c5ce99636d9744d5de47c7b25c271961a34f3dd800b4266027ab2c76df",
+      "cwd": "/workspace/scratch/development-draft-inbox",
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1f1d20f6c7693d5dfc5c9ec6e93e32292811d752e8b45fc351ef99d48b48b255"
+          "sha256": "208e2533febc17e9c36363ec10bac065cc4ec38c687950b56fbbd5d44d26f980"
         }
       ],
-      "command": "npx vitest run --config vitest.config.ts tests/unit/warehouse-issue-allocation.test.ts tests/unit/warehouse-material-balance.test.ts tests/unit/warehouse-receipt-status.test.ts tests/unit/production-readiness-contract.test.ts --reporter=default --reporter=json",
-      "context": "Actual deterministic quantity, contract and allocation outputs; Vitest 4.1.10, deterministic warehouse fixtures."
+      "command": "npx vitest run --config vitest.config.ts tests/unit/development-creation-draft.test.ts --reporter=default --reporter=json",
+      "context": "Real Vitest JSON for deterministic local draft storage, authorization identity and reconciliation behavior."
     },
     {
-      "id": "wh02-static",
+      "id": "draft-inbox-static",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "811d3ea03fd3bc1b981dd4deebebff1c3d6c70f2",
-      "sourceFingerprint": "5c1a49f9d84e62750534fed18b4e47ba3098a037ef3937c11c9b4b6bb885dc0d",
-      "startedAt": "2026-11-27T09:29:59Z",
-      "endedAt": "2026-11-27T09:30:58Z",
-      "log": "/workspace/scratch/wh02-review2-evidence/static.log",
-      "logSha256": "6e2f17fed3b165979d2d3361ce00952872d3f36e5312165a24ca687c5e3fdd78",
-      "cwd": "/workspace/scratch/wh02-inspection-cutover",
-      "command": "npm run typecheck --workspace @dx-rework/api; npm run typecheck --workspace @dx-rework/web; node scripts/check-migrations.mjs; node scripts/acceptance/time-site-inventory.mjs; node --test (release/main migration contract and timing/responsibility sources); bash -n and node --check (fixed Acceptance operator entry); eslint --max-warnings=0 (all changed TS/TSX); git diff --check",
-      "context": "Local validation against current actual release base and edited source. CLI syntax and registered migration/manifest only; no installed root-controller command or deployment executed."
+      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
+      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
+      "startedAt": "2026-11-28T06:26:43Z",
+      "endedAt": "2026-11-28T06:29:28Z",
+      "log": "/workspace/scratch/draft-inbox-evidence/static.log",
+      "logSha256": "d76fb5c43670120d02f34c6c5a8be48ee26a499621d7ba060dcd2c90aa8d122f",
+      "cwd": "/workspace/scratch/development-draft-inbox",
+      "command": "API and Web typechecks, migration checksum lint, exact time-site inventory, scripts/ci/test-execution-contract.test.mjs, eslint --max-warnings=0 on changed TS/TSX, git diff --check",
+      "context": "Local current exact source, official workspace scripts. No Acceptance installation or mutation."
     }
   ]
 }

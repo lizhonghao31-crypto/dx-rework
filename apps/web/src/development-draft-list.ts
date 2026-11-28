@@ -1,13 +1,19 @@
 import {NUMBERED_DRAFT_PATH} from './development-creation-command-path.js';
 import type {CreationDraftRecord} from './development-creation-draft.js';
 
-export type SavedDevelopmentDraft={sourceId:string;designStyleNo:string|null;version:number;updatedAt:string;approvalState:string|null;approvalRequestId?:string|null;temporaryStyleNo?:string|null;
+export type DraftApprovalState='pending'|'returned'|'withdrawn'|'needs_designer';
+export type SavedDevelopmentDraft={sourceId:string;designStyleNo:string|null;version:number;updatedAt:string;approvalState:DraftApprovalState|null;approvalRequestId?:string;approvalVersion?:number;approvalReturnReason?:string|null;temporaryStyleNo?:string|null;
  canDiscard?:boolean;numbered?:boolean;ownedByRequester?:boolean;kind?:'development'|'certain_order'|'preorder'|null};
 export type DevelopmentDraftRow=
  |{kind:'saved';saved:SavedDevelopmentDraft;local?:CreationDraftRecord}
  |{kind:'local';local:CreationDraftRecord};
 
 const draftStyle=(record:CreationDraftRecord)=>record.snapshot.form.designStyleNo.trim().toLowerCase();
+export const independentLocalDrafts=(local:readonly CreationDraftRecord[],search:string)=>{
+ const query=search.trim().toLowerCase();
+ return local.filter(record=>record.phase==='draft'&&(draftStyle(record).includes(query)||
+  (record.snapshot.form.temporaryStyleNo??'').trim().toLowerCase().includes(query)));
+};
 /** Unconfirmed commands retain their original location/input and are never
  * actionable ordinary rows, even if the server still reads the old draft. */
 export function pendingDevelopmentCommands(local:readonly CreationDraftRecord[]){
@@ -22,7 +28,6 @@ export function developmentDraftRows(saved:readonly SavedDevelopmentDraft[], loc
  const knownPending=new Set(pending.flatMap(record=>record.sourceId?[record.sourceId]:[]));
  const unboundStyles=new Set(pending.flatMap(record=>!record.sourceId&&draftStyle(record)?[draftStyle(record)]:[]));
  const bound=new Map(local.flatMap(record=>record.phase==='bound'?[[record.sourceId,record]]:[]));
- const query=search.trim().toLowerCase();
  const unverified=numberedReceipts?.unverified??unboundNumberedDraftKeys(local).length>0;
  const rows:DevelopmentDraftRow[]=saved.filter(record=>!knownPending.has(record.sourceId)&&!unboundStyles.has(record.designStyleNo?.trim().toLowerCase()??'')
    &&!numberedReceipts?.resolvedSourceIds.has(record.sourceId)&&!(unverified&&record.numbered!==false&&record.ownedByRequester!==false)).map(record=>{
@@ -31,6 +36,6 @@ export function developmentDraftRows(saved:readonly SavedDevelopmentDraft[], loc
  });
  // Bound snapshots can only augment a known ordinary, authorized server row.
  // They must not recreate a deleted, published or paginated-away source.
- if(page===1)for(const draft of local)if(draft.phase==='draft'&&draftStyle(draft).includes(query))rows.push({kind:'local',local:draft});
+ if(page===1)for(const draft of independentLocalDrafts(local,search))rows.push({kind:'local',local:draft});
  return rows;
 }
