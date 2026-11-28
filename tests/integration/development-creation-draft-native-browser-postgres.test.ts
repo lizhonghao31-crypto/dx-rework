@@ -547,8 +547,10 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     const summary=page.locator('.designer-order-identity');
     await summary.getByText(orderNumber,{exact:true}).first().waitFor();
     expect(await summary.getByText(orderNumber,{exact:true}).count()).toBeGreaterThan(0);
-    expect(await summary.getByText('P02',{exact:true}).isVisible()).toBe(true);
-    expect(await summary.getByText('TEST-G2-FORMAL-PO',{exact:true}).isVisible()).toBe(true);
+    // Sales series is read from the sheet; the formal PO comes from the separate workspace read.
+    await summary.getByText('P02',{exact:true}).waitFor({state:'visible'});
+    const poTable=summary.getByRole('region',{name:'逐 PO 数量与交期',exact:true});
+    await poTable.getByRole('cell',{name:'TEST-G2-FORMAL-PO',exact:true}).waitFor({state:'visible'});
     expect(await summary.getByRole('button',{name:'编辑基础信息',exact:true}).count()).toBe(0);
     // The former popup is intentionally removed. Its original current-version
     // API remains the compatibility source for already-saved notes; this check
@@ -563,7 +565,7 @@ async function wizardNext(page:Page,{fillRequirements=true}={}){
     const replay=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':idempotencyKey},data:input});
     expect(replay.status()).toBe(200);expect(await replay.json()).toEqual(await outcome.json());
     const stale=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':randomUUID()},data:{...input,brand:'TEST stale edit'}});
-    expect(stale.status()).toBe(409);
+    expect(stale.status(),await stale.text()).toBe(409);
     for(const extra of [{orderDate:'2028-01-01'},{actualReceived:200},{materialUnitPrice:'1'},{expectedCost:'9'}]){
      const forbidden=await page.request.put(h.base+basicsPath,{headers:{'idempotency-key':randomUUID()},data:{...input,expectedRevision:1,...extra}});
      expect(forbidden.status()).toBe(400);

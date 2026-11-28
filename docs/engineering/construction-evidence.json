@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "48f67666b10bba898f9a2c54b721b4b6cd022205",
-  "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
+  "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
   "risk": "full",
   "rules": [
     {
@@ -66,6 +66,27 @@
         "draft-inbox-pg",
         "draft-inbox-static"
       ]
+    },
+    {
+      "rule": "正式单的编号详情与异步逐 PO 区域分别等待，保留原浏览器业务断言",
+      "source": "2026-11-28 审定《设计开发草稿箱施工方案》§2–4，Library libfile_fde3_f-31c47183abe08191b41a061bdfb88b58_c8d3bf5d609c8191bce6411a30e94d44 v0（82 行完整稿）",
+      "writes": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/designer-order-workbench.tsx",
+        "apps/web/src/digital-designer-workspace.tsx"
+      ],
+      "oldTests": [
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts#numbers new pure and confirmed orders"
+      ],
+      "initialization": "旧 Full 46117291547 中 585 项通过、1 项失败，现有顺序在发行基线的生产源码相同。对基线的诊断浏览器仅在测试临时工作区延迟真实原工作台回包，观察真实 PO 暂不可见、放行后可见。未改生产文件。",
+      "dateAndPermission": "仍从原有有效设计师签名入口登记、发布和确认，客户端独立读取原版单与工作台；等待正式 PO 表格精确单元格可见。无人工假数据、固定延时或降低业务断言。",
+      "expectation": "保持原下单写入、订单号、销售系列、精确 PO、回读版本和权限全部受测。根据用户明确决定仅在定向回归通过后正常人工合并，不把上一轮 Full 改记通过或重跑。",
+      "checks": [
+        "draft-inbox-pg",
+        "draft-inbox-static"
+      ]
     }
   ],
   "checks": [
@@ -74,36 +95,36 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
-      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
-      "startedAt": "2026-11-28T06:26:30Z",
-      "endedAt": "2026-11-28T06:31:23Z",
+      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
+      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
+      "startedAt": "2026-11-28T07:20:01Z",
+      "endedAt": "2026-11-28T07:21:21Z",
       "log": "/workspace/scratch/draft-inbox-evidence/pg.log",
-      "logSha256": "15442dea7c5b685ae35c02eceb9e9beb8a20ba30e516479edc5fbbd2500e166e",
+      "logSha256": "211b3d87476d047b92cf860513f2fe6ce92cd7bc50084ebfd92c59ba49523298",
       "cwd": "/workspace/scratch/development-draft-inbox",
-      "passed": 10,
+      "passed": 1,
       "failed": 0,
-      "skipped": 72,
+      "skipped": 34,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8326ea03a9e8283b0884945686917b6a1e7f592a52ef06935b2e72cfea09a6b6"
+          "sha256": "6f7a0c5a3c78bf75289ed061aa4369eeda7c5a3871741a497e126b5278a7a73b"
         }
       ],
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts tests/integration/preorder-material-investment-native-browser-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts --maxWorkers=1 -t \"shows only one draft tab|deletes only the exact returned|starts one effective clock|converts the original preorder|resumes an unnumbered draft|lets the actual merchandiser enter from My Tasks|returns and withdraws the same saved proposal|keeps one creation draft panel|discards ordinary drafts only|recovers only the original eligible shell\" --reporter=default --reporter=json",
-      "context": "Node 22.22.2, canonical Vitest business-chain runner, system Chromium, original signed application and role fixtures; local low-privilege PostgreSQL 16 marked dx-rework-isolated-test-v1, isolated disposable schemas. Not deployed Acceptance or production."
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/development-creation-draft-native-browser-postgres.test.ts --maxWorkers=1 -t \"numbers new pure and confirmed orders\" --reporter=default --reporter=json",
+      "context": "Node 22.22.2, canonical Vitest business-chain runner, system Chromium, original signed application and role fixtures; local low-privilege PostgreSQL 16 marked dx-rework-isolated-test-v1, isolated disposable schemas. Standalone exact reproduction of the failed case, with unchanged original 409 assertion and full error text. Original inspected rerun also recorded passes for 6 adjacent cases, not claiming that mixed run green. Not deployed Acceptance or production."
     },
     {
       "id": "draft-inbox-unit",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
-      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
-      "startedAt": "2026-11-28T06:26:43Z",
-      "endedAt": "2026-11-28T06:26:49Z",
+      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
+      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
+      "startedAt": "2026-11-28T07:15:47Z",
+      "endedAt": "2026-11-28T07:15:50Z",
       "log": "/workspace/scratch/draft-inbox-evidence/unit.log",
-      "logSha256": "034207c5ce99636d9744d5de47c7b25c271961a34f3dd800b4266027ab2c76df",
+      "logSha256": "0c49461ca77554f33251d8fb6a92f997e6357c64ce7e821da53145d1f01398e9",
       "cwd": "/workspace/scratch/development-draft-inbox",
       "passed": 9,
       "failed": 0,
@@ -111,7 +132,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "208e2533febc17e9c36363ec10bac065cc4ec38c687950b56fbbd5d44d26f980"
+          "sha256": "1a81b23f767266aa560be2f65d0b7afb36585d1085e112361f98d7c0d452c5cc"
         }
       ],
       "command": "npx vitest run --config vitest.config.ts tests/unit/development-creation-draft.test.ts --reporter=default --reporter=json",
@@ -122,15 +143,15 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "48f67666b10bba898f9a2c54b721b4b6cd022205",
-      "sourceFingerprint": "63de1b1a010735ce04b8cb90a246011753dea3efcd90fe210bd793d6b4603671",
-      "startedAt": "2026-11-28T06:26:43Z",
-      "endedAt": "2026-11-28T06:29:28Z",
+      "testedHead": "6773baaf63926b15635b3a54d573aadabda250a3",
+      "sourceFingerprint": "78a2cb9f74268c9e0f778065e5ddd4a43ed5f4af38dc8d4932e7c8cbfeeb5b53",
+      "startedAt": "2026-11-28T07:15:47Z",
+      "endedAt": "2026-11-28T07:21:34Z",
       "log": "/workspace/scratch/draft-inbox-evidence/static.log",
-      "logSha256": "d76fb5c43670120d02f34c6c5a8be48ee26a499621d7ba060dcd2c90aa8d122f",
+      "logSha256": "d5e30c22b22779cdbfbb67fba21aa37cdfcc4d8d20f41693f08c88ed452232a3",
       "cwd": "/workspace/scratch/development-draft-inbox",
-      "command": "API and Web typechecks, migration checksum lint, exact time-site inventory, scripts/ci/test-execution-contract.test.mjs, eslint --max-warnings=0 on changed TS/TSX, git diff --check",
-      "context": "Local current exact source, official workspace scripts. No Acceptance installation or mutation."
+      "command": "git diff --quiet 6773baaf63926b15635b3a54d573aadabda250a3 -- apps packages scripts; npx eslint --max-warnings=0 tests/integration/development-creation-draft-native-browser-postgres.test.ts; git diff --check",
+      "context": "Candidate sync fix changes only the original native browser test and its evidence. Git independently verifies zero production application, package and CI script diff since the previously reviewed candidate; no claim that historical Full passed."
     }
   ]
 }
