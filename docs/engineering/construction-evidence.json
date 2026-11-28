@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "134e3f3d054dc092220672c18b09d7e48859e4b8",
-  "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
+  "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
   "risk": "full",
   "rules": [
     {
@@ -102,6 +102,31 @@
         "development-step-two-prior-native-final",
         "development-step-two-static"
       ]
+    },
+    {
+      "rule": "修复本 PR Full 选中的两条已在发布基线复现的仓库测试，不改变任何仓库生产逻辑",
+      "source": "Eric 要求修复 #1139 的两条仓库回归后推送并重跑 Full。原失败 Full 46149892975，发布基线 134e3f3d 的独立同用例日志 ci-base-four。",
+      "writes": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/warehouse-center.tsx",
+        "apps/web/src/bulk-materials-panel.tsx",
+        "apps/web/src/bulk-fabric-panel.tsx",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "tests/helpers/warehouse-original-issue-fixture.ts"
+      ],
+      "oldTests": [
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts#opens the assigned warehouse list by PO",
+        "tests/integration/factory-supervision-instances-browser-postgres.test.ts#lets the assigned warehouse record a failed report"
+      ],
+      "initialization": "原夹具已收取并初验同一批主布，本次复验沿原页面更正，不重复收料；同时保留独立辅料的发料样本。",
+      "dateAndPermission": "原仓管角色、原 PO 和物料行、原批次 ID/版本、原报告版本及北京时间完整保留。",
+      "expectation": "只发出原辅料300米且只余200米。仓管复验原一批为不合格，等待原质量决定，不能发料，收料历史不重写。",
+      "checks": [
+        "development-step-two-warehouse-regressions-final",
+        "development-step-two-static"
+      ]
     }
   ],
   "checks": [
@@ -127,7 +152,30 @@
           "sha256": "1913f62f3f8461921440ffb0ba9f5076a6391c90ad0b565951df060880c95e37"
         }
       ],
-      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes. This revision explicitly adds another live original scenario to the same schema to verify multi-scope collection reading without borrowing a command clock."
+      "context": "Node 22.22.2, real Chromium when browser applies, local marked isolated low-privilege PostgreSQL 16, original App/auth/native service. No Acceptance or production writes. This revision explicitly adds another live original scenario to the same schema to verify multi-scope collection reading without borrowing a command clock.",
+      "inputPaths": [
+        ".github",
+        "apps",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/helpers",
+        "tests/integration/development-creation-browser-steps.ts",
+        "tests/integration/development-creation-draft-native-browser-postgres.test.ts",
+        "tests/integration/member-module-policy-postgres.cases.ts",
+        "tests/integration/own-tail-responsibility-history.cases.ts",
+        "tests/integration/production-analysis-postgres.cases.ts",
+        "tests/integration/receiving-analysis-postgres.cases.ts",
+        "tests/integration/sample-analysis-postgres.cases.ts",
+        "tests/integration/work-analysis-postgres.cases.ts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "b466f7549ce0f2d60040c5a97812b80345edbf29c6d31b9dc228a0af376aafc9"
     },
     {
       "id": "development-step-two-pages-exact",
@@ -323,15 +371,39 @@
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "a4149275f784c874208cd8f999bf9a880fa5bb59",
-      "sourceFingerprint": "ffaa4159230117b1443bc37d73e5407655bf0a3c7bd277da6f48199708708706",
-      "startedAt": "2026-11-28T14:07:31Z",
-      "endedAt": "2026-11-28T14:08:54Z",
-      "log": "/workspace/scratch/development-step-two-evidence/static-after-collection.log",
-      "logSha256": "c66fd4e9e96609383b676aac892752e91d40b773172fac9eed44a19eee84e04a",
+      "testedHead": "57b68f7b7e44eaa88f756a3fdf9208449c890189",
+      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+      "startedAt": "2026-11-28T14:13:36Z",
+      "endedAt": "2026-11-28T14:15:08Z",
+      "log": "/workspace/scratch/development-step-two-evidence/static-wh.log",
+      "logSha256": "b9076060898c9b778616fc83261aa5fe1297b5245c33c72d1101f0805e643b17",
       "cwd": "/workspace/scratch/development-step-two",
       "command": "API and Web typechecks, check-migrations.mjs, time-site-inventory.mjs, test-execution-contract.test.mjs, eslint on touched TS/TSX, git diff --check",
       "context": "Node 22.22.2 and exact dependency lock; no deployment."
+    },
+    {
+      "id": "development-step-two-warehouse-regressions-final",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 6,
+      "testedHead": "57b68f7b7e44eaa88f756a3fdf9208449c890189",
+      "sourceFingerprint": "5d8a06da5816b9620b9bff02b85e81bbd549771cf63afc721a1c03ac09732865",
+      "log": "/workspace/scratch/development-step-two-evidence/warehouse-regressions-final.log",
+      "logSha256": "7d51360f40b186b865dad406a3e4de16815cc5dc2cf0b015b2bc9e0f2987e4b7",
+      "cwd": "/workspace/scratch/development-step-two",
+      "startedAt": "2026-11-28T14:13:27Z",
+      "endedAt": "2026-11-28T14:14:18Z",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2192935790a5676af32702d1b77f4000164a03c6371b54833aad5d37ec6165cf"
+        }
+      ],
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/factory-supervision-instances-browser-postgres.test.ts -t \"opens the assigned warehouse list by PO|lets the assigned warehouse record a failed report\" --reporter=default --reporter=json",
+      "context": "Original assigned warehouse actor, signed native pages through Chromium and isolated PostgreSQL. Only the two mapped warehouse cases are selected. Actual material, original lot identity, report and issue permissions are verified."
     }
   ]
 }
